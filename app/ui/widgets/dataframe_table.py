@@ -1,4 +1,5 @@
-"""엑셀처럼 보이는 표. 셀을 누르면 옆에 산식 말풍선이 뜬다."""
+# dataframe을 엑셀처럼 표 형식으로 보여주는 위젯
+# 셀을 누르면 옆에 산식 말풍선이 뜬다.
 
 from __future__ import annotations
 
@@ -11,7 +12,7 @@ from ui.widgets.formula_bubble import FormulaBubble
 
 
 class DataFrameTable(QTableView):
-    """set_dataframe(df, formulas) 로 데이터를 넣는다."""
+    # set_dataframe(df, formulas) 로 데이터를 넣는다.
 
     cellSelected = pyqtSignal(QModelIndex)
 

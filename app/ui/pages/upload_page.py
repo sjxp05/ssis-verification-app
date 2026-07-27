@@ -1,9 +1,8 @@
-"""0단계 — 문서 업로드 화면.
-
-카드에 파일이 다 채워지면 백그라운드에서 문서를 읽어 상수를 뽑는다.
-읽기가 성공했을 때만 다음 단계로 넘어가는 버튼이 켜진다 — 다음 화면이
-이미 값을 들고 시작해야 하기 때문이다.
-"""
+# 0단계 — 문서 업로드 화면
+#
+# 카드에 파일이 다 채워지면 백그라운드에서 문서를 읽어 상수를 뽑는다.
+# 읽기가 성공했을 때만 다음 단계로 넘어가는 버튼이 켜진다.
+# (다음 화면 시작할 때 여기서 읽어온 값이 필요하기 때문)
 
 from __future__ import annotations
 
@@ -34,7 +33,7 @@ class _ExtractSignals(QObject):
 
 
 class _ExtractTask(QRunnable):
-    """추출기를 GUI 스레드 밖에서 돌린다."""
+    # 추출기를 GUI 스레드 밖에서 돌린다.
 
     def __init__(
         self,
@@ -60,7 +59,7 @@ class _ExtractTask(QRunnable):
 
 
 class UploadPage(QWidget):
-    """valuesReady(ConstantValues) — 다음 단계로 넘어가도 좋을 때."""
+    # valuesReady(ConstantValues) — 다음 단계로 넘어가도 좋을 때
 
     valuesReady = pyqtSignal(object)  # ConstantValues
 
@@ -124,16 +123,16 @@ class UploadPage(QWidget):
         self._extractor = extractor
 
     def set_flow(self, flow: FlowSpec) -> None:
-        """흐름이 바뀌면 문구와 업로드 카드를 통째로 갈아 끼운다."""
+        # 흐름이 바뀌면 문구와 업로드 카드를 통째로 갈아 끼운다.
         if self._flow is not None and self._flow.key == flow.key:
-            return  # 같은 흐름으로 되돌아온 것 — 올린 파일을 유지한다
+            return  # 같은 흐름으로 되돌아온 경우: 올린 파일을 유지
         self._flow = flow
         self._title.setText(flow.upload_title)
         self._subtitle.setText(flow.upload_description)
         self.reset()
 
     def reset(self) -> None:
-        """카드를 새로 만들고 상태를 처음으로 되돌린다."""
+        # 카드를 새로 만들고 상태를 처음으로 되돌린다.
         self._generation += 1  # 돌고 있던 추출 결과를 무효로 만든다
         self._values = None
         self._cards.clear()
@@ -162,7 +161,7 @@ class UploadPage(QWidget):
 
     def _on_file_selected(self, _file: UploadedFile) -> None:
         self._values = None
-        self._generation += 1  # 파일이 바뀌었으니 이전 추출 결과는 버린다
+        self._generation += 1  # 파일이 바뀌었으므로 이전 추출 결과를 버림
         files = self._files()
         if len(files) < len(self._cards):
             self._set_state(WAITING)
@@ -171,7 +170,7 @@ class UploadPage(QWidget):
 
     def _start_extract(self, files: dict[str, UploadedFile]) -> None:
         if self._extractor is None:
-            # 추출기를 안 붙인 경우 — 파일 확인까지만 하고 넘긴다
+            # 추출기를 안 붙인 경우: 파일 확인까지만 하고 넘긴다
             self._values = {}
             self._set_state(READY)
             return
@@ -184,7 +183,7 @@ class UploadPage(QWidget):
 
     def _on_extracted(self, generation: int, values: ConstantValues) -> None:
         if generation != self._generation:
-            return  # 그 사이에 파일이 바뀌었다 — 낡은 결과
+            return  # 중간에 파일이 바뀐 경우: 결과가 낡은 값이므로 다시 읽어야 함
         self._values = values
         self._set_state(READY)
 
@@ -210,9 +209,7 @@ class UploadPage(QWidget):
 
         if state == WAITING:
             missing = len(self._cards) - len(self._files())
-            self._hint.setText(
-                f"파일을 업로드해야 다음 단계로 갈 수 있습니다."
-            )
+            self._hint.setText(f"파일을 업로드해야 다음 단계로 갈 수 있습니다.")
         elif state == BUSY:
             self._hint.setText("문서를 읽고 있습니다. 잠시만 기다려 주세요.")
         elif state == READY:

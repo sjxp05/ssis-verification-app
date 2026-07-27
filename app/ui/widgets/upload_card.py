@@ -1,8 +1,7 @@
-"""드래그앤드롭 + 클릭 업로드 카드.
-
-상태(idle / hover / done / rejected)는 동적 property 로만 표현하고
-색은 전부 app.qss 가 가진다 — 인라인 setStyleSheet 을 쓰지 않는다.
-"""
+# 드래그앤드롭 + 클릭 업로드 카드
+#
+# 상태(idle / hover / done / rejected)는 동적 property 로만 표현
+# 색은 전부 app.qss에서 가져옴 -> 인라인 setStyleSheet를 사용하지 않음
 
 from __future__ import annotations
 
@@ -26,10 +25,9 @@ IDLE, HOVER, DONE, REJECTED = "idle", "hover", "done", "rejected"
 
 
 class UploadCard(QFrame):
-    """드래그앤드롭 또는 클릭으로 파일 한 개를 받는 카드.
-
-    UploadCard("조견표", "설명", (".xlsx", ".xls"), "▦") 처럼 쓴다.
-    """
+    # 드래그앤드롭 또는 클릭으로 파일 한 개를 받는 카드
+    #
+    # UploadCard("조견표", "설명", (".xlsx", ".xls"), "▦") 처럼 쓴다.
 
     fileSelected = pyqtSignal(object)  # UploadedFile
 
@@ -89,7 +87,7 @@ class UploadCard(QFrame):
         return self._file
 
     def set_path(self, path: str | Path) -> bool:
-        """파일을 지정한다. 확장자가 맞지 않으면 False 를 돌려준다."""
+        # 파일을 지정한다. 확장자가 맞지 않으면 False 를 돌려준다.
         if Path(path).suffix.lower() not in self._extensions:
             self._apply_state(REJECTED)
             return False
@@ -99,7 +97,7 @@ class UploadCard(QFrame):
         return True
 
     def set_locked(self, locked: bool) -> None:
-        """추출이 돌아가는 동안 파일을 못 바꾸게 잠근다."""
+        # 추출이 돌아가는 동안 파일을 못 바꾸게 잠근다.
         self.setAcceptDrops(not locked)
         self.setCursor(
             Qt.CursorShape.ArrowCursor if locked else Qt.CursorShape.PointingHandCursor

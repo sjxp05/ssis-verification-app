@@ -1,8 +1,7 @@
-"""진행 단계 표시줄 (조견표 업로드 > 단가 정보 확인 > 단가표 생성).
-
-이미 지나온 단계는 눌러서 되돌아갈 수 있다.
-아직 도달하지 못한 단계는 눌러도 반응하지 않는다.
-"""
+# 진행 단계 표시줄 (조견표 업로드 > 단가 정보 확인 > 단가표 생성)
+#
+# 이미 지나온 단계는 눌러서 되돌아갈 수 있다.
+# 아직 도달하지 못한 단계는 눌러도 반응하지 않는다.
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QWidget
@@ -11,7 +10,7 @@ DONE, CURRENT, TODO = "done", "current", "todo"
 
 
 def _repolish(widget: QWidget) -> None:
-    """동적 property 변경 후 QSS를 다시 적용시킨다."""
+    # 동적 property 변경 후 QSS 다시 적용
     widget.style().unpolish(widget)
     widget.style().polish(widget)
 
@@ -47,7 +46,7 @@ class _StepChip(QFrame):
             _repolish(widget)
 
     def set_navigable(self, navigable: bool) -> None:
-        """되돌아갈 수 있는 단계인지. 커서와 hover 표시가 달라진다."""
+        # 되돌아갈 수 있는 단계인지 여부. 커서와 hover 표시가 달라진다.
         self._navigable = navigable
         self.setCursor(
             Qt.CursorShape.PointingHandCursor
@@ -65,10 +64,9 @@ class _StepChip(QFrame):
 
 
 class StepIndicator(QFrame):
-    """steps = ["조견표 업로드", "단가 정보 확인", "단가표 생성 및 저장"]
-
-    stepClicked(index) — 이미 도달한 단계를 눌렀을 때만 발생한다.
-    """
+    # steps = ["조견표 업로드", "단가 정보 확인", "단가표 생성 및 저장"]
+    #
+    # stepClicked(index) — 이미 도달한 단계를 눌렀을 때만 발생
 
     stepClicked = pyqtSignal(int)
 
@@ -99,7 +97,7 @@ class StepIndicator(QFrame):
 
     # --- API -------------------------------------------------------------
     def set_current(self, index: int) -> None:
-        """index 이전 단계는 done, 해당 단계는 current, 이후는 todo."""
+        # index 이전 단계는 done, 해당 단계는 current, 이후는 todo
         self._current = index
         self._max_reached = max(self._max_reached, index)
         self._refresh()
@@ -111,7 +109,7 @@ class StepIndicator(QFrame):
         return self._max_reached
 
     def set_max_reached(self, index: int) -> None:
-        """되돌아가서 값을 고쳤을 때처럼, 앞 단계를 다시 잠글 때 쓴다."""
+        # 앞 단계를 다시 잠글 때 사용 (되돌아가서 값을 고쳤을 때 등)
         self._max_reached = max(index, self._current)
         self._refresh()
 

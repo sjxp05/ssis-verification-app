@@ -1,8 +1,6 @@
-"""메인 화면 — 어떤 작업을 할지 고른다.
-
-버튼 목록은 models.flows.FLOWS 에서 온다. 흐름이 늘어나면 이 파일은
-고칠 필요가 없다.
-"""
+# 메인 화면 (기본급여단가표/결제단가표 중 어떤 작업을 할지 선택)
+#
+# 버튼 목록은 models.flows.FLOWS 에서 import하기 때문에 흐름이 늘어나도 이 파일은 고칠 필요 X
 
 from __future__ import annotations
 
@@ -15,7 +13,7 @@ from ui.components.scroll_page import centered_scroll_page
 
 
 class FlowButton(QFrame):
-    """제목 + 설명 두 줄짜리 큼직한 선택 버튼."""
+    # 작업 선택 버튼 (제목 + 설명 두 줄)
 
     clicked = pyqtSignal(object)  # FlowSpec
 
@@ -53,7 +51,7 @@ class FlowButton(QFrame):
 
 
 class MainPage(QWidget):
-    """flowRequested(FlowSpec) — 사용자가 작업을 골랐을 때."""
+    # flowRequested(FlowSpec) — 사용자가 작업을 골랐을 때
 
     flowRequested = pyqtSignal(object)  # FlowSpec
 
