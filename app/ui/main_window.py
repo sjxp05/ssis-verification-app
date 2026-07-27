@@ -93,6 +93,7 @@ class MainWindow(QMainWindow):
         self.constants_page = ConstantsPage()
         self.constants_page.generateRequested.connect(self._on_generate)
         self.constants_page.valuesChanged.connect(self._on_values_changed)
+        self.constants_page.valuesKept.connect(self._on_values_kept)
 
         self.table_viewer_page = TableViewerPage()
         self.table_viewer_page.exportRequested.connect(self._on_export)
@@ -179,7 +180,10 @@ class MainWindow(QMainWindow):
         step = max(0, min(step, len(self._flow.steps) - 1))
         self.table_viewer_page.hide_bubbles()
         if step == Screen.TABLES.step:
-            self.table_viewer_page.reset_tab()  # 마지막 단계는 항상 첫 탭부터
+            if self.constants_page.modified_keys() != []:
+                self.table_viewer_page.reset_tab(
+                    0
+                )  # 상수 값이 바뀐 경우에만 '기본급여' 탭으로 초기화
         self._stack.setCurrentIndex(Screen.for_step(step))
         self._steps.set_current(step)
 
@@ -233,7 +237,7 @@ class MainWindow(QMainWindow):
 
     # --- 동작 -------------------------------------------------------------
     def _on_values_ready(self, values: ConstantValues) -> None:
-        # 업로드 화면에서 문서를 다 읽었을 때.
+        # 업로드 화면에서 문서를 다 읽었을 때
         self.constants_page.set_values(values)
         self.go_to_step(Screen.CONSTANTS.step)
 
@@ -241,6 +245,10 @@ class MainWindow(QMainWindow):
         # 상수를 고치면 이미 만든 단가표는 낡은 값이므로 3단계를 다시 잠근다.
         if self._steps is not None:
             self._steps.set_max_reached(Screen.CONSTANTS.step)
+
+    def _on_values_kept(self) -> None:
+        if self._steps is not None:
+            self._steps.set_max_reached(Screen.TABLES.step)
 
     def _on_generate(self, values: dict) -> None:
         if self.table_builder is None:

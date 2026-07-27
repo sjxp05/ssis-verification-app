@@ -1,8 +1,7 @@
-"""1단계 — 문서에서 뽑은 상수 확인 화면.
-
-고시 문서를 파싱해 얻은 값을 채워 넣고, 사용자가 눈으로 확인·수정한 뒤
-'단가표 생성'을 누르면 값 묶음을 다음 단계로 넘긴다.
-"""
+# 1단계 — 문서에서 뽑은 상수 확인 화면.
+#
+# 고시 문서를 파싱해 얻은 값을 채워 넣고, 사용자가 눈으로 확인·수정한 뒤
+# '단가표 생성'을 누르면 값 묶음을 다음 단계로 넘긴다.
 
 from __future__ import annotations
 
@@ -35,7 +34,10 @@ MONTHLY_LIMIT_COUNT = 8
 
 class ConstantsPage(QWidget):
     generateRequested = pyqtSignal(dict)
-    valuesChanged = pyqtSignal()  # 값이 손질되면 이미 만든 단가표는 낡은 것이 된다
+    valuesChanged = pyqtSignal()  # 값이 수정되면 이미 만든 단가표는 낡은 것이 된다
+    valuesKept = (
+        pyqtSignal()
+    )  # 값 수정했다가 취소한 경우 바뀌지 않은 것으로 처리, 단가표 페이지로 정상적 이동 가능
 
     def __init__(self, parent: QWidget | None = None):
         super().__init__(parent)
@@ -51,6 +53,7 @@ class ConstantsPage(QWidget):
         columns.addLayout(self._build_right_column(), 1)
         card.add_layout(columns)
 
+        self._is_table_generated = False  # 단가표 최초 생성 했는지 여부
         self._generate = PrimaryButton("단가표 생성")
         self._generate.clicked.connect(self._on_generate)
 
@@ -126,11 +129,17 @@ class ConstantsPage(QWidget):
 
     def _register(self, field: ValueField) -> None:
         self._fields[field.key] = field
-        field.valueChanged.connect(lambda *_: self.valuesChanged.emit())
+        field.valueChanged.connect(
+            lambda *_: (
+                self.valuesKept.emit()
+                if self._is_table_generated and self.modified_keys() == []
+                else self.valuesChanged.emit()
+            )
+        )
 
     # --- API --------------------------------------------------------------
     def set_values(self, values: dict[str, float | int | None]) -> None:
-        """파서가 뽑아낸 값을 화면에 채운다."""
+        # 파서가 뽑아낸 값을 화면에 채운다.
         for key, value in values.items():
             if key in self._fields:
                 self._fields[key].set_value(value, keep_original=True)
@@ -148,4 +157,5 @@ class ConstantsPage(QWidget):
     def _on_generate(self) -> None:
         if self.invalid_keys():
             return  # 잘못된 칸은 빨간 테두리로 이미 표시돼 있다
+        self._is_table_generated = True
         self.generateRequested.emit(self.values())
