@@ -20,10 +20,12 @@ def centered_scroll_page(max_width: int = 640) -> tuple[QScrollArea, QVBoxLayout
     holder_layout = QVBoxLayout(holder)
     holder_layout.setContentsMargins(28, 0, 28, 0)
     holder_layout.addWidget(column, 0, Qt.AlignmentFlag.AlignHCenter)
+    holder.setObjectName("ScrollHolder")
 
     area = QScrollArea()
     area.setObjectName("ScrollPage")
     area.setWidgetResizable(True)
     area.setFrameShape(QScrollArea.Shape.NoFrame)
     area.setWidget(holder)
+    area.viewport().setObjectName("ScrollViewport")
     return area, layout

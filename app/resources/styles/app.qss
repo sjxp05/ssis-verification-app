@@ -293,11 +293,17 @@ QLabel#BubbleFoot {
 }
 /* --- 스크롤 페이지 ------------------------------------------------- */
 #ScrollPage {
-    background: transparent;
+    background: ${BG};
     border: none;
 }
+#ScrollViewport {
+    background: ${BG};
+}
+#ScrollHolder {
+    background: ${BG};
+}
 #ScrollColumn {
-    background: transparent;
+    background: ${BG};
 }
 
 /* --- 메인 화면의 작업 선택 버튼 ------------------------------------ */
@@ -407,6 +413,13 @@ QLabel#BubbleFoot {
 }
 #UploadHint[state="failed"] {
     color: ${DANGER_DARK};
+}
+#UploadHint[state="stub"] {
+    color: ${SUCCESS_DARK};
+    background: ${SUCCESS_BG};
+    border: 1px solid ${SUCCESS_BORDER};
+    border-radius: ${RADIUS_SM};
+    padding: 10px 12px;
 }
 
 /* --- 잘못된 입력칸 (theme 토큰으로 통일) ---------------------------- */
