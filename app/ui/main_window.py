@@ -1,306 +1,279 @@
+"""메인 윈도우 — 헤더 + 단계 표시줄 + 페이지 스택."""
+
+from __future__ import annotations
+
+from datetime import date
+from typing import Callable
+from enum import IntEnum
+
+import pandas as pd
+from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtWidgets import (
+    QApplication,
+    QFileDialog,
+    QLineEdit,
+    QMainWindow,
+    QMessageBox,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
+)
+
+from models.dto import ConstantValues
+from models.flows import FlowSpec
+from ui.components.header import HeaderBar
+from ui.components.step_indicator import StepIndicator
+from ui.pages.constants_page import ConstantsPage
+from ui.pages.main_page import MainPage
+from ui.pages.constants_page import ConstantsPage
+from ui.pages.table_viewer_page import TableViewerPage
+from ui.pages.upload_page import UploadPage, ValueExtractor
+
+STEPS = ["조견표 업로드", "단가 정보 확인", "단가표 생성 및 저장"]
+
+class Screen(IntEnum):
+    HOME = 0
+    UPLOAD = 1
+    CONSTANTS = 2
+    TABLES = 3
+
+    @property
+    def step(self) -> int:
+        """단계 표시줄에서 이 화면이 몇 번째 단계인지. 메인 화면은 -1."""
+        return -1 if self is Screen.HOME else int(self) - 1
+
+    @classmethod
+    def for_step(cls, step: int) -> Screen:
+        return cls(step + 1)
+
+
+# table_builder(values) -> {탭 인덱스: (DataFrame, 산식)}
+TableBuilder = Callable[[ConstantValues], dict[int, tuple[pd.DataFrame, object]]]
+
+
 class MainWindow(QMainWindow):
-    TAB_UPLOAD, TAB_VALIDATION, TAB_ERRORS, TAB_UNITPRICE, TAB_UNITVALID = range(5)
-    TAB_LABELS = ["⬆ 파일 업로드", "▦ 조견표 검증", "⚠ 오류 목록", "▤ 단가표 생성", "✔ 단가표 검증"]
+    tablesRequested = pyqtSignal(dict)  # table_builder 를 안 넣었을 때 밖으로 넘김
+    # uploadRequested = pyqtSignal()
+    # homeRequested = pyqtSignal()
 
-    def __init__(self, backend: "BackendHooks"):
+    def __init__(self, value_extractor: ValueExtractor | None = None, table_builder: TableBuilder | None = None):
         super().__init__()
-        self.backend = backend
-        self.quick: Optional[SheetData] = None   # 조견표 검증 결과
-        self.unit: Optional[SheetData] = None    # 단가표 검증 결과
-        self.setWindowTitle("데이터 검증 자동화 시스템")
-        self.resize(1280, 800)
-        self.setStyleSheet(f"QMainWindow{{background:{T.BACKGROUND};}}")
+        self.setWindowTitle("조견표 → 단가표 생성")
+        self.resize(1180, 820)
+        self.table_builder = table_builder
+        self._flow: FlowSpec | None = None
+        self._table_count = 0
+        
+        today = date.today()
+        self._header = HeaderBar(
+            "조견표 → 단가표 생성",
+            f"🕐 {today.year}. {today.month}. {today.day}.",
+        )
 
-        central = QWidget()
-        self.setCentralWidget(central)
-        root = QVBoxLayout(central)
-        root.setContentsMargins(0, 0, 0, 0)
-        root.setSpacing(0)
-        root.addWidget(self._build_header())
-        root.addWidget(self._build_tabbar())
+        self._header.backRequested.connect(self.go_home)
+        
+        # 흐름마다 단계 문구가 달라서 StepIndicator 는 통째로 갈아 끼운다.
+        self._step_holder = QWidget()
+        self._step_layout = QVBoxLayout(self._step_holder)
+        self._step_layout.setContentsMargins(0, 0, 0, 0)
+        self._step_layout.setSpacing(0)
+        self._steps: StepIndicator | None = None
+        
+        self.main_page = MainPage()
+        self.main_page.flowRequested.connect(self.start_flow)
+        
+        self.upload_page = UploadPage(value_extractor)
+        self.upload_page.valuesReady.connect(self._on_values_ready)
+        
+        self.constants_page = ConstantsPage()
+        self.constants_page.generateRequested.connect(self._on_generate)
+        self.constants_page.valuesChanged.connect(self._on_values_changed)
+        
+        self.table_viewer_page = TableViewerPage()
+        self.table_viewer_page.exportRequested.connect(self._on_export)
+        
+        self._stack = QStackedWidget()
+        for page in (
+            self.main_page,
+            self.upload_page,
+            self.constants_page,
+            self.table_viewer_page,
+        ):
+            self._stack.addWidget(page)
+        
+        root = QWidget()
+        root.setObjectName("Root")
+        layout = QVBoxLayout(root)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        layout.addWidget(self._header)
+        layout.addWidget(self._step_holder)
+        layout.addWidget(self._stack, 1)
+        self.setCentralWidget(root)
+        
+        self.go_home()
+        # 헤더의 '메인으로'는 단계 이동이 아니라 이 흐름에서 나가는 동작이다.
+        # self._header.backRequested.connect(self.homeRequested.emit)
 
-        # 페이지 생성
-        self.page_upload = UploadPage()
-        self.page_validation = ValidationPage()
-        self.page_errors = ErrorListPage()
-        self.page_unitprice = UnitPricePage()
-        self.page_unitvalid = UnitValidationPage()
+        # self._steps = StepIndicator(STEPS)
+        # self._steps.stepClicked.connect(self._on_step_clicked)
 
-        self.stack = QStackedWidget()
-        for p in (self.page_upload, self.page_validation, self.page_errors,
-                  self.page_unitprice, self.page_unitvalid):
-            self.stack.addWidget(p)
-        root.addWidget(self.stack, 1)
-        root.addWidget(self._build_footer())
+        # self.constants_page = ConstantsPage()
+        # self.constants_page.generateRequested.connect(self._on_generate)
+        # self.constants_page.valuesChanged.connect(self._on_values_changed)
 
-        self._connect_signals()
-        self.go(self.TAB_UPLOAD)
+        # self.table_viewer_page = TableViewerPage()
+        # self.table_viewer_page.exportRequested.connect(self._on_export)
 
-    # ── 시그널 연결 ──────────────────────────────────────────
-    def _connect_signals(self):
-        self.page_upload.validateRequested.connect(self.run_validation)
+        # self._stack = QStackedWidget()
+        # self._stack.addWidget(self.constants_page)
+        # self._stack.addWidget(self.table_viewer_page)
 
-        self.page_validation.fixRequested.connect(lambda e, v: self.fix_error(self.quick, e, v))
-        self.page_validation.fixAllRequested.connect(lambda: self.fix_all(self.quick))
-        self.page_validation.saveRequested.connect(lambda: self.save_sheet(self.quick))
+        # root = QWidget()
+        # root.setObjectName("Root")
+        # layout = QVBoxLayout(root)
+        # layout.setContentsMargins(0, 0, 0, 0)
+        # layout.setSpacing(0)
+        # layout.addWidget(self._header)
+        # layout.addWidget(self._steps)
+        # layout.addWidget(self._stack, 1)
+        # self.setCentralWidget(root)
 
-        self.page_errors.fixRequested.connect(lambda e, v: self.fix_error(self.quick, e, v))
-        self.page_errors.fixAllRequested.connect(lambda: self.fix_all(self.quick))
-        self.page_errors.saveRequested.connect(lambda: self.save_sheet(self.quick))
-        self.page_errors.rowActivated.connect(self._jump_to_error)
+        # self.go_to_step(1)
 
-        self.page_unitprice.generateRequested.connect(self.run_generate)
-        self.page_unitprice.downloadRequested.connect(self.download_unit_price)
-        self.page_unitprice.validateRequested.connect(self.run_unit_validation)
+    # --- 화면 전환 --------------------------------------------------------
+    def go_home(self) -> None:
+        """메인 화면으로. 진행 중이던 흐름은 그대로 두었다가 다시 들어오면 이어간다."""
+        self.table_viewer_page.hide_bubbles()
+        self._stack.setCurrentIndex(Screen.HOME)
+        self._header.set_title("사회보장정보원 단가표 생성 앱")
+        self._header.set_back_visible(False)
+        self._step_holder.setVisible(False)
 
-        self.page_unitvalid.goGenerate.connect(lambda: self.go(self.TAB_UNITPRICE))
-        self.page_unitvalid.validation.fixRequested.connect(lambda e, v: self.fix_error(self.unit, e, v))
-        self.page_unitvalid.validation.fixAllRequested.connect(lambda: self.fix_all(self.unit))
-        self.page_unitvalid.validation.saveRequested.connect(lambda: self.save_sheet(self.unit))
+    def start_flow(self, flow: FlowSpec) -> None:
+        """메인 화면에서 작업을 골랐을 때."""
+        changed = self._flow is None or self._flow.key != flow.key
+        self._flow = flow
+        if changed:
+            self._reset_flow(flow)
+        self._header.set_title(flow.window_title)
+        self._header.set_back_visible(True)
+        self._step_holder.setVisible(True)
+        self.go_to_step(self._steps.current() if self._steps else 0)
 
-    # ── 헤더/탭바/푸터 ───────────────────────────────────────
-    def _build_header(self) -> QWidget:
-        head = QFrame()
-        head.setFixedHeight(48)
-        head.setStyleSheet(f"background:{T.PRIMARY};")
-        l = QHBoxLayout(head)
-        l.setContentsMargins(20, 0, 20, 0)
-        l.setSpacing(10)
-        logo = QLabel("▦")
-        logo.setFixedSize(28, 28)
-        logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        logo.setStyleSheet("background:rgba(255,255,255,0.15); color:white; border-radius:4px; font-size:14px;")
-        title = QLabel("데이터 검증 자동화 시스템")
-        title.setStyleSheet("color:white; font-size:13px; font-weight:600;")
-        l.addWidget(logo)
-        l.addWidget(title)
-        l.addStretch()
-        self.hdr_err = QLabel()
-        self.hdr_err.setStyleSheet("background:rgba(239,68,68,0.2); color:#fecaca;"
-                                   " border:1px solid rgba(248,113,113,0.3); border-radius:4px;"
-                                   " padding:3px 8px; font-size:11px;")
-        self.hdr_fix = QLabel()
-        self.hdr_fix.setStyleSheet("background:rgba(34,197,94,0.2); color:#bbf7d0;"
-                                   " border:1px solid rgba(74,222,128,0.3); border-radius:4px;"
-                                   " padding:3px 8px; font-size:11px;")
-        self.hdr_err.hide()
-        self.hdr_fix.hide()
-        date = QLabel("🕒 " + QDate.currentDate().toString("yyyy. MM. dd."))
-        date.setStyleSheet("color:rgba(255,255,255,0.5); font-size:11px;")
-        l.addWidget(self.hdr_err)
-        l.addWidget(self.hdr_fix)
-        l.addWidget(date)
-        return head
-
-    def _build_tabbar(self) -> QWidget:
-        bar = QFrame()
-        bar.setStyleSheet(f"background:{T.CARD}; border-bottom:1px solid {T.BORDER};")
-        l = QHBoxLayout(bar)
-        l.setContentsMargins(20, 0, 20, 0)
-        l.setSpacing(0)
-        self.tabs: list[QPushButton] = []
-        for i, txt in enumerate(self.TAB_LABELS):
-            b = QPushButton(txt)
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            b.setFixedHeight(42)
-            b.clicked.connect(lambda _, ix=i: self.go(ix))
-            l.addWidget(b)
-            self.tabs.append(b)
-        l.addStretch()
-        return bar
-
-    def _build_footer(self) -> QWidget:
-        foot = QFrame()
-        foot.setFixedHeight(28)
-        foot.setStyleSheet(f"background:{T.MUTED}; border-top:1px solid {T.BORDER};")
-        l = QHBoxLayout(foot)
-        l.setContentsMargins(20, 0, 20, 0)
-        l.setSpacing(16)
-        self.foot_status = QLabel("○ 대기 중")
-        self.foot_status.setStyleSheet(f"font-size:11px; color:{T.MUTED_FG};")
-        self.foot_files = QLabel()
-        self.foot_files.setStyleSheet(f"font-size:11px; color:{T.MUTED_FG};")
-        ver = QLabel("공공기관 데이터 검증 자동화 시스템 v1.0")
-        ver.setStyleSheet(f"font-size:11px; color:{T.MUTED_FG};")
-        l.addWidget(self.foot_status)
-        l.addWidget(self.foot_files)
-        l.addStretch()
-        l.addWidget(ver)
-        return foot
-
-    def go(self, index: int):
-        self.stack.setCurrentIndex(index)
-        for i, b in enumerate(self.tabs):
-            active = i == index
-            if active:
-                b.setStyleSheet(f"QPushButton{{background:transparent; color:{T.PRIMARY}; border:none;"
-                                f" border-bottom:2px solid {T.PRIMARY}; font-size:12px; font-weight:600;"
-                                f" padding:0 16px;}}")
-            else:
-                b.setStyleSheet(f"QPushButton{{background:transparent; color:{T.MUTED_FG}; border:none;"
-                                f" border-bottom:2px solid transparent; font-size:12px; padding:0 16px;}}"
-                                f"QPushButton:hover{{color:{T.FG};}}")
-
-    # ── 동작 (백엔드 호출 → UI 반영) ──────────────────────────
-    def run_validation(self):
-        """탭 1: 검증 실행."""
-        guide = self.page_upload.card_guide.file
-        sheet = self.page_upload.card_sheet.file
-        if not (guide and sheet):
+    
+    def go_to_step(self, step: int) -> None:
+        """0 = 문서 업로드, step 1 = 단가 정보 확인, step 2 = 단가표 생성."""
+        if self._steps is None or self._flow is None:
             return
-        self.page_upload.set_busy(True)
-        try:
-            # TODO: 오래 걸리는 작업이면 QThread/QThreadPool 로 감싸서 UI 프리징 방지
-            self.quick = self.backend.validate_quick_reference(guide.path, sheet.path)
-        except Exception as ex:
-            QMessageBox.critical(self, "검증 실패", str(ex))
-            return
-        finally:
-            self.page_upload.set_busy(False)
-        self.page_validation.set_data(self.quick)
-        self.page_errors.set_data(self.quick)
-        self.refresh_status()
-        self.go(self.TAB_VALIDATION)
+        step = max(0, min(step, len(self._flow.steps) - 1))
+        self.table_viewer_page.hide_bubbles()
+        if step == Screen.TABLES.step:
+            self.table_viewer_page.reset_tab()  # 마지막 단계는 항상 첫 탭부터
+        self._stack.setCurrentIndex(Screen.for_step(step))
+        self._steps.set_current(step)
 
-    def fix_error(self, data: Optional[SheetData], err: ValidationError, value: str):
-        """오류 1건 수정. value="" 이면 expected 로 자동 수정."""
-        if not data:
-            return
-        err.fixed = True
-        err.current = value or err.expected
-        # TODO: 수정 내역을 백엔드에도 반영해야 하면 여기서 호출 (예: backend.apply_fix(err))
-        self._refresh_views(data)
+    # --- 흐름 준비 --------------------------------------------------------
+    def _reset_flow(self, flow: FlowSpec) -> None:
+        """다른 작업을 고르면 앞선 작업의 흔적을 지운다."""
+        self._install_steps(flow)
+        self.upload_page.set_flow(flow)
+        self.constants_page.set_values(dict.fromkeys(self.constants_page.values()))
+        for index in range(self._table_count):
+            self.table_viewer_page.set_table(index, pd.DataFrame())
+        self._table_count = 0
 
-    def fix_all(self, data: Optional[SheetData]):
-        if not data:
-            return
-        for e in data.open_errors:
-            e.fixed = True
-            e.current = e.expected
-        # TODO: 일괄 수정 백엔드 반영이 필요하면 여기서 호출
-        self._refresh_views(data)
+    def _install_steps(self, flow: FlowSpec) -> None:
+        if self._steps is not None:
+            self._step_layout.removeWidget(self._steps)
+            self._steps.deleteLater()
+        self._steps = StepIndicator(list(flow.steps))
+        self._steps.stepClicked.connect(self.go_to_step)
+        self._step_layout.addWidget(self._steps)
 
-    def save_sheet(self, data: Optional[SheetData]):
-        if not data:
+    def _on_step_clicked(self, index: int) -> None:
+        """스텝바에서 이미 지나온 단계를 눌렀을 때."""
+        if index == 0:
+            # 조견표 업로드 화면은 이 창 밖에 있다 — 바깥에서 처리하도록 넘긴다
+            self.uploadRequested.emit()
             return
-        path, _ = QFileDialog.getSaveFileName(self, "파일 저장", data.filename, "Excel (*.xlsx)")
+        self.go_to_step(index)
+
+    def mousePressEvent(self, event):  # noqa: N802 (Qt 시그니처)
+        """빈 곳을 누르면 입력칸에서 포커스(깜빡이는 커서)를 뗀다.
+
+        입력칸·버튼처럼 클릭을 직접 받는 위젯이 아니면 이벤트가 여기까지 올라온다.
+        포커스가 풀리면서 ValueField 의 editingFinished 가 걸려 숫자도 다시 포맷된다.
+        """
+        focused = QApplication.focusWidget()
+        if isinstance(focused, QLineEdit):
+            focused.clearFocus()
+        self.table_viewer_page.hide_bubbles()  # 표 바깥을 누르면 말풍선도 닫는다
+        super().mousePressEvent(event)
+
+    def set_extracted_values(self, values: dict) -> None:
+        self.constants_page.set_values(values)
+
+    def set_tables(self, tables: dict[int, tuple[pd.DataFrame, object]]) -> None:
+        for index in range(self._table_count):
+            if index not in tables:
+                self.table_viewer_page.set_table(index, pd.DataFrame())
+        for index, (df, formulas) in tables.items():
+            self.table_viewer_page.set_table(index, df, formulas)
+        self._table_count = max(tables, default=-1) + 1
+
+    # --- 동작 -------------------------------------------------------------
+    def _on_values_ready(self, values: ConstantValues) -> None:
+        """업로드 화면에서 문서를 다 읽었을 때."""
+        self.constants_page.set_values(values)
+        self.go_to_step(Screen.CONSTANTS.step)
+    
+
+    def _on_values_changed(self) -> None:
+        """상수를 고치면 이미 만든 단가표는 낡은 값이므로 3단계를 다시 잠근다."""
+        if self._steps is not None:
+            self._steps.set_max_reached(Screen.CONSTANTS.step)
+    
+    def _on_generate(self, values: dict) -> None:
+        if self.table_builder is None:
+            self.tablesRequested.emit(values)
+        else:
+            self.set_tables(self.table_builder(values))
+        self.go_to_step(Screen.TABLES.step)
+
+    def _on_export(self, tab_index: int, df: pd.DataFrame) -> None:
+        if df.empty:
+            QMessageBox.information(self, "저장", "저장할 내용이 없습니다.")
+            return
+        if self._flow is None:
+            return
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "표 저장",
+            self._flow.export_name(tab_index),
+            "Excel 파일 (*.xlsx)",
+        )
         if not path:
             return
         try:
-            self.backend.save_fixed_sheet(data, path)
-            QMessageBox.information(self, "저장 완료", f"파일이 저장되었습니다.\n{path}")
-        except Exception as ex:
-            QMessageBox.critical(self, "저장 실패", str(ex))
-
-    def run_generate(self):
-        """탭 4: 단가표 생성."""
-        self.page_unitprice.set_busy("generate", True)
-        try:
-            # TODO: 오래 걸리면 QThread 처리
-            headers, rows, filename, size_text = self.backend.generate_unit_price(self.quick)
-        except Exception as ex:
-            QMessageBox.critical(self, "생성 실패", str(ex))
-            return
-        finally:
-            self.page_unitprice.set_busy("generate", False)
-        self.page_unitprice.set_preview(headers, rows)
-        self.page_unitprice.set_generated(filename, size_text)
-
-    def download_unit_price(self):
-        path, _ = QFileDialog.getSaveFileName(self, "다운로드", "unit_price_list.xlsx", "Excel (*.xlsx)")
-        if not path:
-            return
-        try:
-            self.backend.export_unit_price(path)
-            QMessageBox.information(self, "저장 완료", f"파일이 저장되었습니다.\n{path}")
-        except Exception as ex:
-            QMessageBox.critical(self, "저장 실패", str(ex))
-
-    def run_unit_validation(self):
-        """탭 4 → 5: 단가표 검증."""
-        self.page_unitprice.set_busy("validate", True)
-        try:
-            # TODO: 오래 걸리면 QThread 처리
-            self.unit = self.backend.validate_unit_price()
-        except Exception as ex:
-            QMessageBox.critical(self, "검증 실패", str(ex))
-            return
-        finally:
-            self.page_unitprice.set_busy("validate", False)
-        self.page_unitvalid.show_validation(self.unit)
-        self.go(self.TAB_UNITVALID)
-
-    # ── 화면 갱신 ────────────────────────────────────────────
-    def _refresh_views(self, data: SheetData):
-        if data is self.quick:
-            self.page_validation.refresh()
-            self.page_errors.refresh()
-        elif data is self.unit:
-            self.page_unitvalid.validation.refresh()
-        self.refresh_status()
-
-    def _jump_to_error(self, err: ValidationError):
-        self.go(self.TAB_VALIDATION)
-        self.page_validation.open_detail(err)
-
-    def refresh_status(self):
-        """헤더 배지 / 푸터 / 단가표 페이지 상태 동기화."""
-        if not self.quick:
-            return
-        n_open, n_fixed = len(self.quick.open_errors), len(self.quick.fixed_errors)
-        self.hdr_err.setVisible(n_open > 0)
-        self.hdr_err.setText(f"⨯ 오류 {n_open}건")
-        self.hdr_fix.setVisible(n_fixed > 0)
-        self.hdr_fix.setText(f"✔ 수정 {n_fixed}건")
-        self.foot_status.setText("● 검증 완료")
-        self.foot_status.setStyleSheet(f"font-size:11px; color:{T.GREEN};")
-        files = []
-        if self.page_upload.card_guide.file:
-            files.append("📄 " + self.page_upload.card_guide.file.name)
-        if self.page_upload.card_sheet.file:
-            files.append("▦ " + self.page_upload.card_sheet.file.name)
-        self.foot_files.setText("    ".join(files))
-        self.page_unitprice.set_ready(True, len(self.quick.errors), n_fixed)
-
-
-# ═════════════════════════════════════════════════════════════════════════════
-# [6] BackendHooks — ★ 백엔드 로직 연결 지점 (여기만 채우면 됨) ★
-# ═════════════════════════════════════════════════════════════════════════════
-class BackendHooks:
-    """
-    구현된 백엔드 로직을 이 클래스의 메서드에 연결하세요.
-    각 메서드는 UI가 그대로 소비할 수 있는 형태(SheetData / ValidationError)를 반환합니다.
-    실패 시 예외를 던지면 UI가 에러 다이얼로그를 띄웁니다.
-    """
-
-    def validate_quick_reference(self, guide_pdf_path: str, sheet_xlsx_path: str) -> SheetData:
-        """사업지침 + 조견표 → 검증 결과."""
-        # TODO: 백엔드 검증 로직 호출 후 결과를 SheetData 로 변환하여 반환
-        #   return SheetData(
-        #       filename=os.path.basename(sheet_xlsx_path),
-        #       sheet_name="...",
-        #       headers=[...],                # 표 헤더
-        #       rows=[[...], ...],            # 표 데이터 (문자열 2차원 리스트)
-        #       errors=[ValidationError(...), ...],
-        #   )
-        raise NotImplementedError("validate_quick_reference 를 구현하세요.")
-
-    def save_fixed_sheet(self, data: SheetData, save_path: str) -> None:
-        """수정 완료된 시트를 엑셀로 저장."""
-        # TODO: data.rows + data.errors(수정값 반영됨) 를 엑셀로 기록
-        raise NotImplementedError("save_fixed_sheet 를 구현하세요.")
-
-    def generate_unit_price(self, quick: Optional[SheetData]) -> tuple[list[str], list[list[str]], str, str]:
-        """단가표 생성. 반환: (headers, rows, 파일명, 크기 텍스트)."""
-        # TODO: 검증된 조견표 기반 단가표 생성 로직 호출
-        raise NotImplementedError("generate_unit_price 를 구현하세요.")
-
-    def export_unit_price(self, save_path: str) -> None:
-        """생성된 단가표 엑셀 파일 내보내기."""
-        # TODO: 생성 결과를 save_path 에 기록
-        raise NotImplementedError("export_unit_price 를 구현하세요.")
-
-    def validate_unit_price(self) -> SheetData:
-        """생성된 단가표 검증 결과."""
-        # TODO: 단가표 검증 로직 호출 후 SheetData 반환
-        raise NotImplementedError("validate_unit_price 를 구현하세요.")
+            df.to_excel(path, index=False)
+        except PermissionError:
+            QMessageBox.warning(
+                self,
+                "저장 실패",
+                "파일이 다른 프로그램에서 열려 있는 것 같습니다.\n"
+                "엑셀에서 닫은 뒤 다시 시도해 주세요.",
+            )
+        except ModuleNotFoundError:
+            QMessageBox.warning(
+                self,
+                "저장 실패",
+                "엑셀 저장에 필요한 openpyxl 이 설치돼 있지 않습니다.",
+            )
+        except OSError as error:
+            QMessageBox.warning(
+                self, "저장 실패", f"파일을 저장하지 못했습니다.\n{error}"
+            )
+        else:
+            QMessageBox.information(self, "저장 완료", f"{path} 에 저장했습니다.")
