@@ -117,7 +117,11 @@ class StepIndicator(QFrame):
     def _refresh(self) -> None:
         for i, chip in enumerate(self._chips):
             state = (
-                DONE if i < self._current else CURRENT if i == self._current else TODO
+                CURRENT
+                if i == self._current
+                else DONE
+                if i <= self._max_reached
+                else TODO
             )
             chip.set_state(state)
             chip.set_navigable(i != self._current and i <= self._max_reached)
