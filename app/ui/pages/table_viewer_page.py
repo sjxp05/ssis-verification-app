@@ -1,8 +1,7 @@
-"""2단계 — 생성된 단가표 화면.
-
-pandas DataFrame 을 엑셀 레이아웃처럼 보여주고,
-셀을 클릭하면 그 값이 어떻게 나온 값인지 산식을 말풍선으로 띄운다.
-"""
+# 2단계 — 생성된 단가표 화면.
+#
+# pandas DataFrame 을 엑셀 레이아웃처럼 보여주고,
+# 셀을 클릭하면 그 값이 어떻게 나온 값인지 산식을 말풍선으로 띄운다.
 
 from __future__ import annotations
 
@@ -26,16 +25,15 @@ TABS = [
         "label": "기본급여 단가표",
         "title": "기본급여 단가표 생성",
         "card_title": "기본급여 단가표 미리보기",
-        "action": "Excel 파일로 저장",
     },
     {
         "label": "추가급여 단가표",
         "title": "추가급여 단가표 생성",
         "card_title": "추가급여 단가표 미리보기",
-        "action": "Excel 파일로 저장",
     },
 ]
 ACCENT_COLUMNS = ["등급코드", "코드", "항목코드"]
+ACTION_TEXT = "Excel 파일로 저장"
 
 
 class TableViewerPage(QWidget):
@@ -127,7 +125,7 @@ class TableViewerPage(QWidget):
         spec = TABS[index]
         self._title.setText(spec["title"])
         self._card_title.setText("단가표 미리보기")
-        self._action.setText(spec["action"])
+        self._action.setText(ACTION_TEXT)
         self._stack.setCurrentIndex(index)
 
     def _on_export(self) -> None:

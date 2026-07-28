@@ -1,8 +1,8 @@
-"""실행 진입점.
-
-실제로는 table_builder 안에서 파싱·계산 파이프라인을 호출하면 된다.
-여기서는 화면 확인용 예시 데이터를 만든다.
-"""
+# 실행 진입점
+#
+# 실제로는 extract_value 자리에 실제 파서(서비스 로직)를 넣어야 함
+# build_tables도 table_builder 서비스 로직으로 파싱·계산 파이프라인 호출해야 함
+# 백엔드 붙이기 전까지는 Mock data 사용
 
 from __future__ import annotations
 
@@ -44,8 +44,9 @@ GRADES = [
     ("D008", "2등급(나형)", 884_640, 866_880, 17_693, "소득구분2"),
 ]
 
+
 def extract_values(files: dict[str, UploadedFile]) -> ConstantValues:
-    """문서를 읽어 상수를 뽑는다 — 실제 파서로 교체하세요."""
+    # 문서를 읽어 상수를 뽑는다 — 실제 파서로 교체하세요.
     import time
 
     time.sleep(0.3)
@@ -61,7 +62,7 @@ def extract_values(files: dict[str, UploadedFile]) -> ConstantValues:
 
 
 def build_tables(values: dict) -> dict[int, tuple[pd.DataFrame, pd.DataFrame]]:
-    """확인된 상수로 단가표 DataFrame 과 셀별 산식을 만든다."""
+    # 확인된 상수로 단가표 DataFrame 과 셀별 산식을 만든다.
     rate = values.get("copay_rate_ra") or 6
     cap = values.get("copay_cap") or 216_000
 

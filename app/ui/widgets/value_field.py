@@ -1,8 +1,7 @@
-"""'라벨 + 둥근 입력칸' 한 줄짜리 값 입력 위젯.
-
-문서에서 뽑아낸 상수를 보여주고, 사용자가 고칠 수 있게 한다.
-고쳐진 칸은 파란 테두리, 숫자로 못 읽는 칸은 빨간 테두리로 표시된다.
-"""
+# '라벨 + 둥근 입력칸' 한 줄짜리 값 입력 위젯
+#
+# 문서에서 뽑아낸 상수를 보여주고, 사용자가 고칠 수 있게 한다.
+# 고쳐진 칸은 파란 테두리, 숫자로 못 읽는 칸은 빨간 테두리로 표시된다.
 
 from __future__ import annotations
 
@@ -20,7 +19,7 @@ def _repolish(widget: QWidget) -> None:
 
 
 class ValueField(QWidget):
-    """kind='int' → 216,000 / kind='percent' → 4% 로 표시한다."""
+    # kind='int' → 216,000 / kind='percent' → 4% 로 표시
 
     valueChanged = pyqtSignal(str, object)  # key, value
 

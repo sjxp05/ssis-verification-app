@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True, slots=True)
 class UploadSlot:
-    """업로드 화면의 카드 한 장."""
+    # 업로드 화면의 카드 한 장
 
     key: str  # 추출기에 넘길 때 쓰는 이름
     title: str
@@ -16,7 +16,7 @@ class UploadSlot:
 
 @dataclass(frozen=True, slots=True)
 class FlowSpec:
-    """업로드 → 값 확인 → 표 생성으로 이어지는 작업 흐름 하나."""
+    # 업로드 → 값 확인 → 표 생성으로 이어지는 작업 흐름 하나
 
     key: str
     menu_title: str  # 메인 화면 버튼 제목
@@ -26,14 +26,14 @@ class FlowSpec:
     upload_title: str
     upload_description: str
     uploads: tuple[UploadSlot, ...]
-    export_names: tuple[str, ...]  = ()# 탭 인덱스별 기본 저장 파일명
+    export_names: tuple[str, ...] = ()  # 탭 인덱스별 기본 저장 파일명
     enabled: bool = True
 
     stub: bool = False
     stub_notice: str = "이 작업은 아직 준비 중입니다."
 
     def export_name(self, tab_index: int) -> str:
-        """탭 인덱스에 해당하는 기본 저장 파일명. 범위를 벗어나면 첫 번째를 쓴다."""
+        # 탭 인덱스에 해당하는 기본 저장 파일명. 범위를 벗어나면 첫 번째를 쓴다
         if 0 <= tab_index < len(self.export_names):
             return self.export_names[tab_index]
         return self.export_names[0]
@@ -68,7 +68,7 @@ NOTICE_VERIFY = FlowSpec(
     menu_title="고시 검증 및 결제단가표 생성",
     menu_description="고시와 조견표, 단가표를 대조해 고시의 내용이 옳은지 검증합니다.(준비 중)",
     window_title="고시 검증 및 결제단가표 생성",
-    steps=("문서 업로드", ),
+    steps=("문서 업로드",),
     upload_title="문서 업로드",
     upload_description="고시를 업로드 해주세요.",
     uploads=(
@@ -79,7 +79,6 @@ NOTICE_VERIFY = FlowSpec(
             extensions=(".hwpx",),
             icon="📄",
         ),
-
     ),
     stub=True,
     stub_notice="검증 파이프라인은 준비 중입니다. 파일 확인까지만 가능합니다.",

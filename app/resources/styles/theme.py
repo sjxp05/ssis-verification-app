@@ -1,8 +1,7 @@
-"""디자인 토큰 정의 및 QSS 로더.
-
-app.qss 안의 ${TOKEN} 자리에 아래 값들이 치환된다.
-QPainter로 직접 그리는 위젯(말풍선 등)도 같은 토큰을 import 해서 쓴다.
-"""
+# 디자인 토큰 정의 및 QSS 로더
+#
+# app.qss 안의 ${TOKEN} 자리에 아래 값들이 치환된다.
+# QPainter로 직접 그리는 위젯(말풍선 등)도 같은 토큰을 import 해서 쓴다.
 
 from pathlib import Path
 from string import Template
@@ -55,9 +54,8 @@ _TOKENS = {
 _QSS_PATH = Path(__file__).with_name("app.qss")
 
 
-
 def load_stylesheet() -> str:
-    """app.qss를 읽어 토큰을 치환한 문자열을 돌려준다."""
+    # app.qss를 읽어 토큰을 치환한 문자열을 돌려준다.
     try:
         raw = _QSS_PATH.read_text(encoding="utf-8")
     except FileNotFoundError as error:
@@ -65,8 +63,4 @@ def load_stylesheet() -> str:
     try:
         return Template(raw).substitute(_TOKENS)
     except KeyError as error:
-        raise KeyError(
-            f"app.qss가 정의되지 않은 토큰{error}를 참조함"
-        ) from None
-    
-
+        raise KeyError(f"app.qss가 정의되지 않은 토큰{error}를 참조함") from None

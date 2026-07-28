@@ -1,5 +1,4 @@
-# ui/components/scroll_page.py
-"""가운데 정렬된 폭 제한 세로 컬럼 + 스크롤 영역."""
+# 가운데 정렬된 폭 제한 세로 컬럼 + 스크롤 영역
 
 from __future__ import annotations
 
@@ -8,7 +7,7 @@ from PyQt6.QtWidgets import QScrollArea, QVBoxLayout, QWidget
 
 
 def centered_scroll_page(max_width: int = 640) -> tuple[QScrollArea, QVBoxLayout]:
-    """스크롤 영역과, 거기에 위젯을 쌓을 세로 레이아웃을 함께 돌려준다."""
+    # 스크롤 영역과, 거기에 위젯을 쌓을 세로 레이아웃을 함께 돌려준다.
     column = QWidget()
     column.setObjectName("ScrollColumn")
     column.setMaximumWidth(max_width)

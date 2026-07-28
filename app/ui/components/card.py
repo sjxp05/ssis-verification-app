@@ -1,4 +1,4 @@
-"""회색 제목 띠 + 흰 본문으로 이루어진 카드 컨테이너."""
+# 회색 제목 띠 + 흰 본문으로 이루어진 카드 컨테이너
 
 from PyQt6.QtWidgets import (
     QFrame,
@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
 
 
 class Card(QFrame):
-    """Card("문서 안의 값이 정확한지 확인해 주세요") 처럼 쓰고 body_layout 에 내용을 채운다."""
+    # Card("문서 안의 값이 정확한지 확인해 주세요") 처럼 쓰고 body_layout 에 내용을 채운다.
 
     def __init__(
         self,

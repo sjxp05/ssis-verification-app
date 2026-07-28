@@ -1,9 +1,8 @@
-"""pandas DataFrame 을 QTableView 에 붙이기 위한 모델.
-
-- 숫자 컬럼은 천단위 콤마 + 우측 정렬
-- accent_columns 로 지정한 컬럼은 파란 글씨 (등급코드 같은 것)
-- 셀마다 산식 문자열을 따로 들고 있다가 말풍선에 넘겨준다
-"""
+# pandas DataFrame 을 QTableView 에 붙이기 위한 모델
+#
+# - 숫자 컬럼은 천단위 콤마 + 우측 정렬
+# - accent_columns 로 지정한 컬럼은 파란 글씨 (등급코드 등)
+# - 셀마다 산식 문자열을 따로 들고 있다가 말풍선에 넘겨준다
 
 from __future__ import annotations
 
@@ -107,7 +106,7 @@ class DataFrameModel(QAbstractTableModel):
         )
 
     def cell_label(self, index: QModelIndex) -> str:
-        """말풍선 제목에 쓸 '행 · 컬럼' 라벨."""
+        # 말풍선 제목에 쓸 '행 · 컬럼' 라벨.
         if not index.isValid():
             return ""
         return f"{index.row() + 1}행 · {self._df.columns[index.column()]}"

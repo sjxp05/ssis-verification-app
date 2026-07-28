@@ -1,11 +1,11 @@
-"""상단 네이비 헤더 바."""
+# 상단 네이비 헤더 바
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QWidget
 
 
 class HeaderBar(QFrame):
-    """< 메인으로 | 화면명 ............ 날짜"""
+    # < 메인으로 | 화면명 ............ 날짜
 
     backRequested = pyqtSignal()
 
