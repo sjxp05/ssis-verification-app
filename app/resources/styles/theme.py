@@ -28,16 +28,16 @@ TEXT_MUTED = "#7B8794"
 TEXT_ON_NAVY = "#FFFFFF"
 TEXT_ON_NAVY_MUTED = "#C7D3E2"
 
-DANGER = "#DC2626"  # 구 T.RED — 잘못된 값 / 확장자 불일치
-DANGER_DARK = "#991B1B"  # 구 T.RED_DARK
-DANGER_BG = "#FEF2F2"  # 구 T.RED_BG
-DANGER_BORDER = "#FECACA"  # 구 T.RED_BORDER
+DANGER = "#DC2626"  # 잘못된 값 / 확장자 불일치
+DANGER_DARK = "#991B1B"  
+DANGER_BG = "#FEF2F2"  
+DANGER_BORDER = "#FECACA" 
 
-SUCCESS = "#16A34A"  # 구 T.GREEN — 업로드 완료
-SUCCESS_DARK = "#166534"  # 구 T.GREEN_DARK
-SUCCESS_BG = "#F0FDF4"  # 구 T.GREEN_BG
-SUCCESS_BORDER = "#86EFAC"  # 구 T.GREEN_BORDER
-SUCCESS_SOFT = "#DCFCE7"  # 신규 — 완료 아이콘 배경
+SUCCESS = "#16A34A"  # 업로드 완료
+SUCCESS_DARK = "#166534"  
+SUCCESS_BG = "#F0FDF4"  
+SUCCESS_BORDER = "#86EFAC"
+SUCCESS_SOFT = "#DCFCE7" 
 
 # --- Metric --------------------------------------------------------------
 RADIUS = "6px"

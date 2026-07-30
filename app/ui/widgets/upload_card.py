@@ -1,7 +1,6 @@
 # 드래그앤드롭 + 클릭 업로드 카드
 #
 # 상태(idle / hover / done / rejected)는 동적 property 로만 표현
-# 색은 전부 app.qss에서 가져옴 -> 인라인 setStyleSheet를 사용하지 않음
 
 from __future__ import annotations
 

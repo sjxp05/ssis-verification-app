@@ -40,7 +40,7 @@ class Screen(IntEnum):
 
     @property
     def step(self) -> int:
-        # 단계 표시줄에서 이 화면이 몇 번째 단계인지, 메인 화면은 -1
+        # 단계 표시줄에서 이 화면이 몇 번째 단계인지 표현, 메인 화면은 -1
         return -1 if self is Screen.HOME else int(self) - 1
 
     @classmethod
