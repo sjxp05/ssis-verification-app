@@ -12,7 +12,8 @@ from PyQt6.QtCore import QObject, QRunnable, Qt, QThreadPool, pyqtSignal
 from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from models.dto import ConstantValues, UploadedFile
-from models.flows import FlowSpec
+from models.flows import FlowSpec, UNIT_PRICE
+from services import recent_files
 from ui.components.button import PrimaryButton
 from ui.components.scroll_page import centered_scroll_page
 from utils.qss import set_state
@@ -143,9 +144,19 @@ class UploadPage(QWidget):
 
         if self._flow is None:
             return
+        # TODO(remember_last):
+        # slot.remember_last==True 인 슬롯은 카드를 만든 뒤
+        # services.recent_files.get_recent_path(slot.key) 로 저장된 경로가 있는지 확인
+        #   -> 있으면 card.set_path(path) 를 바로 호출해 자동으로 채운다.
+        #   -> 없거나 파일이 사라졌을 때만 지금처럼 빈 카드로 두고 직접 업로드를 받는다.
+        # 주의: 이 루프 중간에 자동 채움이 fileSelected -> _on_file_selected 를 곧바로 태우면
+        # 아직 안 만들어진 카드까지 "다 찼다"고 오판할 수 있음
+        # 카드를 전부 만든 다음 한 번에 자동 채움을 돌리는 편이 안전하다.
         for slot in self._flow.uploads:
             card = UploadCard(slot.title, slot.description, slot.extensions, slot.icon)
-            card.fileSelected.connect(self._on_file_selected)
+            card.fileSelected.connect(
+                lambda file, key=slot.key: self._on_file_selected(key, file)
+            )
             self._cards[slot.key] = card
             self._cards_layout.addWidget(card)
         self._set_state(WAITING)
@@ -159,9 +170,17 @@ class UploadPage(QWidget):
             key: card.file() for key, card in self._cards.items() if card.file()
         }  # type: ignore[misc]
 
-    def _on_file_selected(self, _file: UploadedFile) -> None:
+    def _on_file_selected(self, key: str, _file: UploadedFile) -> None:
         self._values = None
         self._generation += 1  # 파일이 바뀌었으므로 이전 추출 결과를 버림
+        if (
+            self._flow is not None
+            and self._flow.key == UNIT_PRICE.key
+            and key == "sheet"
+        ):
+            # flow 1(조견표 -> 단가표 생성)에서 조견표를 올리면
+            # flow 2가 나중에 자동으로 불러올 수 있도록 경로 저장
+            recent_files.set_recent_path(key, _file.path)
         files = self._files()
         if len(files) < len(self._cards):
             self._set_state(WAITING)

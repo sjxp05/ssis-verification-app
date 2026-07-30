@@ -5,12 +5,15 @@ from PyQt6.QtWidgets import QButtonGroup, QHBoxLayout, QPushButton, QWidget
 
 
 class SegmentedTabBar(QWidget):
-    # 탭을 고르면 currentChanged(index) 발생
+    # 탭을 고르면 currentChanged(flow, index) 발생
 
-    currentChanged = pyqtSignal(int)
+    currentChanged = pyqtSignal(str, int)
 
-    def __init__(self, labels: list[str], parent: QWidget | None = None):
+    def __init__(
+        self, labels: list[str], flow: str = "", parent: QWidget | None = None
+    ):
         super().__init__(parent)
+        self._flow = flow
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -28,7 +31,9 @@ class SegmentedTabBar(QWidget):
             layout.addWidget(button)
         layout.addStretch(1)
 
-        self._group.idClicked.connect(self.currentChanged.emit)
+        self._group.idClicked.connect(
+            lambda index: self.currentChanged.emit(self._flow, index)
+        )
         self.set_current(0)
 
     def set_current(self, index: int) -> None:

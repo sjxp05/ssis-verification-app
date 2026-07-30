@@ -41,6 +41,15 @@ QFrame#HeaderDivider {
     max-width: 1px;
 }
 
+/* ---------- 시스템 알림 ------------ */
+QMessageBox {
+    background-color: ${SURFACE};
+}
+
+QMessageBox QLabel{
+    color: ${TEXT};
+}
+
 /* ---------- Step indicator ---------- */
 QFrame#StepBar {
     background: ${STEP_BG};

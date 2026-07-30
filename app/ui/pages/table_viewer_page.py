@@ -20,18 +20,27 @@ from ui.components.button import PrimaryButton
 from ui.components.tab_bar import SegmentedTabBar
 from ui.widgets.dataframe_table import DataFrameTable
 
-TABS = [
-    {
-        "label": "기본급여 단가표",
-        "title": "기본급여 단가표 생성",
-        "card_title": "기본급여 단가표 미리보기",
-    },
-    {
-        "label": "추가급여 단가표",
-        "title": "추가급여 단가표 생성",
-        "card_title": "추가급여 단가표 미리보기",
-    },
-]
+TABS = {
+    "unit_price": [
+        {
+            "label": "기본급여 단가표",
+            "title": "기본급여 단가표 생성",
+            "card_title": "기본급여 단가표 미리보기",
+        },
+        {
+            "label": "추가급여 단가표",
+            "title": "추가급여 단가표 생성",
+            "card_title": "추가급여 단가표 미리보기",
+        },
+    ],
+    "notice_verify": [
+        {
+            "label": "결제단가표",
+            "title": "결제단가표 생성",
+            "card_title": "결제단가표 미리보기",
+        },
+    ],
+}
 ACCENT_COLUMNS = ["등급코드", "코드", "항목코드"]
 ACTION_TEXT = "Excel 파일로 저장"
 
@@ -40,11 +49,12 @@ class TableViewerPage(QWidget):
     exportRequested = pyqtSignal(int, object)  # tab index, DataFrame
     cellSelected = pyqtSignal(int, QModelIndex)
 
-    def __init__(self, parent: QWidget | None = None):
+    def __init__(self, parent: QWidget | None = None, flow: str = "unit_price"):
         super().__init__(parent)
         self.setObjectName("PageBody")
+        self._flow = flow
 
-        self._tabs = SegmentedTabBar([tab["label"] for tab in TABS])
+        self._tabs = SegmentedTabBar([tab["label"] for tab in TABS[flow]], flow=flow)
         self._tabs.currentChanged.connect(self._on_tab_changed)
 
         self._title = QLabel()
@@ -67,16 +77,8 @@ class TableViewerPage(QWidget):
 
         self._stack = QStackedWidget()
         self._tables: list[DataFrameTable] = []
-        for index in range(len(TABS)):
-            table = DataFrameTable(
-                accent_columns=ACCENT_COLUMNS, show_row_numbers=False
-            )
-            table.cellSelected.connect(
-                lambda idx, tab=index: self.cellSelected.emit(tab, idx)
-            )
-            self._tables.append(table)
-            self._stack.addWidget(table)
         self._card.add_widget(self._stack)
+        self._build_tables(flow)
 
         self._action = PrimaryButton("")
         self._action.clicked.connect(self._on_export)
@@ -91,22 +93,59 @@ class TableViewerPage(QWidget):
         content.addWidget(self._card, 1)
         content.addWidget(self._action)
 
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(28, 18, 28, 24)
-        outer.setSpacing(18)
-        outer.addWidget(self._tabs)
-        outer.addLayout(content, 1)
+        self._outer = QVBoxLayout(self)
+        self._outer.setContentsMargins(28, 18, 28, 24)
+        self._outer.setSpacing(18)
+        self._outer.addWidget(self._tabs)
+        self._outer.addLayout(content, 1)
 
-        self._on_tab_changed(0)
+        self._on_tab_changed(flow, 0)
 
     # --- API --------------------------------------------------------------
+    def set_flow(self, flow: str) -> None:
+        # flow가 바뀔 때만 탭바·표를 새로 만든다.
+        if flow == self._flow:
+            return
+        self._flow = flow
+        self._build_tabs(flow)
+        self._build_tables(flow)
+        self._on_tab_changed(flow, 0)
+
     def set_table(
         self,
+        flow: str,
         tab_index: int,
         df: pd.DataFrame,
         formulas: pd.DataFrame | dict | None = None,
     ) -> None:
+        self.set_flow(flow)
         self._tables[tab_index].set_dataframe(df, formulas)
+
+    # --- 내부 빌드 ----------------------------------------------------------
+    def _build_tabs(self, flow: str) -> None:
+        # flow가 바뀔 때만 탭바를 새로 만들어 자리에 갈아 끼운다.
+        old_tabs = self._tabs
+        new_tabs = SegmentedTabBar([tab["label"] for tab in TABS[flow]], flow=flow)
+        new_tabs.currentChanged.connect(self._on_tab_changed)
+        self._outer.replaceWidget(old_tabs, new_tabs)
+        old_tabs.deleteLater()
+        self._tabs = new_tabs
+
+    def _build_tables(self, flow: str) -> None:
+        for table in self._tables:
+            self._stack.removeWidget(table)
+            table.deleteLater()
+        self._tables = []
+
+        for index in range(len(TABS[flow])):
+            table = DataFrameTable(
+                accent_columns=ACCENT_COLUMNS, show_row_numbers=False
+            )
+            table.cellSelected.connect(
+                lambda idx, tab=index: self.cellSelected.emit(tab, idx)
+            )
+            self._tables.append(table)
+            self._stack.addWidget(table)
 
     def current_dataframe(self) -> pd.DataFrame:
         return self._tables[self._tabs.current()].dataframe()
@@ -115,14 +154,14 @@ class TableViewerPage(QWidget):
         for table in self._tables:
             table.hide_bubble()
 
-    def reset_tab(self, index: int = 0) -> None:
+    def reset_tab(self, flow: str = "unit_price", index: int = 0) -> None:
         self._tabs.set_current(index)  # 버튼 상태
-        self._on_tab_changed(index)  # 제목·부제·표·저장 버튼 문구
+        self._on_tab_changed(flow, index)  # 제목·부제·표·저장 버튼 문구
 
     # --- 동작 -------------------------------------------------------------
-    def _on_tab_changed(self, index: int) -> None:
+    def _on_tab_changed(self, flow: str, index: int) -> None:
         self.hide_bubbles()
-        spec = TABS[index]
+        spec = TABS[flow][index]
         self._title.setText(spec["title"])
         self._card_title.setText("단가표 미리보기")
         self._action.setText(ACTION_TEXT)
@@ -130,4 +169,4 @@ class TableViewerPage(QWidget):
 
     def _on_export(self) -> None:
         index = self._tabs.current()
-        self.exportRequested.emit(0, self._tables[index].dataframe())
+        self.exportRequested.emit(index, self._tables[index].dataframe())

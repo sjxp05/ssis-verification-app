@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 from typing import Callable
 from enum import IntEnum
 
@@ -20,7 +21,8 @@ from PyQt6.QtWidgets import (
 )
 
 from models.dto import ConstantValues
-from models.flows import FlowSpec
+from models.flows import FlowSpec, UNIT_PRICE
+from services import recent_files
 from ui.components.header import HeaderBar
 from ui.components.step_indicator import StepIndicator
 from ui.pages.constants_page import ConstantsPage
@@ -48,8 +50,8 @@ class Screen(IntEnum):
         return cls(step + 1)
 
 
-# table_builder(values) -> {탭 인덱스: (DataFrame, 산식)}
-TableBuilder = Callable[[ConstantValues], dict[int, tuple[pd.DataFrame, object]]]
+# table_builder(values, flow_key) -> {탭 인덱스: (DataFrame, 산식)}
+TableBuilder = Callable[[ConstantValues, str], dict[int, tuple[pd.DataFrame, object]]]
 
 
 class MainWindow(QMainWindow):
@@ -182,7 +184,7 @@ class MainWindow(QMainWindow):
         if step == Screen.TABLES.step:
             if self.constants_page.modified_keys() != []:
                 self.table_viewer_page.reset_tab(
-                    0
+                    self._flow.key, 0
                 )  # 상수 값이 바뀐 경우에만 '기본급여' 탭으로 초기화
         self._stack.setCurrentIndex(Screen.for_step(step))
         self._steps.set_current(step)
@@ -193,8 +195,7 @@ class MainWindow(QMainWindow):
         self._install_steps(flow)
         self.upload_page.set_flow(flow)
         self.constants_page.set_values(dict.fromkeys(self.constants_page.values()))
-        for index in range(self._table_count):
-            self.table_viewer_page.set_table(index, pd.DataFrame())
+        self.table_viewer_page.set_flow(flow.key)
         self._table_count = 0
 
     def _install_steps(self, flow: FlowSpec) -> None:
@@ -230,9 +231,9 @@ class MainWindow(QMainWindow):
     def set_tables(self, tables: dict[int, tuple[pd.DataFrame, object]]) -> None:
         for index in range(self._table_count):
             if index not in tables:
-                self.table_viewer_page.set_table(index, pd.DataFrame())
+                self.table_viewer_page.set_table(self._flow.key, index, pd.DataFrame())
         for index, (df, formulas) in tables.items():
-            self.table_viewer_page.set_table(index, df, formulas)
+            self.table_viewer_page.set_table(self._flow.key, index, df, formulas)
         self._table_count = max(tables, default=-1) + 1
 
     # --- 동작 -------------------------------------------------------------
@@ -254,7 +255,7 @@ class MainWindow(QMainWindow):
         if self.table_builder is None:
             self.tablesRequested.emit(values)
         else:
-            self.set_tables(self.table_builder(values))
+            self.set_tables(self.table_builder(values, self._flow.key))
         self.go_to_step(Screen.TABLES.step)
 
     def _on_export(self, tab_index: int, df: pd.DataFrame) -> None:
@@ -293,3 +294,7 @@ class MainWindow(QMainWindow):
             )
         else:
             QMessageBox.information(self, "저장 완료", f"{path} 에 저장했습니다.")
+            if self._flow.key == UNIT_PRICE.key and tab_index == 0:
+                # flow 1에서 생성한 기본급여 단가표를 저장하면, flow 2가 나중에
+                # 자동으로 불러올 수 있도록 경로를 남겨 둔다.
+                recent_files.set_recent_path("unit_price_table", Path(path))

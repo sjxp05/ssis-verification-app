@@ -44,6 +44,12 @@ GRADES = [
     ("D008", "2등급(나형)", 884_640, 866_880, 17_693, "소득구분2"),
 ]
 
+# 결제단가표 Mock Data
+NOTICE_ITEMS = [
+    ("P001", "기본형", 30_500),
+    ("P002", "추가형", 45_750),
+]
+
 
 def extract_values(files: dict[str, UploadedFile]) -> ConstantValues:
     # 문서를 읽어 상수를 뽑는다 — 실제 파서로 교체하세요.
@@ -61,8 +67,26 @@ def extract_values(files: dict[str, UploadedFile]) -> ConstantValues:
     return values
 
 
-def build_tables(values: dict) -> dict[int, tuple[pd.DataFrame, pd.DataFrame]]:
-    # 확인된 상수로 단가표 DataFrame 과 셀별 산식을 만든다.
+def build_tables(
+    values: dict, flow: str
+) -> dict[int, tuple[pd.DataFrame, pd.DataFrame | None]]:
+    # 확인된 상수로 flow에 맞는 단가표 DataFrame 과 셀별 산식을 만든다.
+    if flow == "notice_verify":
+        return _build_notice_tables(values)
+    return _build_unit_price_tables(values)
+
+
+def _build_notice_tables(values: dict) -> dict[int, tuple[pd.DataFrame, None]]:
+    # 결제단가표 Mock Data — 검증 파이프라인이 붙기 전까지 탭 1개만 채운다.
+    rows = [
+        {"안": i + 1, "항목코드": code, "항목명": name, "금액": amount}
+        for i, (code, name, amount) in enumerate(NOTICE_ITEMS)
+    ]
+    df = pd.DataFrame(rows)
+    return {0: (df, None)}
+
+
+def _build_unit_price_tables(values: dict) -> dict[int, tuple[pd.DataFrame, pd.DataFrame]]:
     rate = values.get("copay_rate_ra") or 6
     cap = values.get("copay_cap") or 216_000
 

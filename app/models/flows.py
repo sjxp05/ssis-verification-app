@@ -4,14 +4,16 @@ from dataclasses import dataclass
 
 
 @dataclass(frozen=True, slots=True)
+# 업로드 화면의 카드 한 장
 class UploadSlot:
-    # 업로드 화면의 카드 한 장
-
     key: str  # 추출기에 넘길 때 쓰는 이름
     title: str
     description: str
     extensions: tuple[str, ...]
     icon: str = "📄"
+    # True면 services.recent_files 에 저장된 최근 경로가 있을 때 업로드를 건너뛸 후보
+    # (자동 불러오기는 아직 미구현 — services/recent_files.py, upload_page.py 의 관련 TODO 참고)
+    remember_last: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -68,9 +70,11 @@ NOTICE_VERIFY = FlowSpec(
     menu_title="고시 검증 및 결제단가표 생성",
     menu_description="고시와 조견표, 단가표를 대조해 고시의 내용이 옳은지 검증합니다.(준비 중)",
     window_title="고시 검증 및 결제단가표 생성",
-    steps=("문서 업로드",),
+    steps=("문서 업로드", "값 확인", "결제단가표 생성 및 저장"),
     upload_title="문서 업로드",
-    upload_description="고시를 업로드 해주세요.",
+    upload_description=(
+        "고시 문서와 조견표, 기본급여 단가표를 올리면 검증에 필요한 값을 자동으로 읽어옵니다."
+    ),
     uploads=(
         UploadSlot(
             key="guide",
@@ -79,7 +83,24 @@ NOTICE_VERIFY = FlowSpec(
             extensions=(".hwpx",),
             icon="📄",
         ),
+        UploadSlot(
+            key="sheet",
+            title="조견표",
+            description="Excel 형식의 조견표 · 등급·구간 정보를 읽습니다",
+            extensions=(".xlsx", ".xls"),
+            icon="▦",
+            remember_last=True,
+        ),
+        UploadSlot(
+            key="unit_price_table",
+            title="기본급여 단가표",
+            description="Excel 형식의 기본급여 단가표를 업로드해 주세요.",
+            extensions=(".xlsx", ".xls"),
+            icon="📊",
+            remember_last=True,
+        ),
     ),
+    export_names=("결제단가표.xlsx",),
     stub=True,
     stub_notice="검증 파이프라인은 준비 중입니다. 파일 확인까지만 가능합니다.",
 )
