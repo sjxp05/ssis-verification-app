@@ -45,7 +45,6 @@ class ConstantsPage(QWidget):
         self._fields: dict[str, ValueField] = {}
 
         card = Card("문서 안의 값이 정확한지 확인해 주세요")
-        card.setMaximumWidth(760)
 
         columns = QHBoxLayout()
         columns.setSpacing(40)
@@ -67,7 +66,6 @@ class ConstantsPage(QWidget):
         outer.addStretch(1)
         outer.addLayout(center)
         outer.addStretch(2)
-        outer.setAlignment(center, Qt.AlignmentFlag.AlignHCenter)
 
     # --- 구성 -------------------------------------------------------------
     def _build_left_column(self) -> QVBoxLayout:

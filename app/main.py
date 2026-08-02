@@ -10,6 +10,7 @@ import sys
 
 import pandas as pd
 from PyQt6.QtWidgets import QApplication, QMessageBox
+from services.value_extractor import ValueExtractor
 from models.dto import ConstantValues, UploadedFile
 from resources.styles import theme
 from ui.main_window import MainWindow
@@ -51,22 +52,6 @@ NOTICE_ITEMS = [
 ]
 
 
-def extract_values(files: dict[str, UploadedFile]) -> ConstantValues:
-    # 문서를 읽어 상수를 뽑는다 — 실제 파서로 교체하세요.
-    import time
-
-    time.sleep(0.3)
-    values: ConstantValues = {"copay_cap": 216000, "base_unit_price": 30500}
-    values.update(
-        {
-            f"copay_rate_{c}": r
-            for c, r in (("da", 6), ("ra", 9), ("ma", 12), ("ba", 15))
-        }
-    )
-    values.update({f"monthly_limit_{i}": 100000 * i for i in range(1, 9)})
-    return values
-
-
 def build_tables(
     values: dict, flow: str
 ) -> dict[int, tuple[pd.DataFrame, pd.DataFrame | None]]:
@@ -86,7 +71,9 @@ def _build_notice_tables(values: dict) -> dict[int, tuple[pd.DataFrame, None]]:
     return {0: (df, None)}
 
 
-def _build_unit_price_tables(values: dict) -> dict[int, tuple[pd.DataFrame, pd.DataFrame]]:
+def _build_unit_price_tables(
+    values: dict,
+) -> dict[int, tuple[pd.DataFrame, pd.DataFrame]]:
     rate = values.get("copay_rate_ra") or 6
     cap = values.get("copay_cap") or 216_000
 
@@ -137,7 +124,7 @@ def main() -> int:
         app.setStyleSheet(theme.load_stylesheet())
     except theme.StylesheetError as error:
         QMessageBox.warning(None, "스타일 오류", str(error))
-    window = MainWindow(value_extractor=extract_values, table_builder=build_tables)
+    window = MainWindow(value_extractor=ValueExtractor(), table_builder=build_tables)
     window.show()
     return app.exec()
 

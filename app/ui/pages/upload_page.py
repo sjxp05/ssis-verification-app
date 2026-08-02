@@ -11,6 +11,7 @@ from collections.abc import Callable
 from PyQt6.QtCore import QObject, QRunnable, Qt, QThreadPool, pyqtSignal
 from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
+from services.value_extractor import ValueExtractor
 from models.dto import ConstantValues, UploadedFile
 from models.flows import FlowSpec, UNIT_PRICE
 from services import recent_files
@@ -20,12 +21,29 @@ from utils.qss import set_state
 from ui.widgets.upload_card import UploadCard
 
 # 파일 묶음을 받아 상수를 돌려준다. 예외를 던지면 화면에 사유가 뜬다.
-ValueExtractor = Callable[[dict[str, UploadedFile]], ConstantValues]
+# ValueExtractor = Callable[[dict[str, UploadedFile]], ConstantValues]
 
 WAITING, BUSY, READY, FAILED = "waiting", "busy", "ready", "failed"
 
+
 _NEXT_TEXT = "값 읽어오기 완료 — 다음 단계로  →"
 _BUSY_TEXT = "⟳  문서에서 값을 읽는 중..."
+
+
+# 임시 상수 추출 함수: 고시에서 값 추출 구현하기 전 까지 사용
+def extract_values(files: dict[str, UploadedFile]) -> ConstantValues:
+    import time
+
+    time.sleep(0.3)
+    values: ConstantValues = {"copay_cap": 216000, "base_unit_price": 30500}
+    values.update(
+        {
+            f"copay_rate_{c}": r
+            for c, r in (("da", 6), ("ra", 9), ("ma", 12), ("ba", 15))
+        }
+    )
+    values.update({f"monthly_limit_{i}": 100000 * i for i in range(1, 9)})
+    return values
 
 
 class _ExtractSignals(QObject):
@@ -40,18 +58,25 @@ class _ExtractTask(QRunnable):
         self,
         extractor: ValueExtractor,
         files: dict[str, UploadedFile],
+        flow_key: str,
         generation: int,
     ) -> None:
         super().__init__()
         self.signals = _ExtractSignals()
         self._extractor = extractor
         self._files = files
+        self._flow_key = flow_key
         self._generation = generation
 
     def run(self) -> None:
         try:
-            values = self._extractor(self._files)
-        except Exception as error:  # 파서가 어떤 예외를 던질지 알 수 없다
+            if self._flow_key == "unit_price":
+                values = self._extractor.extract_jogyeon_values(self._files["sheet"])
+                print(values)
+            else:
+                # 임시로 메인에서 Mock data 읽어오는 함수 사용
+                values = extract_values(self._files)
+        except Exception as error:
             self.signals.failed.emit(
                 self._generation, str(error) or type(error).__name__
             )
@@ -60,9 +85,8 @@ class _ExtractTask(QRunnable):
 
 
 class UploadPage(QWidget):
-    # valuesReady(ConstantValues) — 다음 단계로 넘어가도 좋을 때
-
-    valuesReady = pyqtSignal(object)  # ConstantValues
+    # valuesReady(ConstantValues): 다음 단계로 넘어가도 된다는 신호
+    valuesReady = pyqtSignal(object)
 
     def __init__(
         self,
@@ -195,7 +219,7 @@ class UploadPage(QWidget):
             return
 
         self._set_state(BUSY)
-        task = _ExtractTask(self._extractor, files, self._generation)
+        task = _ExtractTask(self._extractor, files, self._flow.key, self._generation)
         task.signals.finished.connect(self._on_extracted)
         task.signals.failed.connect(self._on_extract_failed)
         self._pool.start(task)
