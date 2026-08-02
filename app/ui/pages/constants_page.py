@@ -40,6 +40,11 @@ PAGE1_ROW_GROUPS = [
     ("기본단가", "A값", "인정조사 본인부담금 상한액"),
 ]
 
+# 쉼표 없이 연도 그대로 표시할 키
+YEAR_KEYS = {"사업연도"}
+# '본인부담률' 그룹 안에서 퍼센티지로 표시할 구간('다'~'바')
+PERCENT_GRADES = {"다", "라", "마", "바"}
+
 TABS = {
     "unit_price": [
         {
@@ -113,15 +118,19 @@ class ConstantsPage(QWidget):
         label.setObjectName("GroupLabel")
         return label
 
-    def _infer_kind(self, value: object) -> str:
+    def _infer_kind(self, key: str, value: object) -> str:
+        if key in YEAR_KEYS:
+            return "year"
         # bool은 int의 하위 타입이라 먼저 걸러낸다.
         if not isinstance(value, bool) and isinstance(value, (int, float)):
             return "int"
         return "text"  # 숫자가 아닌 값("면제", "20,000 원" 등)은 그대로 표시
 
-    def _make_field(self, key: str, label: str, value: object, **kwargs) -> ValueField:
+    def _make_field(
+        self, key: str, label: str, value: object, kind: str | None = None, **kwargs
+    ) -> ValueField:
         field = ValueField(
-            key, label, value=value, kind=self._infer_kind(value), **kwargs
+            key, label, value=value, kind=kind or self._infer_kind(key, value), **kwargs
         )
         self._register(field)
         return field
@@ -137,10 +146,12 @@ class ConstantsPage(QWidget):
         for i, (sub_key, sub_value) in enumerate(values.items()):
             # 라벨 폭을 텍스트 길이에 맞춰 잡아서 긴 라벨이 잘리지 않게 한다.
             label_width = metrics.horizontalAdvance(sub_key) + 8
+            is_percent = "본인부담률" in key and sub_key in PERCENT_GRADES
             field = self._make_field(
                 f"{key}.{sub_key}",
                 sub_key,
                 sub_value,
+                kind="percent" if is_percent else None,
                 label_width=label_width,
                 input_width=92,
                 right_align_input=key in GROUP_RIGHT_ALIGN,

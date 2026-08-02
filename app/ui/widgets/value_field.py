@@ -19,7 +19,7 @@ def _repolish(widget: QWidget) -> None:
 
 
 class ValueField(QWidget):
-    # kind='int' → 216,000 / kind='percent' → 4% 로 표시
+    # kind='int' → 216,000 / kind='percent' → 4% / kind='year' → 2026 (쉼표 없음) 로 표시
 
     valueChanged = pyqtSignal(str, object)  # key, value
 
@@ -80,7 +80,9 @@ class ValueField(QWidget):
         if self.kind == "text":
             return str(value)
         if self.kind == "percent":
-            return f"{value:g}%"
+            return f"{value:.0%}"
+        if self.kind == "year":
+            return str(int(value))
         if isinstance(value, float) and not value.is_integer():
             return f"{value:,.2f}"
         return f"{int(value):,}"
@@ -96,6 +98,10 @@ class ValueField(QWidget):
             number = float(cleaned)
         except ValueError:
             return None
+        if self.kind == "percent":
+            # _format에서 :.0% 로 100배 해서 보여주므로, 파싱할 땐 다시 100으로 나눠
+            # 저장 스케일(소수)과 맞춘다. 안 그러면 편집 안 해도 값이 달라져 '수정됨'으로 뜬다.
+            number /= 100
         return number
 
     # --- API -------------------------------------------------------------

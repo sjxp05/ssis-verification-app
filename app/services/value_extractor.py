@@ -41,10 +41,8 @@ class ValueExtractor:
 
         # 부담률
         INCOME_GRADES = ["다", "라", "마", "바"]
-        ij_data["인정조사 본인부담률 (기본급여)"].update(
-            {"가": "면제", "나": "20,000 원"}
-        )
-        ij_data["인정조사 본인부담률 (추가급여)"].update({"가": "면제", "나": "면제"})
+        ij_data["인정조사 본인부담률 (기본급여)"].update({"가": 0, "나": 20000})
+        ij_data["인정조사 본인부담률 (추가급여)"].update({"가": 0, "나": 0})
 
         for row, col in zip(*((df == "기본 부담률").to_numpy().nonzero())):
             for i in range(1, 5):
@@ -116,9 +114,7 @@ class ValueExtractor:
 
         # 부담률
         INCOME_GRADES = ["다", "라", "마", "바"]
-        sj_data["종합조사/산정특례 본인부담률"].update(
-            {"가": "면제", "나": "20,000 원"}
-        )
+        sj_data["종합조사/산정특례 본인부담률"].update({"가": 0, "나": 20000})
 
         rate_cell = ()
         mask = df.astype(str).apply(lambda x: x.str.contains("기준중위소득", na=False))
