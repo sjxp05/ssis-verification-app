@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import pandas as pd
 from itertools import product
 
@@ -20,7 +22,7 @@ class ValueExtractor:
         ij_data = {
             "기본단가": None,
             "A값": None,
-            "본인부담금 상한액": None,
+            "인정조사 본인부담금 상한액": None,
             "인정조사 본인부담률 (기본급여)": [],
             "인정조사 본인부담률 (추가급여)": [],
             "인정조사 월한도액 (기본형)": [],
@@ -35,7 +37,7 @@ class ValueExtractor:
         mask = df.astype(str).apply(lambda x: x.str.contains("A값", na=False))
         for row, col in zip(*mask.to_numpy().nonzero()):
             ij_data["A값"] = df.iat[row, col + 1]
-            ij_data["본인부담금 상한액"] = df.iloc[row, col + 2]
+            ij_data["인정조사 본인부담금 상한액"] = df.iloc[row, col + 2]
 
         # 부담률
         for row, col in zip(*((df == "기본 부담률").to_numpy().nonzero())):
@@ -77,6 +79,7 @@ class ValueExtractor:
             header=None,
         )
         sj_data = {
+            "본인부담금 상한액": None,
             "종합조사/산정특례 본인부담률": [],
             "추가급여 월한도액": {
                 "최중증1인가구": None,
@@ -93,6 +96,14 @@ class ValueExtractor:
                 "나머지가구구성원의직장생활등": None,
             },
         }
+
+        # 본인부담금 상한액
+        upper_limit_cell = ()
+        mask = df.astype(str).apply(lambda x: x.str.contains("상한액", na=False))
+        rows, cols = mask.to_numpy().nonzero()
+        if len(rows) > 0:
+            upper_limit_cell = (rows[0], cols[0] - 1)
+        sj_data["본인부담금 상한액"] = df.iat[upper_limit_cell[0], upper_limit_cell[1]]
 
         # 부담률
         rate_cell = ()
@@ -212,16 +223,30 @@ class ValueExtractor:
         sj_data = self._read_sj_value(file.path, JOGYEON_SHEET_NAMES[1])
         jh_data = self._read_jh_value(file.path, JOGYEON_SHEET_NAMES[2])
 
-        return {
-            "기본단가": ij_data["기본단가"],
-            "A값": ij_data["A값"],
-            "본인부담금 상한액": ij_data["본인부담금 상한액"],
-            "인정조사 본인부담률 (기본급여)": ij_data["인정조사 본인부담률 (기본급여)"],
-            "인정조사 본인부담률 (추가급여)": ij_data["인정조사 본인부담률 (추가급여)"],
-            "종합조사/산정특례 본인부담률": sj_data["종합조사/산정특례 본인부담률"],
-            "인정조사 월한도액 (기본형)": ij_data["인정조사 월한도액 (기본형)"],
-            "인정조사 월한도액 (확장형)": ij_data["인정조사 월한도액 (확장형)"],
-            "종합조사 월한도액 (기본형)": jh_data["종합조사 월한도액 (기본형)"],
-            "종합조사 월한도액 (확장형)": jh_data["종합조사 월한도액 (확장형)"],
-            "추가급여 월한도액": sj_data["추가급여 월한도액"],
-        }
+        return [
+            {
+                "사업연도": datetime.today().year
+                + (
+                    1 if datetime.today().month == 12 else 0
+                ),  # 12월에 다음 연도 단가표를 생성하는 경우에만 연도에 +1 추가
+                "차수": 1,
+                "기본단가": ij_data["기본단가"],
+                "A값": ij_data["A값"],
+                "인정조사 본인부담금 상한액": ij_data["인정조사 본인부담금 상한액"],
+                "인정조사 본인부담률 (기본급여)": ij_data[
+                    "인정조사 본인부담률 (기본급여)"
+                ],
+                "인정조사 본인부담률 (추가급여)": ij_data[
+                    "인정조사 본인부담률 (추가급여)"
+                ],
+                "인정조사 월한도액 (기본형)": ij_data["인정조사 월한도액 (기본형)"],
+                "인정조사 월한도액 (확장형)": ij_data["인정조사 월한도액 (확장형)"],
+                "추가급여 월한도액": sj_data["추가급여 월한도액"],
+            },
+            {
+                "종합조사/산정특례 본인부담금 상한액": sj_data["본인부담금 상한액"],
+                "종합조사/산정특례 본인부담률": sj_data["종합조사/산정특례 본인부담률"],
+                "종합조사 월한도액 (기본형)": jh_data["종합조사 월한도액 (기본형)"],
+                "종합조사 월한도액 (확장형)": jh_data["종합조사 월한도액 (확장형)"],
+            },
+        ]

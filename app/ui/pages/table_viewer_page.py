@@ -83,19 +83,20 @@ class TableViewerPage(QWidget):
         self._action = PrimaryButton("")
         self._action.clicked.connect(self._on_export)
 
-        content = QVBoxLayout()
-        content.setSpacing(16)
         header = QVBoxLayout()
         header.setSpacing(6)
         header.addWidget(self._title)
         header.addWidget(self._subtitle)
-        content.addLayout(header)
+
+        content = QVBoxLayout()
+        content.setSpacing(16)
         content.addWidget(self._card, 1)
         content.addWidget(self._action)
 
         self._outer = QVBoxLayout(self)
         self._outer.setContentsMargins(28, 18, 28, 24)
         self._outer.setSpacing(18)
+        self._outer.addLayout(header)
         self._outer.addWidget(self._tabs)
         self._outer.addLayout(content, 1)
 

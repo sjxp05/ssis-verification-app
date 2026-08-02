@@ -10,12 +10,14 @@ from PyQt6.QtWidgets import (
     QGridLayout,
     QHBoxLayout,
     QLabel,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
 from ui.components.card import Card
 from ui.components.button import PrimaryButton
+from ui.components.tab_bar import SegmentedTabBar
 from ui.widgets.value_field import ValueField
 
 # 화면 구성 명세 — 항목이 바뀌면 여기만 고치면 된다.
@@ -31,6 +33,19 @@ COPAY_RATES = [
 ]
 MONTHLY_LIMIT_COUNT = 8
 
+TABS = [
+    {
+        "label": "페이지1",
+        "title": "문서 안의 값이 정확한지 확인해 주세요",
+        "card_title": "페이지1",
+    },
+    {
+        "label": "페이지2",
+        "title": "문서 안의 값이 정확한지 확인해 주세요",
+        "card_title": "페이지2",
+    },
+]
+
 
 class ConstantsPage(QWidget):
     generateRequested = pyqtSignal(dict)
@@ -44,28 +59,47 @@ class ConstantsPage(QWidget):
         self.setObjectName("PageBody")
         self._fields: dict[str, ValueField] = {}
 
-        card = Card("문서 안의 값이 정확한지 확인해 주세요")
+        self._title = QLabel()
+        self._title.setObjectName("PageTitle")
 
-        columns = QHBoxLayout()
-        columns.setSpacing(40)
-        columns.addLayout(self._build_left_column(), 1)
-        columns.addLayout(self._build_right_column(), 1)
-        card.add_layout(columns)
+        self._tabs = SegmentedTabBar([tab["label"] for tab in TABS])
+        self._tabs.currentChanged.connect(self._on_tab_changed)
+
+        self._card = Card()
+        self._card_title = QLabel()
+        self._card_title.setObjectName("CardTitle")
+
+        card_head = QHBoxLayout()
+        card_head.addWidget(self._card_title)
+        card_head.addStretch(1)
+        self._card.add_layout(card_head)
+
+        self._stack = QStackedWidget()
+        page1 = QWidget()
+        page1.setLayout(self._build_left_column())
+        page2 = QWidget()
+        page2.setLayout(self._build_right_column())
+        self._stack.addWidget(page1)
+        self._stack.addWidget(page2)
+        self._card.add_widget(self._stack)
 
         self._is_table_generated = False  # 단가표 최초 생성 했는지 여부
         self._generate = PrimaryButton("단가표 생성")
         self._generate.clicked.connect(self._on_generate)
 
-        center = QVBoxLayout()
-        center.setSpacing(18)
-        center.addWidget(card)
-        center.addWidget(self._generate)
+        content = QVBoxLayout()
+        content.setSpacing(16)
+        content.addWidget(self._card, 1)
+        content.addWidget(self._generate)
 
         outer = QVBoxLayout(self)
-        outer.setContentsMargins(28, 26, 28, 26)
-        outer.addStretch(1)
-        outer.addLayout(center)
-        outer.addStretch(2)
+        outer.setContentsMargins(28, 18, 28, 24)
+        outer.setSpacing(18)
+        outer.addWidget(self._title)
+        outer.addWidget(self._tabs)
+        outer.addLayout(content, 1)
+
+        self._on_tab_changed("", 0)
 
     # --- 구성 -------------------------------------------------------------
     def _build_left_column(self) -> QVBoxLayout:
@@ -152,6 +186,12 @@ class ConstantsPage(QWidget):
         return [key for key, field in self._fields.items() if field.is_modified()]
 
     # --- 동작 -------------------------------------------------------------
+    def _on_tab_changed(self, _flow: str, index: int) -> None:
+        spec = TABS[index]
+        self._title.setText(spec["title"])
+        self._card_title.setText(spec["card_title"])
+        self._stack.setCurrentIndex(index)
+
     def _on_generate(self) -> None:
         if self.invalid_keys():
             return  # 잘못된 칸은 빨간 테두리로 이미 표시돼 있다

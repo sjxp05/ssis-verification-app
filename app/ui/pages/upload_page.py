@@ -251,20 +251,17 @@ class UploadPage(QWidget):
         self._next.setText(_BUSY_TEXT if busy else _NEXT_TEXT)
 
         if state == WAITING:
-            missing = len(self._cards) - len(self._files())
-            self._hint.setText(f"파일을 업로드해야 다음 단계로 갈 수 있습니다.")
+            # missing = len(self._cards) - len(self._files())
+            self._hint.setText("파일을 업로드해야 다음 단계로 갈 수 있습니다.")
         elif state == BUSY:
             self._hint.setText("문서를 읽고 있습니다. 잠시만 기다려 주세요.")
         elif state == READY:
-            count = len(self._values or {})
             self._hint.setText(
-                f"값 {count}개를 읽었습니다. 다음 화면에서 확인·수정할 수 있습니다."
-                if count
-                else "문서를 확인했습니다."
+                "문서에서 값을 추출했습니다. 다음 화면에서 확인·수정할 수 있습니다."
             )
         else:
             self._hint.setText(
-                f"문서를 읽지 못했습니다 — {reason}\n파일을 다시 골라 주세요."
+                f"문서를 읽지 못했습니다: {reason}\n올바른 형식의 파일을 업로드해 주세요."
             )
 
         set_state(self._hint, "state", state)
