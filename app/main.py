@@ -10,7 +10,9 @@ import sys
 
 import pandas as pd
 from PyQt6.QtWidgets import QApplication, QMessageBox
-from services.value_extractor import ValueExtractor
+
+# from services.value_extractor import ValueExtractor
+from services.jogyeon_value_extractor import ValueExtractor
 from models.dto import ConstantValues, UploadedFile
 from resources.styles import theme
 from ui.main_window import MainWindow
