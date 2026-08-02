@@ -10,7 +10,7 @@ from collections.abc import Callable
 from PyQt6.QtCore import QObject, QRunnable, Qt, QThreadPool, pyqtSignal
 from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
-from services.value_extractor import ValueExtractor
+from services.jogyeon_value_extractor import ValueExtractor
 from models.dto import ConstantValues, UploadedFile
 from models.flows import FlowSpec, UNIT_PRICE
 from services import recent_files
