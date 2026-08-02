@@ -194,7 +194,7 @@ class MainWindow(QMainWindow):
         # 다른 작업을 고르면 앞선 작업의 흔적을 지운다.
         self._install_steps(flow)
         self.upload_page.set_flow(flow)
-        self.constants_page.set_values(dict.fromkeys(self.constants_page.values()))
+        self.constants_page.set_flow(flow.key)
         self.table_viewer_page.set_flow(flow.key)
         self._table_count = 0
 

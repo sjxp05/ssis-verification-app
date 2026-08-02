@@ -40,18 +40,21 @@ PAGE1_ROW_GROUPS = [
     ("기본단가", "A값", "인정조사 본인부담금 상한액"),
 ]
 
-TABS = [
-    {
-        "label": "인정조사",
-        "title": "문서 안의 값이 정확한지 확인해 주세요",
-        "card_title": "인정조사",
-    },
-    {
-        "label": "종합조사/산정특례",
-        "title": "문서 안의 값이 정확한지 확인해 주세요",
-        "card_title": "종합조사/산정특례",
-    },
-]
+TABS = {
+    "unit_price": [
+        {
+            "label": "인정조사",
+            "title": "문서 안의 값이 정확한지 확인해 주세요",
+            "card_title": "인정조사",
+        },
+        {
+            "label": "종합조사/산정특례",
+            "title": "문서 안의 값이 정확한지 확인해 주세요",
+            "card_title": "종합조사/산정특례",
+        },
+    ],
+    "notice_verify": [],
+}
 
 
 class ConstantsPage(QWidget):
@@ -61,15 +64,17 @@ class ConstantsPage(QWidget):
         pyqtSignal()
     )  # 값 수정했다가 취소한 경우 바뀌지 않은 것으로 처리, 단가표 페이지로 정상적 이동 가능
 
-    def __init__(self, parent: QWidget | None = None):
+    def __init__(self, parent: QWidget | None = None, flow: str = "unit_price"):
         super().__init__(parent)
         self.setObjectName("PageBody")
         self._fields: dict[str, ValueField] = {}
 
+        self._flow = flow
+
         self._title = QLabel()
         self._title.setObjectName("PageTitle")
 
-        self._tabs = SegmentedTabBar([tab["label"] for tab in TABS])
+        self._tabs = SegmentedTabBar([tab["label"] for tab in TABS[flow]], flow=flow)
         self._tabs.currentChanged.connect(self._on_tab_changed)
 
         self._card = Card()
@@ -93,14 +98,14 @@ class ConstantsPage(QWidget):
         content.addWidget(self._card, 1)
         content.addWidget(self._generate)
 
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(28, 18, 28, 24)
-        outer.setSpacing(18)
-        outer.addWidget(self._title)
-        outer.addWidget(self._tabs)
-        outer.addLayout(content, 1)
+        self._outer = QVBoxLayout(self)
+        self._outer.setContentsMargins(28, 18, 28, 24)
+        self._outer.setSpacing(18)
+        self._outer.addWidget(self._title)
+        self._outer.addWidget(self._tabs)
+        self._outer.addLayout(content, 1)
 
-        self._on_tab_changed("", 0)
+        self._on_tab_changed(flow, 0)
 
     # --- 구성 -------------------------------------------------------------
     def _group_label(self, text: str) -> QLabel:
@@ -234,7 +239,16 @@ class ConstantsPage(QWidget):
         for index, page_values in enumerate(pages):
             self._stack.addWidget(self._build_page(index, page_values))
 
-        self._on_tab_changed("", self._tabs.current())
+        self._on_tab_changed(self._flow, self._tabs.current())
+
+    def _build_tabs(self, flow: str) -> None:
+        # flow가 바뀔 때만 탭바를 새로 만들어 자리에 갈아 끼운다.
+        old_tabs = self._tabs
+        new_tabs = SegmentedTabBar([tab["label"] for tab in TABS[flow]], flow=flow)
+        new_tabs.currentChanged.connect(self._on_tab_changed)
+        self._outer.replaceWidget(old_tabs, new_tabs)
+        old_tabs.deleteLater()
+        self._tabs = new_tabs
 
     def _register(self, field: ValueField) -> None:
         self._fields[field.key] = field
@@ -247,6 +261,14 @@ class ConstantsPage(QWidget):
         )
 
     # --- API --------------------------------------------------------------
+    def set_flow(self, flow: str) -> None:
+        # flow가 바뀔 때만 탭바를 새로 만들고, 이전 흐름에서 만든 필드를 비운다.
+        if flow == self._flow:
+            return
+        self._flow = flow
+        self._build_tabs(flow)
+        self._rebuild_pages([])
+
     def set_values(self, values: dict | list[dict]) -> None:
         # value_extractor는 탭 개수에 맞춰 dict의 list를 돌려준다 —
         # dict 하나가 탭 하나에 해당하므로 각각 페이지를 새로 만든다.
@@ -268,8 +290,12 @@ class ConstantsPage(QWidget):
         return [key for key, field in self._fields.items() if field.is_modified()]
 
     # --- 동작 -------------------------------------------------------------
-    def _on_tab_changed(self, _flow: str, index: int) -> None:
-        spec = TABS[index] if 0 <= index < len(TABS) else TABS[0]
+    def _on_tab_changed(self, flow: str, index: int) -> None:
+        spec = (
+            TABS[flow][index]
+            if 0 <= index < len(TABS[flow])
+            else TABS["unit_price"][0]
+        )
         self._title.setText(spec["title"])
         self._card_title.setText(spec["card_title"])
         if 0 <= index < self._stack.count():
