@@ -23,10 +23,10 @@ class ValueExtractor:
             "기본단가": None,
             "A값": None,
             "인정조사 본인부담금 상한액": None,
-            "인정조사 본인부담률 (기본급여)": [],
-            "인정조사 본인부담률 (추가급여)": [],
-            "인정조사 월한도액 (기본형)": [],
-            "인정조사 월한도액 (확장형)": [],
+            "인정조사 본인부담률 (기본급여)": {},
+            "인정조사 본인부담률 (추가급여)": {},
+            "인정조사 월한도액 (기본형)": {},
+            "인정조사 월한도액 (확장형)": {},
         }
 
         # 기본단가
@@ -40,10 +40,18 @@ class ValueExtractor:
             ij_data["인정조사 본인부담금 상한액"] = df.iloc[row, col + 2]
 
         # 부담률
+        INCOME_GRADES = ["다", "라", "마", "바"]
+        ij_data["인정조사 본인부담률 (기본급여)"].update(
+            {"가": "면제", "나": "20,000 원"}
+        )
+        ij_data["인정조사 본인부담률 (추가급여)"].update({"가": "면제", "나": "면제"})
+
         for row, col in zip(*((df == "기본 부담률").to_numpy().nonzero())):
             for i in range(1, 5):
-                ij_data["인정조사 본인부담률 (기본급여)"].append(df.iat[row, col + i])
-                ij_data["인정조사 본인부담률 (추가급여)"].append(
+                ij_data["인정조사 본인부담률 (기본급여)"][INCOME_GRADES[i - 1]] = (
+                    df.iat[row, col + i]
+                )
+                ij_data["인정조사 본인부담률 (추가급여)"][INCOME_GRADES[i - 1]] = (
                     df.iat[row + 1, col + i]
                 )
 
@@ -60,12 +68,13 @@ class ValueExtractor:
                 IJ_ROW_MAP[cell_val] = i  # 엑셀상의 실제 오프셋(위치) 저장
 
         for grade_name, offset in IJ_ROW_MAP.items():
-            ij_data["인정조사 월한도액 (기본형)"].append(
-                df.iat[grade_cell[0] + offset, grade_cell[1] + 3]
-            )
-            ij_data["인정조사 월한도액 (확장형)"].append(
-                df.iat[grade_cell[0] + offset, grade_cell[1] + 4]
-            )
+            ij_data["인정조사 월한도액 (기본형)"][grade_name] = df.iat[
+                grade_cell[0] + offset, grade_cell[1] + 3
+            ]
+
+            ij_data["인정조사 월한도액 (확장형)"][grade_name] = df.iat[
+                grade_cell[0] + offset, grade_cell[1] + 4
+            ]
 
         return ij_data
 
@@ -80,7 +89,7 @@ class ValueExtractor:
         )
         sj_data = {
             "본인부담금 상한액": None,
-            "종합조사/산정특례 본인부담률": [],
+            "종합조사/산정특례 본인부담률": {},
             "추가급여 월한도액": {
                 "최중증1인가구": None,
                 "1등급1인가구": None,
@@ -106,6 +115,11 @@ class ValueExtractor:
         sj_data["본인부담금 상한액"] = df.iat[upper_limit_cell[0], upper_limit_cell[1]]
 
         # 부담률
+        INCOME_GRADES = ["다", "라", "마", "바"]
+        sj_data["종합조사/산정특례 본인부담률"].update(
+            {"가": "면제", "나": "20,000 원"}
+        )
+
         rate_cell = ()
         mask = df.astype(str).apply(lambda x: x.str.contains("기준중위소득", na=False))
         rows, cols = mask.to_numpy().nonzero()
@@ -113,9 +127,9 @@ class ValueExtractor:
             rate_cell = (rows[0] + 1, cols[0])
 
         for i in range(4):
-            sj_data["종합조사/산정특례 본인부담률"].append(
-                df.iat[rate_cell[0], rate_cell[1] + i]
-            )
+            sj_data["종합조사/산정특례 본인부담률"][INCOME_GRADES[i]] = df.iat[
+                rate_cell[0], rate_cell[1] + i
+            ]
 
         # 추가급여 월 한도액
         TARGET_KEYWORDS = [
@@ -168,7 +182,7 @@ class ValueExtractor:
             base_r, base_c = row + 1, col + 17
             break
 
-        result = []
+        result = {}
         col_map = {}
 
         for r_offset in [-2, -1, 0]:
@@ -188,7 +202,7 @@ class ValueExtractor:
                     f"종합조사 엑셀 표에서 '{target_zone}' 텍스트를 찾을 수 없습니다."
                 )
 
-            result.append(df.iat[base_r, actual_c])
+            result[f"{g+1}구간"] = df.iat[base_r, actual_c]
 
         return result
 
@@ -202,7 +216,7 @@ class ValueExtractor:
             header=None,
         )
 
-        jh_data = {"종합조사 월한도액 (기본형)": [], "종합조사 월한도액 (확장형)": []}
+        jh_data = {"종합조사 월한도액 (기본형)": {}, "종합조사 월한도액 (확장형)": {}}
 
         # 월 한도액(기본/확장)
         TARGET_GRADES = [f"{i}등급" for i in range(1, 16)]
@@ -217,8 +231,6 @@ class ValueExtractor:
         return jh_data
 
     def extract_jogyeon_values(self, file: UploadedFile):
-        print(file)
-
         ij_data = self._read_ij_value(file.path, JOGYEON_SHEET_NAMES[0])
         sj_data = self._read_sj_value(file.path, JOGYEON_SHEET_NAMES[1])
         jh_data = self._read_jh_value(file.path, JOGYEON_SHEET_NAMES[2])

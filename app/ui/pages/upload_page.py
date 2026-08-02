@@ -51,9 +51,8 @@ class _ExtractSignals(QObject):
     failed = pyqtSignal(int, str)  # generation, 사유
 
 
+# 추출기를 GUI 스레드 밖에서 돌린다.
 class _ExtractTask(QRunnable):
-    # 추출기를 GUI 스레드 밖에서 돌린다.
-
     def __init__(
         self,
         extractor: ValueExtractor,
@@ -72,7 +71,6 @@ class _ExtractTask(QRunnable):
         try:
             if self._flow_key == "unit_price":
                 values = self._extractor.extract_jogyeon_values(self._files["sheet"])
-                print(values)
             else:
                 # 임시로 메인에서 Mock data 읽어오는 함수 사용
                 values = extract_values(self._files)

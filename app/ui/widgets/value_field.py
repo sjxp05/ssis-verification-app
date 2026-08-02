@@ -27,20 +27,28 @@ class ValueField(QWidget):
         self,
         key: str,
         label: str,
-        value: float | int | None = None,
+        value: float | int | str | None = None,
         kind: str = "int",
         label_width: int = 96,
         input_width: int = 92,
+        label_bold: bool = False,
+        right_align_input: bool = False,
         parent: QWidget | None = None,
     ):
         super().__init__(parent)
         self.key = key
         self.kind = kind
-        self._original: float | int | None = value
+        self._original: float | int | str | None = value
 
         self._label = QLabel(label)
         self._label.setObjectName("FieldLabel")
         self._label.setFixedWidth(label_width)
+        if label_bold:
+            # 컨테이너에 스타일시트를 걸면 자식까지 덮어써 버리므로(테두리 사고 참고),
+            # 폰트는 QFont로 이 라벨에만 직접 적용한다.
+            font = self._label.font()
+            font.setBold(True)
+            self._label.setFont(font)
 
         self._input = QLineEdit()
         self._input.setObjectName("FieldInput")
@@ -53,22 +61,34 @@ class ValueField(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(10)
         layout.addWidget(self._label)
-        layout.addWidget(self._input)
-        layout.addStretch(1)
+        if right_align_input:
+            # 라벨은 왼쪽에 그대로 두고, 위젯이 넓어진 만큼 생기는 여유 폭을
+            # 라벨과 입력칸 사이에 몰아서 입력칸을 오른쪽 끝에 붙인다.
+            layout.addStretch(1)
+            layout.addWidget(self._input)
+            layout.addSpacing(50)  # 셀 오른쪽 끝에 딱 붙지 않도록 약간 띄운다
+        else:
+            layout.addWidget(self._input)
+            layout.addStretch(1)
 
         self.set_value(value, keep_original=True)
 
     # --- 표시 형식 --------------------------------------------------------
-    def _format(self, value: float | int | None) -> str:
+    def _format(self, value: float | int | str | None) -> str:
         if value is None:
             return ""
+        if self.kind == "text":
+            return str(value)
         if self.kind == "percent":
             return f"{value:g}%"
         if isinstance(value, float) and not value.is_integer():
             return f"{value:,.2f}"
         return f"{int(value):,}"
 
-    def _parse(self, text: str) -> float | None:
+    def _parse(self, text: str) -> float | str | None:
+        if self.kind == "text":
+            stripped = text.strip()
+            return stripped or None
         cleaned = _NUMBER_RE.sub("", text)
         if not cleaned:
             return None
@@ -79,13 +99,15 @@ class ValueField(QWidget):
         return number
 
     # --- API -------------------------------------------------------------
-    def value(self) -> float | int | None:
-        number = self._parse(self._input.text())
-        if number is None:
-            return None
-        return int(number) if float(number).is_integer() else number
+    def value(self) -> float | int | str | None:
+        parsed = self._parse(self._input.text())
+        if self.kind == "text" or parsed is None:
+            return parsed
+        return int(parsed) if float(parsed).is_integer() else parsed
 
-    def set_value(self, value: float | int | None, keep_original: bool = False) -> None:
+    def set_value(
+        self, value: float | int | str | None, keep_original: bool = False
+    ) -> None:
         if keep_original:
             self._original = value
         self._input.setText(self._format(value))

@@ -340,7 +340,6 @@ QLabel#BubbleFoot {
     color: ${TEXT_MUTED};
     background: transparent;
 }
-#FlowButton:disabled #FlowButtonTitle,
 #FlowButton:disabled #FlowButtonDesc {
     color: ${TEXT_MUTED};
 }
