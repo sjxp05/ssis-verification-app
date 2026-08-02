@@ -83,13 +83,6 @@ class ConstantsPage(QWidget):
         self._tabs.currentChanged.connect(self._on_tab_changed)
 
         self._card = Card()
-        self._card_title = QLabel()
-        self._card_title.setObjectName("CardTitle")
-
-        card_head = QHBoxLayout()
-        card_head.addWidget(self._card_title)
-        card_head.addStretch(1)
-        self._card.add_layout(card_head)
 
         self._stack = QStackedWidget()  # 값이 오기 전까지는 비어 있다
         self._card.add_widget(self._stack)
@@ -124,7 +117,7 @@ class ConstantsPage(QWidget):
         # bool은 int의 하위 타입이라 먼저 걸러낸다.
         if not isinstance(value, bool) and isinstance(value, (int, float)):
             return "int"
-        return "text"  # 숫자가 아닌 값("면제", "20,000 원" 등)은 그대로 표시
+        return "text"  # 숫자가 아닌 값이면 그대로 표시
 
     def _make_field(
         self, key: str, label: str, value: object, kind: str | None = None, **kwargs
@@ -162,7 +155,9 @@ class ConstantsPage(QWidget):
         column.addLayout(grid)
 
     def _row_groups_for(self, index: int) -> list[tuple[str, ...]]:
-        if index == 0:
+        # unit_price 흐름의 키 구성을 기준으로 정한 묶음이라 첫 번째 flow에만 적용
+        # 두 번째 flow는 어떤 값이 들어올지 미정
+        if self._flow == "unit_price" and index == 0:
             return PAGE1_ROW_GROUPS
         return []
 
@@ -303,12 +298,9 @@ class ConstantsPage(QWidget):
     # --- 동작 -------------------------------------------------------------
     def _on_tab_changed(self, flow: str, index: int) -> None:
         spec = (
-            TABS[flow][index]
-            if 0 <= index < len(TABS[flow])
-            else TABS["unit_price"][0]
+            TABS[flow][index] if 0 <= index < len(TABS[flow]) else TABS["unit_price"][0]
         )
         self._title.setText(spec["title"])
-        self._card_title.setText(spec["card_title"])
         if 0 <= index < self._stack.count():
             self._stack.setCurrentIndex(index)
 

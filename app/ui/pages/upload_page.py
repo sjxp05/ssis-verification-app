@@ -1,8 +1,7 @@
 # 0단계 — 문서 업로드 화면
 #
-# 카드에 파일이 다 채워지면 백그라운드에서 문서를 읽어 상수를 뽑는다.
-# 읽기가 성공했을 때만 다음 단계로 넘어가는 버튼이 켜진다.
-# (다음 화면 시작할 때 여기서 읽어온 값이 필요하기 때문)
+# 카드에 파일이 다 채워지면 '확인' 버튼이 켜지고, 버튼을 눌러야 그때 백그라운드에서 문서를 읽어 상수를 뽑는다.
+# 추출이 성공하면 바로 다음 단계로 넘어간다. (다음 화면 시작할 때 여기서 읽어온 값이 필요하기 때문)
 
 from __future__ import annotations
 
@@ -23,10 +22,11 @@ from ui.widgets.upload_card import UploadCard
 # 파일 묶음을 받아 상수를 돌려준다. 예외를 던지면 화면에 사유가 뜬다.
 # ValueExtractor = Callable[[dict[str, UploadedFile]], ConstantValues]
 
-WAITING, BUSY, READY, FAILED = "waiting", "busy", "ready", "failed"
+WAITING, FILLED, BUSY, READY, FAILED = "waiting", "filled", "busy", "ready", "failed"
 
 
-_NEXT_TEXT = "값 읽어오기 완료 — 다음 단계로  →"
+_CONFIRM_TEXT = "문서 읽기 시작"
+_NEXT_TEXT = "다음 단계로  →"
 _BUSY_TEXT = "⟳  문서에서 값을 읽는 중..."
 
 
@@ -119,7 +119,7 @@ class UploadPage(QWidget):
         self._cards_layout.setContentsMargins(0, 0, 0, 0)
         self._cards_layout.setSpacing(14)
 
-        self._next = PrimaryButton(_NEXT_TEXT)
+        self._next = PrimaryButton(_CONFIRM_TEXT)
         self._next.setEnabled(False)
         self._next.clicked.connect(self._on_next)
 
@@ -204,14 +204,11 @@ class UploadPage(QWidget):
             # flow 2가 나중에 자동으로 불러올 수 있도록 경로 저장
             recent_files.set_recent_path(key, _file.path)
         files = self._files()
-        if len(files) < len(self._cards):
-            self._set_state(WAITING)
-            return
-        self._start_extract(files)
+        self._set_state(FILLED if len(files) == len(self._cards) else WAITING)
 
     def _start_extract(self, files: dict[str, UploadedFile]) -> None:
         if self._extractor is None:
-            # 추출기를 안 붙인 경우: 파일 확인까지만 하고 넘긴다
+            # 추출기를 안 붙인 경우: 파일 확인까지만 하고 READY 로 넘어간다
             self._values = {}
             self._set_state(READY)
             return
@@ -235,7 +232,10 @@ class UploadPage(QWidget):
         self._set_state(FAILED, reason)
 
     def _on_next(self) -> None:
-        if self._state == READY and self._values is not None:
+        if self._state in (FILLED, FAILED):
+            # '확인' 버튼: 파일이 다 준비됐거나 추출이 실패해 재시도하는 경우
+            self._start_extract(self._files())
+        elif self._state == READY and self._values is not None:
             self.valuesReady.emit(self._values)
 
     # --- 내부 -------------------------------------------------------------
@@ -245,12 +245,18 @@ class UploadPage(QWidget):
         for card in self._cards.values():
             card.set_locked(busy)
 
-        self._next.setEnabled(state == READY)
-        self._next.setText(_BUSY_TEXT if busy else _NEXT_TEXT)
+        self._next.setEnabled(state in (FILLED, READY, FAILED))
+        self._next.setText(
+            _BUSY_TEXT if busy else _NEXT_TEXT if state == READY else _CONFIRM_TEXT
+        )
 
         if state == WAITING:
             # missing = len(self._cards) - len(self._files())
             self._hint.setText("파일을 업로드해야 다음 단계로 갈 수 있습니다.")
+        elif state == FILLED:
+            self._hint.setText(
+                "파일을 모두 올렸습니다. '확인'을 누르면 값을 읽어옵니다."
+            )
         elif state == BUSY:
             self._hint.setText("문서를 읽고 있습니다. 잠시만 기다려 주세요.")
         elif state == READY:

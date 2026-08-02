@@ -44,15 +44,11 @@ class FlowSpec:
 UNIT_PRICE = FlowSpec(
     key="unit_price",
     menu_title="조견표 → 단가표 생성",
-    menu_description=(
-        "고시 문서와 조견표에서 상수를 읽어 기본급여·추가급여 단가표를 만듭니다."
-    ),
+    menu_description=("조견표에서 상수를 읽어 기본급여·추가급여 단가표를 만듭니다."),
     window_title="조견표 → 단가표 생성",
     steps=("조견표 업로드", "단가 정보 확인", "단가표 생성 및 저장"),
     upload_title="조견표 업로드",
-    upload_description=(
-        "고시 문서와 조견표를 올리면 단가 계산에 필요한 값을 자동으로 읽어옵니다."
-    ),
+    upload_description=("조견표를 올리면 단가 계산에 필요한 값을 자동으로 읽어옵니다."),
     uploads=(
         UploadSlot(
             key="sheet",
