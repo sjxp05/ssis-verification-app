@@ -155,6 +155,11 @@ class MainWindow(QMainWindow):
         self.table_viewer_page.hide_bubbles()
         super().closeEvent(event)
 
+    def moveEvent(self, event) -> None:  # noqa: N802 (Qt 시그니처)
+        # 창을 옮기면 말풍선 위치가 어긋나므로 항상 숨김
+        self.table_viewer_page.hide_bubbles()
+        super().moveEvent(event)
+
     # --- 화면 전환 --------------------------------------------------------
     def go_home(self) -> None:
         # 메인 화면으로. 진행 중이던 흐름은 그대로 두었다가 다시 들어오면 이어간다.
