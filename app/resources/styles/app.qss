@@ -1,0 +1,450 @@
+/* ===================================================================
+   app.qss  —  $${TOKEN} 은 theme.py 에서 치환됨
+   =================================================================== */
+
+QWidget {
+    font-family: ${FONT_FAMILY};
+    font-size: 13px;
+    color: ${TEXT};
+}
+
+QWidget#Root,
+QWidget#PageBody {
+    background: ${BG};
+}
+
+/* ---------- Header ---------- */
+QFrame#HeaderBar {
+    background: ${NAVY};
+}
+QLabel#HeaderTitle {
+    color: ${TEXT_ON_NAVY};
+    font-size: 15px;
+    font-weight: 700;
+}
+QLabel#HeaderMeta {
+    color: ${TEXT_ON_NAVY_MUTED};
+    font-size: 12px;
+}
+QPushButton#HeaderBack {
+    color: ${TEXT_ON_NAVY_MUTED};
+    background: transparent;
+    border: none;
+    padding: 4px 8px;
+    font-size: 13px;
+}
+QPushButton#HeaderBack:hover {
+    color: ${TEXT_ON_NAVY};
+}
+QFrame#HeaderDivider {
+    background: rgba(255, 255, 255, 0.22);
+    max-width: 1px;
+}
+
+/* ---------- 시스템 알림 ------------ */
+QMessageBox {
+    background-color: ${SURFACE};
+}
+
+QMessageBox QLabel{
+    color: ${TEXT};
+}
+
+/* ---------- Step indicator ---------- */
+QFrame#StepBar {
+    background: ${STEP_BG};
+    border-bottom: 1px solid ${BORDER};
+}
+QLabel#StepArrow {
+    color: ${TEXT_MUTED};
+    font-size: 13px;
+}
+QFrame#StepChip {
+    border-radius: ${RADIUS_SM};
+    background: transparent;
+}
+QFrame#StepChip[state="current"] {
+    background: ${NAVY};
+}
+QLabel#StepMark {
+    min-width: 20px;
+    max-width: 20px;
+    min-height: 20px;
+    max-height: 20px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 700;
+    background: ${BORDER};
+    color: #FFFFFF;
+}
+QLabel#StepMark[state="done"] {
+    background: #2F855A;
+    color: #FFFFFF;
+}
+QLabel#StepMark[state="current"] {
+    background: #FFFFFF;
+    color: ${NAVY};
+}
+QLabel#StepText {
+    font-size: 13px;
+    color: ${TEXT_MUTED};
+}
+QLabel#StepText[state="done"] {
+    color: ${TEXT};
+}
+QLabel#StepText[state="current"] {
+    color: #FFFFFF;
+    font-weight: 700;
+}
+
+/* ---------- Tabs ---------- */
+QPushButton#Tab {
+    background: ${STEP_BG};
+    color: ${TEXT_MUTED};
+    border: 1px solid transparent;
+    border-radius: ${RADIUS_SM};
+    padding: 8px 18px;
+    font-size: 13px;
+}
+QPushButton#Tab:hover {
+    color: ${TEXT};
+}
+QPushButton#Tab:checked {
+    background: ${SURFACE};
+    color: ${NAVY};
+    border: 1px solid ${BORDER};
+    font-weight: 700;
+}
+
+/* ---------- Card ---------- */
+QFrame#Card {
+    background: ${SURFACE};
+    border: 1px solid ${BORDER};
+    border-radius: ${RADIUS};
+}
+QFrame#CardHeader {
+    background: ${CARD_HEADER_BG};
+    border-bottom: 1px solid ${BORDER};
+    border-top-left-radius: ${RADIUS};
+    border-top-right-radius: ${RADIUS};
+}
+QLabel#CardTitle {
+    font-size: 13px;
+    font-weight: 700;
+    color: ${TEXT};
+}
+QLabel#CardHint {
+    font-size: 12px;
+    color: ${TEXT_MUTED};
+}
+
+/* ---------- Section heading ---------- */
+QLabel#PageTitle {
+    font-size: 17px;
+    font-weight: 700;
+    color: ${TEXT};
+}
+QLabel#PageSubtitle {
+    font-size: 13px;
+    color: ${ACCENT};
+}
+QLabel#GroupLabel {
+    font-size: 13px;
+    font-weight: 700;
+    color: ${TEXT};
+}
+
+/* ---------- Value field ---------- */
+QLabel#FieldLabel {
+    font-size: 13px;
+    color: ${TEXT};
+}
+QLineEdit#FieldInput {
+    background: ${FIELD_BG};
+    border: 1px solid ${BORDER};
+    border-radius: 12px;
+    padding: 5px 12px;
+    min-height: 18px;
+    color: ${TEXT};
+}
+QLineEdit#FieldInput:focus {
+    border: 1px solid ${NAVY_LIGHT};
+}
+QLineEdit#FieldInput[modified="true"] {
+    border: 1px solid ${ACCENT};
+    background: #F2F7FD;
+}
+QLineEdit#FieldInput[invalid="true"] {
+    border: 1px solid #C53030;
+    background: #FDF3F3;
+}
+
+/* ---------- Table ---------- */
+QTableView#DataTable {
+    background: ${SURFACE};
+    alternate-background-color: #FAFBFC;
+    border: 1px solid ${BORDER};
+    border-radius: ${RADIUS_SM};
+    gridline-color: ${GRID};
+    selection-background-color: #D6E6F7;
+    selection-color: ${TEXT};
+    outline: none;
+}
+QTableView#DataTable::item {
+    padding: 6px 10px;
+    border: none;
+}
+QHeaderView::section:horizontal {
+    background: ${NAVY};
+    color: ${TEXT_ON_NAVY};
+    padding: 9px 10px;
+    border: none;
+    border-right: 1px solid rgba(255, 255, 255, 0.14);
+    font-weight: 700;
+}
+QHeaderView::section:vertical {
+    background: #F1F3F5;
+    color: ${TEXT_MUTED};
+    border: none;
+    border-right: 1px solid ${GRID};
+    border-bottom: 1px solid ${GRID};
+    padding: 4px 8px;
+}
+QTableCornerButton::section {
+    background: ${NAVY};
+    border: none;
+}
+
+/* ---------- Buttons ---------- */
+QPushButton#PrimaryButton {
+    background: ${NAVY};
+    color: #FFFFFF;
+    border: none;
+    border-radius: ${RADIUS_SM};
+    padding: 14px 20px;
+    font-size: 14px;
+    font-weight: 700;
+}
+QPushButton#PrimaryButton:hover {
+    background: ${NAVY_DARK};
+}
+QPushButton#PrimaryButton:disabled {
+    background: #B7BEC7;
+    color: #EEF1F4;
+}
+
+QPushButton#PillButton {
+    background: ${ACCENT_SOFT};
+    color: ${NAVY};
+    border: none;
+    border-radius: 14px;
+    padding: 7px 26px;
+    font-size: 13px;
+    font-weight: 700;
+}
+QPushButton#PillButton:hover {
+    background: #BCD8F1;
+}
+
+QPushButton#GhostButton {
+    background: transparent;
+    color: ${NAVY};
+    border: 1px solid ${BORDER};
+    border-radius: ${RADIUS_SM};
+    padding: 9px 16px;
+}
+QPushButton#GhostButton:hover {
+    background: #EDF2F8;
+}
+
+/* ---------- Scrollbar ---------- */
+QScrollBar:vertical {
+    background: transparent;
+    width: 10px;
+    margin: 0;
+}
+QScrollBar::handle:vertical {
+    background: #C3C9D1;
+    border-radius: 5px;
+    min-height: 30px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #A9B1BB;
+}
+QScrollBar::add-line, QScrollBar::sub-line {
+    height: 0;
+    width: 0;
+}
+QScrollBar:horizontal {
+    background: transparent;
+    height: 10px;
+}
+QScrollBar::handle:horizontal {
+    background: #C3C9D1;
+    border-radius: 5px;
+    min-width: 30px;
+}
+
+/* ---------- Formula bubble ---------- */
+QLabel#BubbleTitle {
+    color: ${TEXT_MUTED};
+    font-size: 11px;
+    font-weight: 700;
+}
+QLabel#BubbleBody {
+    color: ${TEXT};
+    font-family: ${FONT_MONO};
+    font-size: 12px;
+}
+QLabel#BubbleFoot {
+    color: ${TEXT_MUTED};
+    font-size: 11px;
+}
+/* --- 스크롤 페이지 ------------------------------------------------- */
+#ScrollPage {
+    background: ${BG};
+    border: none;
+}
+#ScrollViewport {
+    background: ${BG};
+}
+#ScrollHolder {
+    background: ${BG};
+}
+#ScrollColumn {
+    background: ${BG};
+}
+
+/* --- 메인 화면의 작업 선택 버튼 ------------------------------------ */
+#FlowButton {
+    background: ${SURFACE};
+    border: 1px solid ${BORDER};
+    border-radius: ${RADIUS};
+}
+#FlowButton:hover {
+    border-color: ${NAVY};
+    background: ${BORDER_SOFT};
+}
+#FlowButton:disabled {
+    background: ${BG};
+    border-color: ${BORDER_SOFT};
+}
+#FlowButtonTitle {
+    font-size: 15px;
+    font-weight: 600;
+    color: ${TEXT};
+    background: transparent;
+}
+#FlowButtonDesc {
+    font-size: 12px;
+    color: ${TEXT_MUTED};
+    background: transparent;
+}
+#FlowButton:disabled #FlowButtonDesc {
+    color: ${TEXT_MUTED};
+}
+
+/* --- 업로드 카드 ---------------------------------------------------- */
+#UploadCard {
+    background: ${SURFACE};
+    border: 2px dashed ${BORDER};
+    border-radius: ${RADIUS_SM};
+}
+#UploadCard[state="hover"] {
+    background: ${ACCENT_SOFT};
+    border-color: ${NAVY};
+}
+#UploadCard[state="done"] {
+    background: ${SUCCESS_BG};
+    border: 1px solid ${SUCCESS_BORDER};
+}
+#UploadCard[state="rejected"] {
+    background: ${DANGER_BG};
+    border-color: ${DANGER};
+}
+
+#UploadIcon {
+    background: ${ACCENT_SOFT};
+    color: ${NAVY};
+    border-radius: ${RADIUS_SM};
+    font-size: 16px;
+}
+#UploadIcon[state="done"] {
+    background: ${SUCCESS_SOFT};
+    color: ${SUCCESS};
+}
+#UploadIcon[state="rejected"] {
+    background: ${DANGER_BG};
+    color: ${DANGER};
+}
+
+#UploadTitle {
+    font-weight: 600;
+    font-size: 13px;
+    color: ${TEXT};
+    background: transparent;
+}
+#UploadDesc {
+    font-size: 11px;
+    color: ${TEXT_MUTED};
+    background: transparent;
+}
+#UploadStatus {
+    font-size: 11px;
+    color: ${TEXT_MUTED};
+    padding: 8px 10px;
+    background: transparent;
+}
+#UploadStatus[state="done"] {
+    color: ${SUCCESS_DARK};
+    background: ${SUCCESS_SOFT};
+    border-radius: ${RADIUS_SM};
+    font-family: ${FONT_MONO};
+}
+#UploadStatus[state="rejected"] {
+    color: ${DANGER_DARK};
+    background: ${DANGER_BG};
+    border-radius: ${RADIUS_SM};
+}
+
+/* --- 업로드 화면 하단 안내 문구 ------------------------------------- */
+#UploadHint {
+    font-size: 11px;
+    color: ${TEXT_MUTED};
+    padding: 4px 0;
+}
+#UploadHint[state="busy"] {
+    color: ${ACCENT};
+}
+#UploadHint[state="ready"] {
+    color: ${SUCCESS_DARK};
+}
+#UploadHint[state="failed"] {
+    color: ${DANGER_DARK};
+}
+#UploadHint[state="stub"] {
+    color: ${SUCCESS_DARK};
+    background: ${SUCCESS_BG};
+    border: 1px solid ${SUCCESS_BORDER};
+    border-radius: ${RADIUS_SM};
+    padding: 10px 12px;
+}
+
+/* --- 잘못된 입력칸 (theme 토큰으로 통일) ---------------------------- */
+#FieldInput[invalid="true"] {
+    border: 1px solid ${DANGER};
+    background: ${DANGER_BG};
+}
+
+/* --- 버튼 비활성 상태 ----------------------------------------------- */
+/* 이 규칙이 없으면 비활성 버튼이 활성과 똑같이 보여서,
+   "두 문서를 다 올려야 진행 가능"이 사용자에게 전달되지 않습니다. */
+#PrimaryButton:disabled {
+    background: ${CARD_HEADER_BG};
+    color: ${TEXT_MUTED};
+}
+#GhostButton:disabled {
+    color: ${TEXT_MUTED};
+    border-color: ${BORDER};
+}
+
