@@ -44,6 +44,14 @@
 '종합조사 월한도액 (확장형).13구간': 1697000, '종합조사 월한도액 (확장형).14구간': 1179000, '종합조사 월한도액 (확장형).15구간': 661000}
 """
 
+""" 
+추가급여에서 필요한 것:
+'인정조사 본인부담률 (추가급여).가': 0, '인정조사 본인부담률 (추가급여).나': 0, '인정조사 본인부담률 (추가급여).다': 0.02, '인정조사 본인부담률 (추가급여).라': 0.03, '인정조사 본인부담률 (추가급여).마': 0.04, '인정조사 본인부담률 (추가급여).바': 0.05,
+'추가급여 월한도액.최중증1인가구': 4718000, '추가급여 월한도액.1등급1인가구': 1385000, '추가급여 월한도액.2등급이하1인가구': 349000,
+'추가급여 월한도액.최중증취약가구': 4718000, '추가급여 월한도액.1등급취약가구': 1385000, '추가급여 월한도액.2등급이하취약가구': 349000,
+'추가급여 월한도액.출산': 1385000, '추가급여 월한도액.자립준비': 349000, '추가급여 월한도액.학교생활': 175000, '추가급여 월한도액.직장생활': 694000,
+'추가급여 월한도액.보호자일시부재': 349000, '추가급여 월한도액.나머지가구구성원의직장생활등': 1264000,
+"""
 
 from pandas import DataFrame
 
@@ -67,6 +75,16 @@ COL_INCOME_TYPE = "소득구분"
 COL_SORT_NUM = "정렬순서"
 COL_ITEM_CODE = "물품코드"
 
+# 추가급여 단가표 칼럼명
+ADD_COL_SEQ = "순번"
+ADD_COL_GRADE_CODE = "등급구분"
+ADD_COL_GRADE_NAME = "등급명"
+ADD_COL_SUPPORT_AMOUNT = "지원량"
+ADD_COL_GOV_SUPPORT = "정부지원금"
+ADD_COL_COPAYMENT = "본인부담금"
+ADD_COL_INCOME_TYPE = "소득구분"
+ADD_COL_CATEGORY = "추가급여구분"
+
 HEADERS = [
     COL_SEQ,
     COL_BUSINESS_TYPE_ID,
@@ -86,6 +104,18 @@ HEADERS = [
     COL_INCOME_TYPE,
     COL_SORT_NUM,
     COL_ITEM_CODE,
+]
+
+# 추가급여 단가표 헤더
+ADD_HEADERS = [
+    ADD_COL_SEQ, 
+    ADD_COL_GRADE_CODE, 
+    ADD_COL_GRADE_NAME,
+    ADD_COL_SUPPORT_AMOUNT, 
+    ADD_COL_GOV_SUPPORT,
+    ADD_COL_COPAYMENT, 
+    ADD_COL_INCOME_TYPE, 
+    ADD_COL_CATEGORY,
 ]
 
 SORT_NUM_START = {"기본": 1, "확장": 241, "특례": 361}
@@ -120,6 +150,22 @@ JH_INCOME_LABELS = {
     "바": "기준중위소득180%초과",
 }
 
+# 추가급여 단가표 라벨별 (시작코드번호, 등급명, 추가급여구분 '여부' 표기 여부) 정의
+ADD_CODE_INFO = {
+    "출산": (25, "출산가구", 1),
+    "학교생활": (31, "학교생활", 1),
+    "직장생활": (37, "직장생활", 1),
+    "자립준비": (43, "자립준비", 1),
+    "보호자일시부재": (61, "보호자일시부재", 0), 
+    "나머지가구구성원의직장생활등": (67, "가족의직장생활", 0),
+    "최중증1인가구": (73, "최중증1인가구", 1),
+    "1등급1인가구": (79, "1등급1인가구", 0),
+    "2등급이하1인가구": (85, "2등급이하1인가구", 0),
+    "최중증취약가구": (91, "최중증취약가구", 0),
+    "1등급취약가구": (97, "1등급취약가구", 0),
+    "2등급이하취약가구": (103, "2등급이하취약가구", 0),
+}
+
 
 def _save_param(
     params: dict[str, str | int | float],
@@ -150,6 +196,11 @@ def _select_params(values: dict[str, str | int | float], type: str) -> dict:
         for k, v in values.items():
             if k.find("종합") != -1:
                 _save_param(params, k, v)
+
+    elif type == "추가":
+            for k, v in values.items():
+                if k.find("추가") != -1:
+                    _save_param(params, k, v)
 
     return params
 
@@ -287,21 +338,56 @@ def _write_urgent_unsuitable_prices(jh_values: dict) -> list[dict]:
     return rows
 
 
+# 추가급여 단가표 작성 함수
+def _write_add_prices(values: dict) -> list[dict]:
+    prefix = "A"
+    limits = values["추가급여 월한도액"]
+    rates = values["인정조사 본인부담률 (추가급여)"]
+
+    rows = []
+    seq = 1
+    for key, (base_code, category_name, flag) in ADD_CODE_INFO.items():
+        limit = limits[key]
+        for k, letter in enumerate(INCOME_LETTERS):
+            current_code = base_code + k
+            copayment = _calculate_copayment(limit, rates[letter], float('inf'))
+            rows.append(
+                {
+                    ADD_COL_SEQ: seq,
+                    ADD_COL_GRADE_CODE: f"{prefix}{current_code:03d}", 
+                    ADD_COL_GRADE_NAME: f"{category_name}_{letter}형",
+                    ADD_COL_SUPPORT_AMOUNT: limit, 
+                    ADD_COL_GOV_SUPPORT: _calculate_gov_support(limit, copayment),
+                    ADD_COL_COPAYMENT: copayment, 
+                    ADD_COL_INCOME_TYPE: IJ_INCOME_LABELS[letter], 
+                    ADD_COL_CATEGORY: f"{category_name}여부" if flag==1 else f"{category_name}",
+                }
+            )
+            seq += 1
+
+    return rows
+
+    
+
 def main(values: dict) -> DataFrame:
     ij_values = _select_params(values, "인정")
     jh_values = _select_params(values, "종합")
+    add_values = _select_params(values, "추가")
 
     rows = []
+    add_rows = []
     for variant in ("기본형", "확장형"):
         rows += _write_ij_prices(ij_values, variant)
         rows += _write_jh_prices(jh_values, variant)
+
+    add_rows += _write_add_prices(add_values)
 
     for i, row in enumerate(rows, start=1):
         row[COL_SEQ] = i
 
     rows += _write_urgent_unsuitable_prices(jh_values)
 
-    return DataFrame(rows, columns=HEADERS)
+    return DataFrame(rows, columns=HEADERS), DataFrame(add_rows, columns=ADD_HEADERS)
 
 
 if __name__ == "__main__":
