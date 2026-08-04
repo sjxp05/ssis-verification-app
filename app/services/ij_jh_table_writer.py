@@ -119,6 +119,7 @@ ADD_HEADERS = [
 ]
 
 SORT_NUM_START = {"기본": 1, "확장": 241, "특례": 361}
+SJ_SORT_NUM_START = {"기본형": 361, "확장형": 1081}
 
 BUSINESS_ID = "HWG001"
 VOUCHER_TYPE = "포인트"
@@ -166,6 +167,19 @@ ADD_CODE_INFO = {
     "2등급이하취약가구": (103, "2등급이하취약가구", 0),
 }
 
+SJ_ORDER = [
+    ("1등급", ["최중증취약가구", "최중증1인가구", "1등급취약가구",
+               "1등급1인가구", "나머지가구구성원의직장생활등", None]),
+    ("2등급", ["2등급이하취약가구", "2등급이하1인가구", None]),
+    ("3등급", ["2등급이하취약가구", "2등급이하1인가구", None]),
+    ("4등급", ["2등급이하취약가구", "2등급이하1인가구", None]),
+]
+
+SJ_COMBOS = [(True, True), (True, False), (False, True), (False, False)]
+
+SJ_CASE_CNT=60
+SJ_GROUP_SIZE=15
+SJ_DAYTIME_HOURS=22
 
 def _save_param(
     params: dict[str, str | int | float],
@@ -226,7 +240,6 @@ def _resolve_copayment(
         return min(rate_or_amount, cap) if variant == "기본형" else 0
     return _calculate_copayment(monthly_limit, rate_or_amount, cap)
 
-
 def _write_ij_prices(values: dict, variant: str) -> list[dict]:
     prefix = "D" if variant == "기본형" else "C"
     suffix = "" if variant == "기본형" else "_주간확장"
@@ -260,6 +273,64 @@ def _write_ij_prices(values: dict, variant: str) -> list[dict]:
             code_num += 1
             sort_num += 1
 
+    return rows
+
+#산정 주간확장 차감: 22시간 X 기본단가, 천원 미만 절사 적용
+def _sj_ext_deduction(unit_price:int)->int:
+    return SJ_DAYTIME_HOURS*unit_price // 1000*1000
+
+#산정 특례 월한도액 계산함
+def _build_sj_limits(base_limits: dict, add_limits: dict)->dict:
+    limits={}
+    n=1
+    for grade,mains in SJ_ORDER:
+        for main in mains:
+            for school,work in SJ_COMBOS:
+                limit=base_limits[grade]
+                if main:
+                    limit+=add_limits[main]
+                if school:
+                    limit+=add_limits["학교생활"]
+                if work:
+                    limit += add_limits["직장생활"]
+                limits[f"특례{n}"] = limit
+                n+=1
+
+    assert n-1==SJ_CASE_CNT
+    return limits
+
+def _write_sj_prices(sj_limits:dict,jh_values:dict,unit_price:int,variant:str)->list[dict]:
+    prefix = "D" if variant == "기본형" else "C"
+    suffix = "" if variant == "기본형" else "_주간확장"
+    rates = jh_values["종합조사/산정특례 본인부담률"]
+    cap = jh_values["종합조사/산정특례 본인부담금 상한액"]
+    deduction=0 if variant=="기본형" else _sj_ext_deduction(unit_price)
+
+    sort_num = SJ_SORT_NUM_START[variant]
+    rows=[]
+    for s in range(SJ_CASE_CNT):
+        limit=sj_limits[f"특례{s+1}"]-deduction
+        group_char="ABCD"[s//SJ_GROUP_SIZE]
+        for k, letter in enumerate(INCOME_LETTERS):
+            code_num=(s%SJ_GROUP_SIZE)*len(INCOME_LETTERS)+k+1
+            copayment=_resolve_copayment(letter,limit,rates[letter],cap,variant)
+            rows.append(
+                {
+                    COL_BUSINESS_TYPE_ID:BUSINESS_ID,
+                    COL_BUSINESS_YEAR: jh_values[COL_BUSINESS_YEAR],
+                    COL_CHASU:jh_values[COL_CHASU],
+                    COL_GRADE_CODE: f"{prefix}{group_char}{code_num:02d}",
+                    COL_GRADE_NAME: f"특례{s + 1}({letter}형){suffix}",
+                    COL_VOUCHER_TYPE: VOUCHER_TYPE,
+                    COL_SUPPORT_AMOUNT: limit,
+                    COL_GOV_SUPPORT: _calculate_gov_support(limit, copayment),
+                    COL_COPAYMENT: copayment,
+                    COL_REJUDGE_YN: REJUDGE_IMPOSSIBLE,
+                    COL_INCOME_TYPE: JH_INCOME_LABELS[letter],
+                    COL_SORT_NUM: sort_num,
+                }
+            )
+            sort_num+=1
     return rows
 
 
@@ -374,11 +445,20 @@ def main(values: dict) -> DataFrame:
     jh_values = _select_params(values, "종합")
     add_values = _select_params(values, "추가")
 
+    #산정 특례에 필요 부분(월한도액 계산)
+    sj_limits = _build_sj_limits(
+        ij_values["인정조사 월한도액 (기본형)"],
+        add_values["추가급여 월한도액"],
+    )
+
     rows = []
     add_rows = []
     for variant in ("기본형", "확장형"):
         rows += _write_ij_prices(ij_values, variant)
         rows += _write_jh_prices(jh_values, variant)
+
+    for variant in ("기본형", "확장형"):
+        rows += _write_sj_prices(sj_limits, jh_values, values["기본단가"], variant)
 
     add_rows += _write_add_prices(add_values)
 
@@ -470,5 +550,6 @@ if __name__ == "__main__":
 
     TEST_FILE_PATH = "C:\\Users\\LG\\Downloads\\생성된_기본단가.xlsx"
 
-    df = main(sample_values)
-    df.to_excel(TEST_FILE_PATH, header=True, index=False)
+    df, add_df = main(sample_values)
+    df.to_excel("생성된_기본단가.xlsx", header=True, index=False)
+    add_df.to_excel("생성된_추가단가.xlsx", header=True, index=False)

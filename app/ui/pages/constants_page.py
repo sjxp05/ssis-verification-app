@@ -28,7 +28,7 @@ from ui.components.button import PrimaryButton
 from ui.components.tab_bar import SegmentedTabBar
 from ui.widgets.value_field import ValueField
 
-GROUP_GRID_COLUMNS = 4
+GROUP_GRID_COLUMNS = 6
 # 라벨이 길어 기본 4열로는 잘리는 그룹은 여기서 열 수를 따로 지정한다.
 GROUP_COLUMN_OVERRIDES = {"추가급여 월한도액": 3}
 # value_field를 셀 오른쪽에 붙여서 정렬할 그룹
