@@ -44,6 +44,18 @@
 '종합조사 월한도액 (확장형).13구간': 1697000, '종합조사 월한도액 (확장형).14구간': 1179000, '종합조사 월한도액 (확장형).15구간': 661000}
 """
 
+"""
+산정특례에서 필요한 것:
+'기본단가': 17270,
+'종합조사/산정특례 본인부담금 상한액': 216200,
+'종합조사/산정특례 본인부담률.가': 0, '종합조사/산정특례 본인부담률.나': 20000, '종합조사/산정특례 본인부담률.다': 0.04, '종합조사/산정특례 본인부담률.라': 0.06, '종합조사/산정특례 본인부담률.마': 0.08, '종합조사/산정특례 본인부담률.바': 0.1,
+'인정조사 월한도액 (기본형).1등급': 2041000, '인정조사 월한도액 (기본형).2등급': 1627000, '인정조사 월한도액 (기본형).3등급': 1230000, '인정조사 월한도액 (기본형).4등급': 815000,
+'추가급여 월한도액.최중증1인가구': 4718000, '추가급여 월한도액.1등급1인가구': 1385000, '추가급여 월한도액.2등급이하1인가구': 349000,
+'추가급여 월한도액.최중증취약가구': 4718000, '추가급여 월한도액.1등급취약가구': 1385000, '추가급여 월한도액.2등급이하취약가구': 349000,
+'추가급여 월한도액.출산': 1385000, '추가급여 월한도액.자립준비': 349000, '추가급여 월한도액.학교생활': 175000, '추가급여 월한도액.직장생활': 694000,
+'추가급여 월한도액.보호자일시부재': 349000, '추가급여 월한도액.나머지가구구성원의직장생활등': 1264000,
+"""
+
 """ 
 추가급여에서 필요한 것:
 '인정조사 본인부담률 (추가급여).가': 0, '인정조사 본인부담률 (추가급여).나': 0, '인정조사 본인부담률 (추가급여).다': 0.02, '인정조사 본인부담률 (추가급여).라': 0.03, '인정조사 본인부담률 (추가급여).마': 0.04, '인정조사 본인부담률 (추가급여).바': 0.05,
@@ -108,13 +120,13 @@ HEADERS = [
 
 # 추가급여 단가표 헤더
 ADD_HEADERS = [
-    ADD_COL_SEQ, 
-    ADD_COL_GRADE_CODE, 
+    ADD_COL_SEQ,
+    ADD_COL_GRADE_CODE,
     ADD_COL_GRADE_NAME,
-    ADD_COL_SUPPORT_AMOUNT, 
+    ADD_COL_SUPPORT_AMOUNT,
     ADD_COL_GOV_SUPPORT,
-    ADD_COL_COPAYMENT, 
-    ADD_COL_INCOME_TYPE, 
+    ADD_COL_COPAYMENT,
+    ADD_COL_INCOME_TYPE,
     ADD_COL_CATEGORY,
 ]
 
@@ -157,7 +169,7 @@ ADD_CODE_INFO = {
     "학교생활": (31, "학교생활", 1),
     "직장생활": (37, "직장생활", 1),
     "자립준비": (43, "자립준비", 1),
-    "보호자일시부재": (61, "보호자일시부재", 0), 
+    "보호자일시부재": (61, "보호자일시부재", 0),
     "나머지가구구성원의직장생활등": (67, "가족의직장생활", 0),
     "최중증1인가구": (73, "최중증1인가구", 1),
     "1등급1인가구": (79, "1등급1인가구", 0),
@@ -168,8 +180,17 @@ ADD_CODE_INFO = {
 }
 
 SJ_ORDER = [
-    ("1등급", ["최중증취약가구", "최중증1인가구", "1등급취약가구",
-               "1등급1인가구", "나머지가구구성원의직장생활등", None]),
+    (
+        "1등급",
+        [
+            "최중증취약가구",
+            "최중증1인가구",
+            "1등급취약가구",
+            "1등급1인가구",
+            "나머지가구구성원의직장생활등",
+            None,
+        ],
+    ),
     ("2등급", ["2등급이하취약가구", "2등급이하1인가구", None]),
     ("3등급", ["2등급이하취약가구", "2등급이하1인가구", None]),
     ("4등급", ["2등급이하취약가구", "2등급이하1인가구", None]),
@@ -177,9 +198,18 @@ SJ_ORDER = [
 
 SJ_COMBOS = [(True, True), (True, False), (False, True), (False, False)]
 
-SJ_CASE_CNT=60
-SJ_GROUP_SIZE=15
-SJ_DAYTIME_HOURS=22
+SJ_CASE_CNT = 60
+SJ_GROUP_SIZE = 15
+SJ_DAYTIME_HOURS = 22
+
+SJ_KEYS = [
+    "기본단가",
+    "종합조사/산정특례 본인부담금 상한액",
+    "종합조사/산정특례 본인부담률",
+    "인정조사 월한도액 (기본형)",
+    "추가급여 월한도액",
+]
+
 
 def _save_param(
     params: dict[str, str | int | float],
@@ -201,20 +231,17 @@ def _select_params(values: dict[str, str | int | float], type: str) -> dict:
     params.update({COL_CHASU: values[COL_CHASU]})
 
     # 여기서 values 중에 필요한 파라미터만 골라주기
-    if type == "인정":
-        for k, v in values.items():
-            if k.find("인정") != -1:
-                _save_param(params, k, v)
-
-    elif type == "종합":
-        for k, v in values.items():
-            if k.find("종합") != -1:
-                _save_param(params, k, v)
-
-    elif type == "추가":
-            for k, v in values.items():
-                if k.find("추가") != -1:
+    for k, v in values.items():
+        # 산정특례: 가져올 키 중에 인정, 종합, 추가 키가 섞여 있음. 별도의 리스트로 관리
+        if type == "산정":
+            for sj_key in SJ_KEYS:
+                if k.find(sj_key) != -1:
                     _save_param(params, k, v)
+
+        # 인정, 종합, 추가: 해당 단어를 포함하는 키를 모두 고르면 됨
+        else:
+            if k.find(type) != -1:
+                _save_param(params, k, v)
 
     return params
 
@@ -239,6 +266,7 @@ def _resolve_copayment(
         # 확장형(주간활동 확장형)은 차상위(나)도 본인부담금 면제
         return min(rate_or_amount, cap) if variant == "기본형" else 0
     return _calculate_copayment(monthly_limit, rate_or_amount, cap)
+
 
 def _write_ij_prices(values: dict, variant: str) -> list[dict]:
     prefix = "D" if variant == "기본형" else "C"
@@ -275,50 +303,60 @@ def _write_ij_prices(values: dict, variant: str) -> list[dict]:
 
     return rows
 
-#산정 주간확장 차감: 22시간 X 기본단가, 천원 미만 절사 적용
-def _sj_ext_deduction(unit_price:int)->int:
-    return SJ_DAYTIME_HOURS*unit_price // 1000*1000
 
-#산정 특례 월한도액 계산함
-def _build_sj_limits(base_limits: dict, add_limits: dict)->dict:
-    limits={}
-    n=1
-    for grade,mains in SJ_ORDER:
+# 산정 주간확장 차감: 22시간 X 기본단가, 천원 미만 절사 적용
+def _sj_ext_deduction(unit_price: int) -> int:
+    return SJ_DAYTIME_HOURS * unit_price // 1000 * 1000
+
+
+# 산정 특례 월한도액 계산함
+def _build_sj_limits(base_limits: dict, add_limits: dict) -> dict:
+    limits = {}
+    n = 1
+    for grade, mains in SJ_ORDER:
         for main in mains:
-            for school,work in SJ_COMBOS:
-                limit=base_limits[grade]
+            for school, work in SJ_COMBOS:
+                limit = base_limits[grade]
                 if main:
-                    limit+=add_limits[main]
+                    limit += add_limits[main]
                 if school:
-                    limit+=add_limits["학교생활"]
+                    limit += add_limits["학교생활"]
                 if work:
                     limit += add_limits["직장생활"]
                 limits[f"특례{n}"] = limit
-                n+=1
+                n += 1
 
-    assert n-1==SJ_CASE_CNT
+    assert n - 1 == SJ_CASE_CNT
     return limits
 
-def _write_sj_prices(sj_limits:dict,jh_values:dict,unit_price:int,variant:str)->list[dict]:
+
+def _write_sj_prices(values: dict, variant: str) -> list[dict]:
+    # 월한도액 계산
+    sj_limits = _build_sj_limits(
+        values["인정조사 월한도액 (기본형)"],
+        values["추가급여 월한도액"],
+    )
+
     prefix = "D" if variant == "기본형" else "C"
     suffix = "" if variant == "기본형" else "_주간확장"
-    rates = jh_values["종합조사/산정특례 본인부담률"]
-    cap = jh_values["종합조사/산정특례 본인부담금 상한액"]
-    deduction=0 if variant=="기본형" else _sj_ext_deduction(unit_price)
+    rates = values["종합조사/산정특례 본인부담률"]
+    cap = values["종합조사/산정특례 본인부담금 상한액"]
+    unit_price = values["기본단가"]
+    deduction = 0 if variant == "기본형" else _sj_ext_deduction(unit_price)
 
     sort_num = SJ_SORT_NUM_START[variant]
-    rows=[]
+    rows = []
     for s in range(SJ_CASE_CNT):
-        limit=sj_limits[f"특례{s+1}"]-deduction
-        group_char="ABCD"[s//SJ_GROUP_SIZE]
+        limit = sj_limits[f"특례{s+1}"] - deduction
+        group_char = "ABCD"[s // SJ_GROUP_SIZE]
         for k, letter in enumerate(INCOME_LETTERS):
-            code_num=(s%SJ_GROUP_SIZE)*len(INCOME_LETTERS)+k+1
-            copayment=_resolve_copayment(letter,limit,rates[letter],cap,variant)
+            code_num = (s % SJ_GROUP_SIZE) * len(INCOME_LETTERS) + k + 1
+            copayment = _resolve_copayment(letter, limit, rates[letter], cap, variant)
             rows.append(
                 {
-                    COL_BUSINESS_TYPE_ID:BUSINESS_ID,
-                    COL_BUSINESS_YEAR: jh_values[COL_BUSINESS_YEAR],
-                    COL_CHASU:jh_values[COL_CHASU],
+                    COL_BUSINESS_TYPE_ID: BUSINESS_ID,
+                    COL_BUSINESS_YEAR: values[COL_BUSINESS_YEAR],
+                    COL_CHASU: values[COL_CHASU],
                     COL_GRADE_CODE: f"{prefix}{group_char}{code_num:02d}",
                     COL_GRADE_NAME: f"특례{s + 1}({letter}형){suffix}",
                     COL_VOUCHER_TYPE: VOUCHER_TYPE,
@@ -330,7 +368,7 @@ def _write_sj_prices(sj_limits:dict,jh_values:dict,unit_price:int,variant:str)->
                     COL_SORT_NUM: sort_num,
                 }
             )
-            sort_num+=1
+            sort_num += 1
     return rows
 
 
@@ -421,35 +459,31 @@ def _write_add_prices(values: dict) -> list[dict]:
         limit = limits[key]
         for k, letter in enumerate(INCOME_LETTERS):
             current_code = base_code + k
-            copayment = _calculate_copayment(limit, rates[letter], float('inf'))
+            copayment = _calculate_copayment(limit, rates[letter], float("inf"))
             rows.append(
                 {
                     ADD_COL_SEQ: seq,
-                    ADD_COL_GRADE_CODE: f"{prefix}{current_code:03d}", 
+                    ADD_COL_GRADE_CODE: f"{prefix}{current_code:03d}",
                     ADD_COL_GRADE_NAME: f"{category_name}_{letter}형",
-                    ADD_COL_SUPPORT_AMOUNT: limit, 
+                    ADD_COL_SUPPORT_AMOUNT: limit,
                     ADD_COL_GOV_SUPPORT: _calculate_gov_support(limit, copayment),
-                    ADD_COL_COPAYMENT: copayment, 
-                    ADD_COL_INCOME_TYPE: IJ_INCOME_LABELS[letter], 
-                    ADD_COL_CATEGORY: f"{category_name}여부" if flag==1 else f"{category_name}",
+                    ADD_COL_COPAYMENT: copayment,
+                    ADD_COL_INCOME_TYPE: IJ_INCOME_LABELS[letter],
+                    ADD_COL_CATEGORY: (
+                        f"{category_name}여부" if flag == 1 else f"{category_name}"
+                    ),
                 }
             )
             seq += 1
 
     return rows
 
-    
 
 def main(values: dict) -> DataFrame:
     ij_values = _select_params(values, "인정")
     jh_values = _select_params(values, "종합")
+    sj_values = _select_params(values, "산정")
     add_values = _select_params(values, "추가")
-
-    #산정 특례에 필요 부분(월한도액 계산)
-    sj_limits = _build_sj_limits(
-        ij_values["인정조사 월한도액 (기본형)"],
-        add_values["추가급여 월한도액"],
-    )
 
     rows = []
     add_rows = []
@@ -458,7 +492,7 @@ def main(values: dict) -> DataFrame:
         rows += _write_jh_prices(jh_values, variant)
 
     for variant in ("기본형", "확장형"):
-        rows += _write_sj_prices(sj_limits, jh_values, values["기본단가"], variant)
+        rows += _write_sj_prices(sj_values, variant)
 
     add_rows += _write_add_prices(add_values)
 
