@@ -120,10 +120,14 @@ class ValueField(QWidget):
         self._update_state()
 
     def is_valid(self) -> bool:
-        return (
-            self._input.text().strip() == ""
-            or self._parse(self._input.text()) is not None
-        )
+        text = self._input.text().strip()
+        if text == "":
+            return True
+        parsed = self._parse(text)
+        if parsed is None:
+            return False
+        # 숫자 칸은 음수도 잘못된 값으로 취급한다 (금액/비율은 음수가 될 수 없음).
+        return self.kind == "text" or parsed >= 0
 
     def is_modified(self) -> bool:
         return self.value() != self._original

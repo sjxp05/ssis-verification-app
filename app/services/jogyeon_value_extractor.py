@@ -313,7 +313,7 @@ class ValueExtractor:
         self._validate(data)
 
         # 화면에 탭(페이지) 2개로 나눠 보여주기 위해 dict 2개짜리 list로 반환
-        tab1 = {"사업연도": self._business_year(), "차수": 1}
+        tab1 = {"사업년도": self._business_year(), "차수": 1}
         tab1.update({key: data[key] for key in self._TAB1_KEYS})
         tab2 = {key: data[key] for key in self._TAB2_KEYS}
         return [tab1, tab2]

@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import QObject, QRunnable, Qt, QThreadPool, pyqtSignal
 from PyQt6.QtGui import QFontMetrics
 from PyQt6.QtWidgets import (
     QGridLayout,
@@ -23,12 +23,24 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+import pandas as pd
+
+from services.table_writer import TableWriter
 from ui.components.card import Card
 from ui.components.button import PrimaryButton
 from ui.components.tab_bar import SegmentedTabBar
 from ui.widgets.value_field import ValueField
+from utils.qss import set_state
 
-GROUP_GRID_COLUMNS = 4
+# 단가표 생성 상태
+WAITING, FILLED, BUSY, READY, FAILED = "waiting", "filled", "busy", "ready", "failed"
+
+_GENERATE_TEXT = "단가표 생성"
+_NEXT_TEXT = "다음 단계로  →"
+_BUSY_TEXT = "⟳  단가표를 생성하는 중..."
+
+
+GROUP_GRID_COLUMNS = 6
 # 라벨이 길어 기본 4열로는 잘리는 그룹은 여기서 열 수를 따로 지정한다.
 GROUP_COLUMN_OVERRIDES = {"추가급여 월한도액": 3}
 # value_field를 셀 오른쪽에 붙여서 정렬할 그룹
@@ -36,12 +48,12 @@ GROUP_RIGHT_ALIGN = {"추가급여 월한도액"}
 
 # '인정조사' 탭(0번 페이지)에서 한 줄에 나란히 둘 최상위 스칼라 키 묶음
 PAGE1_ROW_GROUPS = [
-    ("사업연도", "차수"),
+    ("사업년도", "차수"),
     ("기본단가", "A값", "인정조사 본인부담금 상한액"),
 ]
 
 # 쉼표 없이 연도 그대로 표시할 키
-YEAR_KEYS = {"사업연도"}
+YEAR_KEYS = {"사업년도"}
 # '본인부담률' 그룹 안에서 퍼센티지로 표시할 구간('다'~'바')
 PERCENT_GRADES = {"다", "라", "마", "바"}
 
@@ -62,14 +74,72 @@ TABS = {
 }
 
 
+# 임시 단가표 생성 함수: 결제단가 구현하기 전 까지 사용
+def _build_notice_tables(values: dict) -> dict[int, tuple[pd.DataFrame, None]]:
+    # 결제단가표 Mock Data — 검증 파이프라인이 붙기 전까지 탭 1개만 채운다.
+    NOTICE_ITEMS = [
+        ("P001", "기본형", 30_500),
+        ("P002", "추가형", 45_750),
+    ]
+
+    rows = [
+        {"안": i + 1, "항목코드": code, "항목명": name, "금액": amount}
+        for i, (code, name, amount) in enumerate(NOTICE_ITEMS)
+    ]
+    df = pd.DataFrame(rows)
+    return {0: (df, None)}
+
+
+class _TableWriteSignals(QObject):
+    finished = pyqtSignal(int, object)  # generation, Tables
+    failed = pyqtSignal(int, str)  # generation, 사유
+
+
+# 단가표 생성기를 GUI 스레드 밖에서 돌린다.
+class _TableWriteTask(QRunnable):
+    def __init__(
+        self,
+        table_writer: TableWriter,
+        values: dict[str, str | int | float],
+        flow_key: str,
+        generation: int,
+    ) -> None:
+        super().__init__()
+        self.signals = _TableWriteSignals()
+        self._table_writer = table_writer
+        self._values = values
+        self._flow_key = flow_key
+        self._generation = generation
+
+    def run(self) -> None:
+        try:
+            if self._flow_key == "unit_price":
+                tables = self._table_writer.write_basic_add_tables(self._values)
+            else:
+                # 임시로 결제단가 만들어 주는 함수 사용
+                tables = _build_notice_tables(self._values)
+        except Exception as error:
+            self.signals.failed.emit(
+                self._generation, str(error) or type(error).__name__
+            )
+        else:
+            self.signals.finished.emit(self._generation, tables)
+
+
 class ConstantsPage(QWidget):
-    generateRequested = pyqtSignal(dict)
+    # tablesReady(dict): 단가표 생성이 끝나 다음 단계로 넘어가도 된다는 신호
+    tablesReady = pyqtSignal(object)
     valuesChanged = pyqtSignal()  # 값이 수정되면 이미 만든 단가표는 낡은 것이 된다
     valuesKept = (
         pyqtSignal()
     )  # 값 수정했다가 취소한 경우 바뀌지 않은 것으로 처리, 단가표 페이지로 정상적 이동 가능
 
-    def __init__(self, parent: QWidget | None = None, flow: str = "unit_price"):
+    def __init__(
+        self,
+        table_writer: TableWriter | None = None,
+        parent: QWidget | None = None,
+        flow: str = "unit_price",
+    ):
         super().__init__(parent)
         self.setObjectName("PageBody")
         self._fields: dict[str, ValueField] = {}
@@ -78,6 +148,8 @@ class ConstantsPage(QWidget):
 
         self._title = QLabel()
         self._title.setObjectName("PageTitle")
+        self._table_writer = table_writer
+        self._pool = QThreadPool.globalInstance()
 
         self._tabs = SegmentedTabBar([tab["label"] for tab in TABS[flow]], flow=flow)
         self._tabs.currentChanged.connect(self._on_tab_changed)
@@ -88,13 +160,24 @@ class ConstantsPage(QWidget):
         self._card.add_widget(self._stack)
 
         self._is_table_generated = False  # 단가표 최초 생성 했는지 여부
-        self._generate = PrimaryButton("단가표 생성")
-        self._generate.clicked.connect(self._on_generate)
+        self._tables: dict | None = None
+        self._generation = 0
+        self._state = WAITING
+
+        self._next = PrimaryButton(_GENERATE_TEXT)
+        self._next.setEnabled(False)
+        self._next.clicked.connect(self._on_next)
+
+        self._hint = QLabel()
+        self._hint.setObjectName("GenerateHint")
+        self._hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._hint.setWordWrap(True)
 
         content = QVBoxLayout()
         content.setSpacing(16)
         content.addWidget(self._card, 1)
-        content.addWidget(self._generate)
+        content.addWidget(self._next)
+        content.addWidget(self._hint)
 
         self._outer = QVBoxLayout(self)
         self._outer.setContentsMargins(28, 18, 28, 24)
@@ -104,6 +187,7 @@ class ConstantsPage(QWidget):
         self._outer.addLayout(content, 1)
 
         self._on_tab_changed(flow, 0)
+        self._set_state(WAITING)
 
     # --- 구성 -------------------------------------------------------------
     def _group_label(self, text: str) -> QLabel:
@@ -247,6 +331,11 @@ class ConstantsPage(QWidget):
 
         self._on_tab_changed(self._flow, self._tabs.current())
 
+        # 새로 받은 값이므로 이전에 만든 단가표는 낡은 것으로 친다.
+        self._is_table_generated = False
+        self._tables = None
+        self._refresh_state()
+
     def _build_tabs(self, flow: str) -> None:
         # flow가 바뀔 때만 탭바를 새로 만들어 자리에 갈아 끼운다.
         old_tabs = self._tabs
@@ -258,13 +347,14 @@ class ConstantsPage(QWidget):
 
     def _register(self, field: ValueField) -> None:
         self._fields[field.key] = field
-        field.valueChanged.connect(
-            lambda *_: (
-                self.valuesKept.emit()
-                if self._is_table_generated and self.modified_keys() == []
-                else self.valuesChanged.emit()
-            )
-        )
+        field.valueChanged.connect(lambda *_: self._on_field_changed())
+
+    def _on_field_changed(self) -> None:
+        if self._is_table_generated and self.modified_keys() == []:
+            self.valuesKept.emit()
+        else:
+            self.valuesChanged.emit()
+        self._refresh_state()
 
     # --- API --------------------------------------------------------------
     def set_flow(self, flow: str) -> None:
@@ -285,6 +375,7 @@ class ConstantsPage(QWidget):
         for key, value in values.items():
             if key in self._fields:
                 self._fields[key].set_value(value, keep_original=True)
+        self._refresh_state()
 
     def values(self) -> dict:
         return {key: field.value() for key, field in self._fields.items()}
@@ -304,8 +395,89 @@ class ConstantsPage(QWidget):
         if 0 <= index < self._stack.count():
             self._stack.setCurrentIndex(index)
 
-    def _on_generate(self) -> None:
-        if self.invalid_keys():
-            return  # 잘못된 칸은 빨간 테두리로 이미 표시돼 있다
+    def _commit_original_values(self) -> None:
+        # 생성에 사용한 값을 새 기본값으로 삼아, 수정 표시(파란 테두리)를 지운다.
+        for field in self._fields.values():
+            field.set_value(field.value(), keep_original=True)
+
+    def _start_table_write(self, values: dict[str, str | int | float]) -> None:
+        if self._table_writer is None:
+            # 생성기를 안 붙인 경우: 상수 확인까지만 하고 READY 로 넘어간다
+            self._tables = {}
+            self._is_table_generated = True
+            self._commit_original_values()
+            self._set_state(READY)
+            return
+
+        self._set_state(BUSY)
+        self._generation += 1
+        task = _TableWriteTask(self._table_writer, values, self._flow, self._generation)
+        task.signals.finished.connect(self._on_table_complete)
+        task.signals.failed.connect(self._on_table_failed)
+        self._pool.start(task)
+
+    def _on_table_complete(self, generation: int, tables: dict) -> None:
+        if generation != self._generation:
+            return  # 생성 중에 값이 바뀐 경우: 결과가 낡은 값이므로 버린다
+        self._tables = tables
         self._is_table_generated = True
-        self.generateRequested.emit(self.values())
+        self._commit_original_values()
+        self._set_state(READY)
+
+    def _on_table_failed(self, generation: int, reason: str) -> None:
+        if generation != self._generation:
+            return
+        self._tables = None
+        self._set_state(FAILED, reason)
+
+    def _on_next(self) -> None:
+        if self._state in (FILLED, FAILED):
+            # '단가표 생성' 버튼: 값이 다 채워졌거나 생성이 실패해 재시도하는 경우
+            self._start_table_write(self.values())
+        elif self._state == READY and self._tables is not None:
+            # '다음 단계로' 버튼
+            self.tablesReady.emit(self._tables)
+
+    # --- 내부 -------------------------------------------------------------
+    def _refresh_state(self) -> None:
+        if self._state == BUSY:
+            return  # 생성 중엔 값이 바뀌어도 상태를 그대로 둔다
+        if not self._fields or self.invalid_keys():
+            self._set_state(WAITING)
+        elif self._is_table_generated and self.modified_keys() == []:
+            self._set_state(READY)
+        else:
+            self._set_state(FILLED)
+
+    def _set_state(self, state: str, reason: str = "") -> None:
+        self._state = state
+        busy = state == BUSY
+        for field in self._fields.values():
+            field.set_read_only(busy)
+
+        self._next.setEnabled(state in (FILLED, READY, FAILED))
+        self._next.setText(
+            _BUSY_TEXT if busy else _NEXT_TEXT if state == READY else _GENERATE_TEXT
+        )
+
+        if state == WAITING:
+            self._hint.setText(
+                "값을 불러오는 중입니다."
+                if not self._fields
+                else "잘못된 값이 있어 단가표를 생성할 수 없습니다. 빨간 테두리 칸을 확인해 주세요."
+            )
+        elif state == FILLED:
+            self._hint.setText("값을 확인했다면 '단가표 생성'을 눌러 주세요.")
+        elif state == BUSY:
+            self._hint.setText("단가표를 생성하고 있습니다. 잠시만 기다려 주세요.")
+        elif state == READY:
+            self._hint.setText(
+                "단가표를 생성했습니다. 다음 화면에서 확인할 수 있습니다."
+            )
+        else:
+            self._hint.setText(
+                f"단가표를 생성하지 못했습니다: {reason}\n값을 확인한 뒤 다시 시도해 주세요."
+            )
+
+        set_state(self._hint, "state", state)
+        self._hint.setVisible(True)

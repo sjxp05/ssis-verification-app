@@ -43,7 +43,9 @@ class DataFrameTable(QTableView):
         self.verticalHeader().setVisible(show_row_numbers)
         self.verticalHeader().setDefaultSectionSize(34)
         self.horizontalHeader().setHighlightSections(False)
-        self.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.horizontalHeader().setSectionResizeMode(
+            QHeaderView.ResizeMode.Interactive
+        )
         self.horizontalHeader().setMinimumSectionSize(70)
         self.horizontalHeader().setFixedHeight(38)
 
@@ -60,6 +62,7 @@ class DataFrameTable(QTableView):
         self.hide_bubble()
         self._model.set_dataframe(df, formulas)
         self.clearSelection()
+        self.resizeColumnsToContents()
 
     def dataframe(self) -> pd.DataFrame:
         return self._model.dataframe()

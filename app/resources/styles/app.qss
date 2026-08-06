@@ -430,6 +430,22 @@ QLabel#BubbleFoot {
     padding: 10px 12px;
 }
 
+/* --- 단가표 생성 화면 하단 안내 문구 --------------------------------- */
+#GenerateHint {
+    font-size: 11px;
+    color: ${TEXT_MUTED};
+    padding: 4px 0;
+}
+#GenerateHint[state="busy"] {
+    color: ${ACCENT};
+}
+#GenerateHint[state="ready"] {
+    color: ${SUCCESS_DARK};
+}
+#GenerateHint[state="failed"] {
+    color: ${DANGER_DARK};
+}
+
 /* --- 잘못된 입력칸 (theme 토큰으로 통일) ---------------------------- */
 #FieldInput[invalid="true"] {
     border: 1px solid ${DANGER};

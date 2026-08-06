@@ -4,11 +4,9 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
-from typing import Callable
 from enum import IntEnum
 
 import pandas as pd
-from PyQt6.QtCore import pyqtSignal
 from PyQt6.QtWidgets import (
     QApplication,
     QFileDialog,
@@ -20,6 +18,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from services.table_writer import TableWriter
 from models.dto import ConstantValues
 from models.flows import FlowSpec, UNIT_PRICE
 from services import recent_files
@@ -27,7 +26,6 @@ from ui.components.header import HeaderBar
 from ui.components.step_indicator import StepIndicator
 from ui.pages.constants_page import ConstantsPage
 from ui.pages.main_page import MainPage
-from ui.pages.constants_page import ConstantsPage
 from ui.pages.table_viewer_page import TableViewerPage
 from ui.pages.upload_page import UploadPage, ValueExtractor
 
@@ -50,24 +48,18 @@ class Screen(IntEnum):
         return cls(step + 1)
 
 
-# table_builder(values, flow_key) -> {탭 인덱스: (DataFrame, 산식)}
-TableBuilder = Callable[[ConstantValues, str], dict[int, tuple[pd.DataFrame, object]]]
-
-
 class MainWindow(QMainWindow):
-    tablesRequested = pyqtSignal(dict)  # table_builder 를 안 넣었을 때 밖으로 넘김
     # uploadRequested = pyqtSignal()
     # homeRequested = pyqtSignal()
 
     def __init__(
         self,
         value_extractor: ValueExtractor | None = None,
-        table_builder: TableBuilder | None = None,
+        table_writer: TableWriter | None = None,
     ):
         super().__init__()
         self.setWindowTitle("조견표 → 단가표 생성")
         self.resize(1180, 820)
-        self.table_builder = table_builder
         self._flow: FlowSpec | None = None
         self._table_count = 0
 
@@ -92,8 +84,8 @@ class MainWindow(QMainWindow):
         self.upload_page = UploadPage(value_extractor)
         self.upload_page.valuesReady.connect(self._on_values_ready)
 
-        self.constants_page = ConstantsPage()
-        self.constants_page.generateRequested.connect(self._on_generate)
+        self.constants_page = ConstantsPage(table_writer)
+        self.constants_page.tablesReady.connect(self._on_tables_ready)
         self.constants_page.valuesChanged.connect(self._on_values_changed)
         self.constants_page.valuesKept.connect(self._on_values_kept)
 
@@ -256,11 +248,9 @@ class MainWindow(QMainWindow):
         if self._steps is not None:
             self._steps.set_max_reached(Screen.TABLES.step)
 
-    def _on_generate(self, values: dict) -> None:
-        if self.table_builder is None:
-            self.tablesRequested.emit(values)
-        else:
-            self.set_tables(self.table_builder(values, self._flow.key))
+    def _on_tables_ready(self, tables: dict) -> None:
+        # 상수 확인 화면에서 단가표 생성을 마치고 '다음 단계로'를 눌렀을 때
+        self.set_tables(tables)
         self.go_to_step(Screen.TABLES.step)
 
     def _on_export(self, tab_index: int, df: pd.DataFrame) -> None:
