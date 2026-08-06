@@ -12,6 +12,7 @@ import pandas as pd
 from PyQt6.QtWidgets import QApplication, QMessageBox
 
 # from services.value_extractor import ValueExtractor
+from services.table_writer import TableWriter
 from services.jogyeon_value_extractor import ValueExtractor
 from models.dto import ConstantValues, UploadedFile
 from resources.styles import theme
@@ -126,7 +127,7 @@ def main() -> int:
         app.setStyleSheet(theme.load_stylesheet())
     except theme.StylesheetError as error:
         QMessageBox.warning(None, "스타일 오류", str(error))
-    window = MainWindow(value_extractor=ValueExtractor(), table_builder=build_tables)
+    window = MainWindow(value_extractor=ValueExtractor(), table_writer=TableWriter())
     window.show()
     return app.exec()
 
