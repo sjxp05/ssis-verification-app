@@ -1,7 +1,8 @@
 from collections import Counter
 from pandas import DataFrame
 
-from services.tmp.payment_master import SERVICE_MASTER
+# 임시로 사용할 고시검증 반환값
+from services.tmp.service_master import SERVICE_MASTER
 
 # 기본급여 단가표 컬럼명 - 서식 변경시 여기만 변경
 COL_SEQ = "안"
