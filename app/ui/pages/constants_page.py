@@ -74,22 +74,6 @@ TABS = {
 }
 
 
-# 임시 단가표 생성 함수: 결제단가 구현하기 전 까지 사용
-def _build_notice_tables(values: dict) -> dict[int, tuple[pd.DataFrame, None]]:
-    # 결제단가표 Mock Data — 검증 파이프라인이 붙기 전까지 탭 1개만 채운다.
-    NOTICE_ITEMS = [
-        ("P001", "기본형", 30_500),
-        ("P002", "추가형", 45_750),
-    ]
-
-    rows = [
-        {"안": i + 1, "항목코드": code, "항목명": name, "금액": amount}
-        for i, (code, name, amount) in enumerate(NOTICE_ITEMS)
-    ]
-    df = pd.DataFrame(rows)
-    return {0: (df, None)}
-
-
 class _TableWriteSignals(QObject):
     finished = pyqtSignal(int, object)  # generation, Tables
     failed = pyqtSignal(int, str)  # generation, 사유
@@ -114,10 +98,14 @@ class _TableWriteTask(QRunnable):
     def run(self) -> None:
         try:
             if self._flow_key == "unit_price":
-                tables = self._table_writer.write_basic_add_tables(self._values)
+                tables = self._table_writer.write_basic_add_tables(
+                    values=self._values,
+                )
             else:
-                # 임시로 결제단가 만들어 주는 함수 사용
-                tables = _build_notice_tables(self._values)
+                tables = self._table_writer.write_payment_table(
+                    service_prices=self._values,
+                    basic_df=None,  # TODO: 여기에 기본급여 단가표 혹은 단가표 엑셀파일의 path를 넣어줄 것
+                )
         except Exception as error:
             self.signals.failed.emit(
                 self._generation, str(error) or type(error).__name__

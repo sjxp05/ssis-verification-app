@@ -1,6 +1,9 @@
+from collections import Counter
 from pandas import DataFrame
 
-# 단가표 컬럼명 - 서식 변경시 여기만 변경
+from services.tmp.payment_master import SERVICE_MASTER
+
+# 기본급여 단가표 컬럼명 - 서식 변경시 여기만 변경
 COL_SEQ = "안"
 COL_BUSINESS_TYPE_ID = "사업유형ID"
 COL_BUSINESS_YEAR = "사업년도"
@@ -30,7 +33,37 @@ ADD_COL_COPAYMENT = "본인부담금"
 ADD_COL_INCOME_TYPE = "소득구분"
 ADD_COL_CATEGORY = "추가급여구분"
 
-HEADERS = [
+# 결제단가표 컬럼명
+PAYMENT_COL_ORDER = "순번"
+PAYMENT_COL_BUSINESS_YEAR = "사업년도"
+PAYMENT_COL_CHASU = "차수"
+PAYMENT_COL_BUSINESS_DIV = "사업구분"
+PAYMENT_COL_BUSINESS_DIV_NAME = "사업구분명"
+PAYMENT_COL_BUSINESS_TYPE_ID = "사업유형ID"
+PAYMENT_COL_BUSINESS_TYPE_NAME = "사업유형명"
+PAYMENT_COL_SERVICE_TYPE_ID = "서비스유형ID"
+PAYMENT_COL_SERVICE_TYPE_NAME = "서비스유형명"
+PAYMENT_COL_SERVICE_KIND = "서비스종류"
+PAYMENT_COL_SERVICE_KIND_NAME = "서비스종유명"
+PAYMENT_COL_GRADE_CODE = "등급구분"
+PAYMENT_COL_GRADE_NAME = "등급명"
+PAYMENT_COL_SERVICE_TIME = "서비스시간"
+PAYMENT_COL_SERVICE_TIME_NAME = "서비스시간명"
+PAYMENT_COL_UNIT_PRICE = "단위기준단가"
+PAYMENT_COL_UNIT_PRICE_NIGHT = "단위기준심야단가"
+PAYMENT_COL_SUPPORT_AMOUNT = "지원량"
+PAYMENT_COL_GOV_SUPPORT_AMOUNT = "정부지원금액"
+PAYMENT_COL_COPAYMENT_AMOUNT = "본인부담금액"
+PAYMENT_COL_GOV_SUPPORT_RATE = "정부지원금율"
+PAYMENT_COL_COPAYMENT_RATE = "본인부담금율"
+PAYMENT_COL_USE_YN = "사용여부"
+PAYMENT_COL_SERVICE_START_DATE = "서비스시작일자"
+PAYMENT_COL_SERVICE_END_DATE = "서비스종료일자"
+PAYMENT_COL_PRICE_MGMT_LEVEL = "단가관리레벨"
+PAYMENT_COL_REMARKS = "비고"
+
+# 기본급여 단가표 헤더
+BASIC_HEADERS = [
     COL_SEQ,
     COL_BUSINESS_TYPE_ID,
     COL_BUSINESS_YEAR,
@@ -61,6 +94,37 @@ ADD_HEADERS = [
     ADD_COL_COPAYMENT,
     ADD_COL_INCOME_TYPE,
     ADD_COL_CATEGORY,
+]
+
+# 결제단가표 헤더
+PAYMENT_HEADERS = [
+    PAYMENT_COL_ORDER,
+    PAYMENT_COL_BUSINESS_YEAR,
+    PAYMENT_COL_CHASU,
+    PAYMENT_COL_BUSINESS_DIV,
+    PAYMENT_COL_BUSINESS_DIV_NAME,
+    PAYMENT_COL_BUSINESS_TYPE_ID,
+    PAYMENT_COL_BUSINESS_TYPE_NAME,
+    PAYMENT_COL_SERVICE_TYPE_ID,
+    PAYMENT_COL_SERVICE_TYPE_NAME,
+    PAYMENT_COL_SERVICE_KIND,
+    PAYMENT_COL_SERVICE_KIND_NAME,
+    PAYMENT_COL_GRADE_CODE,
+    PAYMENT_COL_GRADE_NAME,
+    PAYMENT_COL_SERVICE_TIME,
+    PAYMENT_COL_SERVICE_TIME_NAME,
+    PAYMENT_COL_UNIT_PRICE,
+    PAYMENT_COL_UNIT_PRICE_NIGHT,
+    PAYMENT_COL_SUPPORT_AMOUNT,
+    PAYMENT_COL_GOV_SUPPORT_AMOUNT,
+    PAYMENT_COL_COPAYMENT_AMOUNT,
+    PAYMENT_COL_GOV_SUPPORT_RATE,
+    PAYMENT_COL_COPAYMENT_RATE,
+    PAYMENT_COL_USE_YN,
+    PAYMENT_COL_SERVICE_START_DATE,
+    PAYMENT_COL_SERVICE_END_DATE,
+    PAYMENT_COL_PRICE_MGMT_LEVEL,
+    PAYMENT_COL_REMARKS,
 ]
 
 SORT_NUM_START = {"기본": 1, "확장": 241, "특례": 361}
@@ -143,8 +207,143 @@ SJ_KEYS = [
     "추가급여 월한도액",
 ]
 
+# 사업 고정값: 결제단가표 전체 행에 동일하게 들어감
+BUSINESS = {
+    PAYMENT_COL_BUSINESS_DIV: "HW01",
+    PAYMENT_COL_BUSINESS_DIV_NAME: "장애인활동지원",
+    PAYMENT_COL_BUSINESS_TYPE_ID: "HWG001",
+    PAYMENT_COL_BUSINESS_TYPE_NAME: "장애인활동지원",
+}
+
+# 결제단가표에 포함하지 않는 등급 (부적합)
+EXCLUDED_GRADES = {"9999"}
+
+# 활동보조 4x2=8, 방문간호 3x3=9, 방문목욕 2x2=4, 지시서 4x1=4
+EXPECTED_SERVICE_ROW_COUNTS = {
+    "ST0001": 8,
+    "ST0002": 9,
+    "ST0003": 4,
+    "ST0004": 4,
+}
+
+TIME_NAMES = {
+    0: "0분부터 30분미만",
+    30: "30분부터 60분미만",
+    40: "40분부터 59분까지",
+    60: "60분이상",
+}
+
+
+# 고시에서 추출한 서비스별 단가 검증 함수
+# (고시검증/값 확인 화면에서 이미 검증해서 올라와야 하는데 만약을 대비해 여기 넣어둠)
+def validate_service_prices(prices: dict) -> None:
+    # 0 이하인 단가가 있으면 안 된다
+    for service, items in prices.items():
+        for key, amount in items.items():
+            if amount <= 0:
+                raise ValueError(
+                    f"서비스 단가 {service}/{key}가 0 이하입니다: {amount}"
+                )
+
+    # 방문간호는 시간이 길수록 비싸야 한다
+    g = prices["방문간호"]
+    if not (g["30분미만"] < g["30분이상60분미만"] < g["60분이상"]):
+        raise ValueError(
+            "방문간호 단가가 시간 구간 순으로 증가하지 않습니다: "
+            f"30분미만={g['30분미만']}, 30분이상60분미만={g['30분이상60분미만']}, "
+            f"60분이상={g['60분이상']}"
+        )
+
+    # 공휴일 및 심야 단가는 일반 단가보다 높아야 한다
+    h = prices["활동보조"]
+    if not (h["일반"] < h["심야"] and h["일반"] < h["공휴일"]):
+        raise ValueError(
+            "활동보조 심야/공휴일 단가가 일반보다 높지 않습니다: "
+            f"일반={h['일반']}, 심야={h['심야']}, 공휴일={h['공휴일']}"
+        )
+
+
+# 기본급여 단가표의 각 등급 검증
+# (고시검증/값 확인 화면에서 이미 검증해서 올라와야 하는데 만약을 대비해 여기 넣어둠)
+def validate_basic_df(df: DataFrame) -> None:
+    # 등급구분은 유일해야 한다 (중복되면 어떤 금액이 맞는지 알 수 없음)
+    dup = df[df[COL_GRADE_CODE].duplicated(keep=False)]
+    if not dup.empty:
+        raise ValueError(f"등급구분이 중복된 행이 있습니다:\n{dup.to_string()}")
+
+    # 항등식: 지원량 = 정부지원금 + 본인부담금 (기본 단가표 자체의 무결성)
+    bad = df[df[COL_SUPPORT_AMOUNT] != df[COL_GOV_SUPPORT] + df[COL_COPAYMENT]]
+    if not bad.empty:
+        raise ValueError(
+            "지원량 = 정부지원금 + 본인부담금 항등식이 깨진 행이 있습니다:\n"
+            f"{bad.head(10).to_string()}"
+        )
+
+    # 율 계산에 지원량이 0이면 안 된다 (부적합 제외 후에는 없어야 정상)
+    zero = df[df[COL_SUPPORT_AMOUNT] <= 0]
+    if not zero.empty:
+        raise ValueError(f"지원량이 0 이하인 등급이 있습니다:\n{zero.to_string()}")
+
 
 class TableWriter:
+    # --- 계산 공식 -----------------------------------------------------------------------
+
+    # 절사 (rounddown(절사할 숫자, -자릿수) 엑셀 함수와 유사하게 작동)
+    def _rounddown(x: float, digit: int) -> int:
+        scale = 10 ** (-digit)
+        return int(x) // scale * scale
+
+    # ex: 본인부담금 계산 함수
+    def _calculate_copayment(self, monthly_limit: int, copay_rate: float, cap: float):
+        return min(self._rounddown(monthly_limit * copay_rate, -2), cap)
+
+    # 정부지원금 계산 함수
+    def _calculate_gov_support(self, monthly_limit: int, copayment: int):
+        return monthly_limit - copayment
+
+    # 가·나형은 정액(param 값 자체가 부담금), 다~바형은 요율 기반으로 계산
+    def _resolve_copayment(
+        self,
+        letter: str,
+        monthly_limit: int,
+        rate_or_amount: float,
+        cap: float,
+        variant: str,
+    ):
+        if letter == "가":
+            return 0
+        if letter == "나":
+            # 확장형(주간활동 확장형)은 차상위(나)도 본인부담금 면제
+            return min(rate_or_amount, cap) if variant == "기본형" else 0
+        return self._calculate_copayment(monthly_limit, rate_or_amount, cap)
+
+    # 산정 주간확장 차감: 22시간 X 기본단가, 천원 미만 절사 적용
+    def _sj_ext_deduction(self, unit_price: int) -> int:
+        return self._rounddown(SJ_DAYTIME_HOURS * unit_price, -3)
+
+    # 산정 특례 월한도액 계산함
+    def _build_sj_limits(self, base_limits: dict, add_limits: dict) -> dict:
+        limits = {}
+        n = 1
+        for grade, mains in SJ_ORDER:
+            for main in mains:
+                for school, work in SJ_COMBOS:
+                    limit = base_limits[grade]
+                    if main:
+                        limit += add_limits[main]
+                    if school:
+                        limit += add_limits["학교생활"]
+                    if work:
+                        limit += add_limits["직장생활"]
+                    limits[f"특례{n}"] = limit
+                    n += 1
+
+        assert n - 1 == SJ_CASE_CNT
+        return limits
+
+    # --- 기본급여/추가급여 단가표 (unit_price flow) -----------------------------------------------
+
+    # 필요한 상수값만 선택해 가져오기
     def _save_param(
         self,
         params: dict[str, str | int | float],
@@ -178,30 +377,6 @@ class TableWriter:
                     self._save_param(params, k, v)
 
         return params
-
-    # ex: 본인부담금 계산 함수
-    def _calculate_copayment(self, monthly_limit: int, copay_rate: float, cap: float):
-        return min((monthly_limit * copay_rate) // 100 * 100, cap)
-
-    # 정부지원금 계산 함수
-    def _calculate_gov_support(self, monthly_limit: int, copayment: int):
-        return monthly_limit - copayment
-
-    # 가·나형은 정액(param 값 자체가 부담금), 다~바형은 요율 기반으로 계산
-    def _resolve_copayment(
-        self,
-        letter: str,
-        monthly_limit: int,
-        rate_or_amount: float,
-        cap: float,
-        variant: str,
-    ):
-        if letter == "가":
-            return 0
-        if letter == "나":
-            # 확장형(주간활동 확장형)은 차상위(나)도 본인부담금 면제
-            return min(rate_or_amount, cap) if variant == "기본형" else 0
-        return self._calculate_copayment(monthly_limit, rate_or_amount, cap)
 
     def _write_ij_prices(self, values: dict, variant: str) -> list[dict]:
         prefix = "D" if variant == "기본형" else "C"
@@ -239,30 +414,6 @@ class TableWriter:
                 sort_num += 1
 
         return rows
-
-    # 산정 주간확장 차감: 22시간 X 기본단가, 천원 미만 절사 적용
-    def _sj_ext_deduction(self, unit_price: int) -> int:
-        return SJ_DAYTIME_HOURS * unit_price // 1000 * 1000
-
-    # 산정 특례 월한도액 계산함
-    def _build_sj_limits(self, base_limits: dict, add_limits: dict) -> dict:
-        limits = {}
-        n = 1
-        for grade, mains in SJ_ORDER:
-            for main in mains:
-                for school, work in SJ_COMBOS:
-                    limit = base_limits[grade]
-                    if main:
-                        limit += add_limits[main]
-                    if school:
-                        limit += add_limits["학교생활"]
-                    if work:
-                        limit += add_limits["직장생활"]
-                    limits[f"특례{n}"] = limit
-                    n += 1
-
-        assert n - 1 == SJ_CASE_CNT
-        return limits
 
     def _write_sj_prices(self, values: dict, variant: str) -> list[dict]:
         # 월한도액 계산
@@ -419,6 +570,185 @@ class TableWriter:
 
         return rows
 
+    # --- 결제단가표 (verify_notice flow) ----------------------------------------------------------
+
+    # 기본급여 단가표의 등급 목록을 읽어옴
+    def _prepare_basic_grades(self, basic_df: DataFrame) -> list[dict]:
+        need = [
+            COL_GRADE_CODE,
+            COL_GRADE_NAME,
+            COL_SUPPORT_AMOUNT,
+            COL_GOV_SUPPORT,
+            COL_COPAYMENT,
+        ]
+        missing = [c for c in need if c not in basic_df.columns]
+        if missing:
+            raise ValueError(f"기본급여 단가표에 필요한 열이 없습니다: {missing}")
+        df = basic_df[need].copy()
+
+        # 부적합 등 결제 불가 등급 제외
+        df = df[~df[COL_GRADE_CODE].astype(str).isin(EXCLUDED_GRADES)]
+
+        return df.sort_values(COL_GRADE_CODE).to_dict("records")
+
+    # 각 등급별로 유형별 조합 수와 단가 상식(0원 이하, 심야<주간 금지)을 검증
+    def _validate_service_rows(self, rows: list[dict]) -> None:
+
+        counts = Counter(r[PAYMENT_COL_SERVICE_TYPE_ID] for r in rows)
+        if dict(counts) != EXPECTED_SERVICE_ROW_COUNTS:
+            raise ValueError(
+                f"서비스유형별 조합 수가 기댓값과 다릅니다: {dict(counts)} != {EXPECTED_SERVICE_ROW_COUNTS}"
+            )
+
+        for r in rows:
+            # 0 이하인 단가가 있으면 안 된다
+            if r[PAYMENT_COL_UNIT_PRICE] <= 0:
+                raise ValueError(f"서비스 단가가 0 이하입니다: {r}")
+            # 공휴일 및 심야 단가는 일반 단가보다 높아야 한다
+            elif r[PAYMENT_COL_UNIT_PRICE_NIGHT] < r[PAYMENT_COL_UNIT_PRICE]:
+                raise ValueError(f"단위기준심야단가가 단위기준단가보다 낮습니다: {r}")
+
+    # TODO: 고시 검증 값을 어떤 형태로 받는지에 따라 수정할 것
+    # (서비스 유형 x 종류 x 시간대) 조합 25개 행 만들기
+    def _build_service_rows(self, prices: dict) -> list[dict]:
+        rows = []
+        for svc in SERVICE_MASTER:
+            rule = svc["단가"]
+
+            for sk_code, sk_name in svc["종류"]:
+                if rule["방식"] == "시간비율":
+                    src = rule["원천"].get(sk_code) or rule["원천"]["공통"]
+                    base = prices[src[0]][src[1]]
+
+                    for time_code, ratio in rule["시간대"]:
+                        day = self._rounddown(base * ratio, -1)
+
+                        if "심야배율" in rule:
+                            night = self._rounddown(day * rule["심야배율"], -1)
+                            # 기준 시간대(비율 1.0)에서만 고시 명시값과 직접 비교 가능
+                            if ratio == 1.0:
+                                chk = rule["심야확인"]
+                                stated = prices[chk[0]][chk[1]]
+                                if night != stated:
+                                    raise ValueError(
+                                        f"{svc['서비스유형명']} 심야단가 계산값이 고시 명시값과 다릅니다.\n"
+                                        f"  계산값     : {night:,}원 = 주간 {day:,}원 x {rule['심야배율']} (10원 미만 절사)\n"
+                                        f"  고시 명시값: {stated:,}원\n"
+                                        f"조치: 고시 문서에서 해당 금액이나 심야배율을 확인하세요."
+                                    )
+                        else:
+                            night = day  # 심야 구분이 없는 서비스는 주간과 동일
+
+                        rows.append(
+                            {
+                                PAYMENT_COL_SERVICE_TYPE_ID: svc["서비스유형ID"],
+                                PAYMENT_COL_SERVICE_TYPE_NAME: svc["서비스유형명"],
+                                PAYMENT_COL_SERVICE_KIND: sk_code,
+                                PAYMENT_COL_SERVICE_KIND_NAME: sk_name,
+                                PAYMENT_COL_SERVICE_TIME: time_code,
+                                PAYMENT_COL_SERVICE_TIME_NAME: TIME_NAMES[time_code],
+                                PAYMENT_COL_UNIT_PRICE: day,
+                                PAYMENT_COL_UNIT_PRICE_NIGHT: night,
+                            }
+                        )
+
+                elif rule["방식"] == "시간대별금액":
+                    for time_code, src in rule["시간대"]:
+                        amount = prices[src[0]][src[1]]
+                        rows.append(
+                            {
+                                PAYMENT_COL_SERVICE_TYPE_ID: svc["서비스유형ID"],
+                                PAYMENT_COL_SERVICE_TYPE_NAME: svc["서비스유형명"],
+                                PAYMENT_COL_SERVICE_KIND: sk_code,
+                                PAYMENT_COL_SERVICE_KIND_NAME: sk_name,
+                                PAYMENT_COL_SERVICE_TIME: time_code,
+                                PAYMENT_COL_SERVICE_TIME_NAME: TIME_NAMES[time_code],
+                                PAYMENT_COL_UNIT_PRICE: amount,
+                                PAYMENT_COL_UNIT_PRICE_NIGHT: amount,  # 심야 구분 없음
+                            }
+                        )
+
+                else:
+                    raise ValueError(f"알 수 없는 단가 계산 방식: {rule['방식']}")
+
+        self._validate_service_rows(rows)  # 조합 수 25개인지, 단가 율 검증
+        return rows
+
+    # 등급 x 서비스 조합 -> 결제단가 DataFrame 생성
+    def _build_payment_rows(
+        self,
+        grades: list[dict],
+        service_rows: list[dict],
+        business_year: int,
+        chasu: int,
+    ) -> DataFrame:
+        # 행 순서: 서비스유형 블록 -> 등급구분 알파벳순 (실제 파일과 동일한 배치)
+        by_type: dict[str, list[dict]] = {}
+        for svc in service_rows:
+            by_type.setdefault(svc[PAYMENT_COL_SERVICE_TYPE_ID], []).append(svc)
+
+        rows = []
+        for type_id in sorted(by_type):
+            for grade in grades:
+                support = grade[COL_SUPPORT_AMOUNT]
+                for svc in by_type[type_id]:
+                    rows.append(
+                        {
+                            PAYMENT_COL_BUSINESS_YEAR: business_year,
+                            PAYMENT_COL_CHASU: chasu,
+                            **BUSINESS,
+                            PAYMENT_COL_SERVICE_TYPE_ID: svc[
+                                PAYMENT_COL_SERVICE_TYPE_ID
+                            ],
+                            PAYMENT_COL_SERVICE_TYPE_NAME: svc[
+                                PAYMENT_COL_SERVICE_TYPE_NAME
+                            ],
+                            PAYMENT_COL_SERVICE_KIND: svc[PAYMENT_COL_SERVICE_KIND],
+                            PAYMENT_COL_SERVICE_KIND_NAME: svc[
+                                PAYMENT_COL_SERVICE_KIND_NAME
+                            ],
+                            PAYMENT_COL_GRADE_CODE: grade[COL_GRADE_CODE],
+                            PAYMENT_COL_GRADE_NAME: grade[COL_GRADE_NAME],
+                            PAYMENT_COL_SERVICE_TIME: svc[PAYMENT_COL_SERVICE_TIME],
+                            PAYMENT_COL_SERVICE_TIME_NAME: svc[
+                                PAYMENT_COL_SERVICE_TIME_NAME
+                            ],
+                            PAYMENT_COL_UNIT_PRICE: svc[PAYMENT_COL_UNIT_PRICE],
+                            PAYMENT_COL_UNIT_PRICE_NIGHT: svc[
+                                PAYMENT_COL_UNIT_PRICE_NIGHT
+                            ],
+                            PAYMENT_COL_SUPPORT_AMOUNT: support,
+                            PAYMENT_COL_GOV_SUPPORT_AMOUNT: grade[COL_GOV_SUPPORT],
+                            PAYMENT_COL_COPAYMENT_AMOUNT: grade[COL_COPAYMENT],
+                            PAYMENT_COL_GOV_SUPPORT_RATE: round(
+                                grade[COL_GOV_SUPPORT] / support, 10
+                            ),
+                            PAYMENT_COL_COPAYMENT_RATE: round(
+                                grade[COL_COPAYMENT] / support, 10
+                            ),
+                            PAYMENT_COL_USE_YN: "Y",
+                            PAYMENT_COL_SERVICE_START_DATE: int(f"{business_year}0101"),
+                            PAYMENT_COL_SERVICE_END_DATE: int(f"{business_year}1231"),
+                            PAYMENT_COL_PRICE_MGMT_LEVEL: 0,
+                            PAYMENT_COL_REMARKS: " ",
+                        }
+                    )
+
+        df = DataFrame(rows)
+        df.insert(0, PAYMENT_COL_ORDER, range(1, len(df) + 1))
+        df = df[PAYMENT_HEADERS]
+
+        # 자가 검증: 행수 = 등급수 x 조합수
+        expected = len(grades) * len(service_rows)
+        if len(df) != expected:
+            raise ValueError(
+                f"행수가 기댓값과 다릅니다: {len(df)} != 등급 {len(grades)} x 조합 {len(service_rows)}"
+            )
+        return df
+
+    # --- 실제 페이지로 데이터프레임을 반환하는 함수 --------------------------------------------------
+
+    # 기본급여 및 추가급여 단가표 생성
     def write_basic_add_tables(
         self, values: dict[str, str | int | float]
     ) -> dict[int, tuple[DataFrame, None]]:
@@ -444,6 +774,27 @@ class TableWriter:
         rows += self._write_urgent_unsuitable_prices(jh_values)
 
         return {
-            0: (DataFrame(rows, columns=HEADERS), None),
+            0: (DataFrame(rows, columns=BASIC_HEADERS), None),
             1: (DataFrame(add_rows, columns=ADD_HEADERS), None),
         }
+
+    # 결제단가표 생성
+    # 고시와 기본단가표는 이미 읽고 검증까지 마친 상태로 각각 service_prices, basic_df로 들어온다고 가정
+    def write_payment_table(
+        self,
+        service_prices: dict[str, str | int | float],
+        basic_df: DataFrame | str | None = None,
+    ) -> dict[int, tuple[DataFrame, None]]:
+
+        if basic_df is None:
+            raise ValueError("[ERROR] 기본급여 단가표 읽기 실패")
+        grades = self._prepare_basic_grades(basic_df)
+
+        service_rows = self._build_service_rows(service_prices)
+
+        business_year = service_prices.get(PAYMENT_COL_BUSINESS_YEAR, 2026)
+        chasu = service_prices.get(PAYMENT_COL_CHASU, 1)
+
+        df = self._build_payment_rows(grades, service_rows, business_year, chasu)
+
+        return {0: (df, None)}
