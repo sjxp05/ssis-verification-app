@@ -232,6 +232,8 @@ class TableValidator:
             support = _num(row.get(C_SUPPORT))
             gov = _num(row.get(C_GOV))
             copay = _num(row.get(C_COPAY))
+            if not name.strip():
+                continue
             parsed = parse_name(name)
  
             # 고정 행 2개
@@ -338,6 +340,8 @@ class TableValidator:
 
         #표 전체 검증: 행 수와 소득형 결손, 등급 구분 중복여부
         expected_rows = (4 + 15 + 60) * len(TIERS) * 2 + 2  # 인정4·구간15·특례60 x 6 x (기본/확장) + 고정 2
+        # 사용자가 추가한 빈 행(등급명 없음)은 정원 외로 포함X
+        expected_rows += sum(1 for n in df.get(C_NAME, []) if not str(n or "").strip())
         self._check_row_count(report, df, expected_rows)
         self._check_tier_groups(report, df, name_col=C_NAME)
         self._check_duplicate_codes(report, df)
@@ -357,6 +361,8 @@ class TableValidator:
             support = _num(row.get(C_SUPPORT))
             gov = _num(row.get(C_GOV))
             copay = _num(row.get(C_COPAY))
+            if not name.strip():
+                continue 
             parsed = parse_name(name)
  
             if parsed.kind != "add":
@@ -424,7 +430,10 @@ class TableValidator:
             report.metrics[i] = self._rate_metric_text(parsed, support, copay, rate, cap=None)
 
         #표 전체 검증: 행 수와 소득형(가~바), 등급 구분 중복여부
-        self._check_row_count(report, df, len(ADD_CODE_INFO) * len(TIERS))  # 12 x 6 = 72
+        expected_rows = len(ADD_CODE_INFO) * len(TIERS)  # 12 x 6 = 72
+        #사용자가 추가한 빈 행은 정원 외
+        expected_rows += sum(1 for n in df.get(C_NAME, []) if not str(n or "").strip())
+        self._check_row_count(report, df, expected_rows)
         self._check_tier_groups(report, df, name_col=C_NAME)
         self._check_duplicate_codes(report, df)
         self._check_duplicate_names(report, df)

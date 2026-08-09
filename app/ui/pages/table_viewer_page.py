@@ -60,6 +60,8 @@ _PREV_TEXT = "작년 단가표 불러오기 (증가율)"
 _LOAD_TEXT = "단가표 불러오기 (검증)"
 _PREV_DONE_TEXT = "✓ 작년 단가표 적용됨"
 _LOAD_DONE_TEXT = "✓ 단가표 불러옴"
+_ADD_ROW_TEXT = "+"
+_DEL_ROW_TEXT = "-"
 _PANEL_HIDE_TEXT = ">"
 _PANEL_SHOW_TEXT = "<"
 
@@ -101,6 +103,16 @@ class TableViewerPage(QWidget):
         self._load_button = GhostButton(_LOAD_TEXT)
         self._load_button.clicked.connect(self._on_load_table)
 
+        self._add_row_button = GhostButton(_ADD_ROW_TEXT)
+        self._add_row_button.setObjectName("RowButton")
+        self._add_row_button.setFixedWidth(28)
+        self._add_row_button.clicked.connect(self._on_add_row)
+
+        self._del_row_button = GhostButton(_DEL_ROW_TEXT)
+        self._del_row_button.setObjectName("RowButton")
+        self._del_row_button.setFixedWidth(28)
+        self._del_row_button.clicked.connect(self._on_del_row)
+
         self._panel_button = GhostButton(_PANEL_HIDE_TEXT)
         self._panel_button.clicked.connect(self._toggle_panel)
 
@@ -108,6 +120,8 @@ class TableViewerPage(QWidget):
         card_head.addWidget(self._card_title)
         card_head.addStretch(1)
         card_head.addWidget(self._card_hint)
+        card_head.addWidget(self._add_row_button)
+        card_head.addWidget(self._del_row_button)  
         card_head.addWidget(self._load_button)
         card_head.addWidget(self._prev_button)
         card_head.addWidget(self._panel_button)
@@ -214,6 +228,9 @@ class TableViewerPage(QWidget):
             table.cellSelected.connect(
                 lambda idx, tab=index: self._on_cell_selected(tab, idx)
             )
+            table.model().cellEdited.connect(
+                lambda row, col, tab=index: self._on_cell_edited(tab, row, col)
+            )
             self._tables.append(table)
             self._stack.addWidget(table)
 
@@ -276,6 +293,49 @@ class TableViewerPage(QWidget):
         index = self._model_of(tab).index(row, int(df.columns.get_loc(column)))
         table.setCurrentIndex(index)
         table.scrollTo(index)
+        self._panel.show_cell(row, column)
+
+    def _on_add_row(self) -> None:
+        # 선택한 행 바로 아래에 행을 삽입한다
+        tab = self._tabs.current()
+        table = self._tables[tab]
+        model = self._model_of(tab)
+        df = model.dataframe()
+
+        current = table.currentIndex()
+        at = current.row() + 1 if current.isValid() else None  # 선택 행 바로 아래
+
+        row = model.add_row({}, at=at)
+        table.scrollTo(model.index(row, 0))
+        table.setCurrentIndex(model.index(row, 0))
+        self._run_validation(tab)
+
+    def _on_del_row(self) -> None:
+        # 선택한 행을 삭제한다 (확인창 후) 엑셀 저장에도 반영됨
+        tab = self._tabs.current()
+        table = self._tables[tab]
+        model = self._model_of(tab)
+        current = table.currentIndex()
+        if not current.isValid():
+            QMessageBox.information(self, "행 삭제", "삭제할 행의 셀을 먼저 선택해 주세요.")
+            return
+        row = current.row()
+        df = model.dataframe()
+        name = str(df.iloc[row].get("등급명", "") or "").strip() or "(빈 행)"
+        answer = QMessageBox.question(
+            self, "행 삭제",
+            f"{row + 1}행을 삭제할까요?\n등급명: {name}",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        if model.remove_row(row):
+            self._run_validation(tab)
+
+    def _on_cell_edited(self, tab: int, row: int, column: str) -> None:
+        # 더블클릭 편집으로 값이 바뀌면 즉시 재검증하고 상세를 갱신
+        self._run_validation(tab)
         self._panel.show_cell(row, column)
 
     def _on_fix_requested(self, row: int, column: str, value) -> None:

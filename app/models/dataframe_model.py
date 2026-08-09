@@ -9,15 +9,18 @@ from __future__ import annotations
 from typing import Any
 
 import pandas as pd
-from PyQt6.QtCore import QAbstractTableModel, QModelIndex, Qt
+from PyQt6.QtCore import QAbstractTableModel, QModelIndex, Qt, pyqtSignal
 from PyQt6.QtGui import QColor
 
 from resources.styles import theme
 
-ERROR_BG = "#FF7A7A"    # 오류 셀 (분명한 빨강 계열)
-WARNING_BG = "#F4D87B"  # 확인 필요 셀 (분명한 노랑 계열)
+ERROR_BG = theme.ERROR_BG    # 오류 셀 (분명한 빨강 계열)
+WARNING_BG = theme.WARNING_BG  # 확인 필요 셀 (분명한 노랑 계열)
 
 class DataFrameModel(QAbstractTableModel):
+    # 더블클릭 편집으로 셀 값이 바뀌었을 때 (행, 컬럼명) 뷰어가 재검증한다
+    cellEdited = pyqtSignal(int, str)
+
     def __init__(
         self,
         df: pd.DataFrame | None = None,
@@ -153,8 +156,48 @@ class DataFrameModel(QAbstractTableModel):
 
         return None
 
+    # 더블클릭 편집 반영. 숫자 셀이면 숫자로, 아니면 문자 그대로.
+    def setData(self, index: QModelIndex, value, role: int = Qt.ItemDataRole.EditRole) -> bool:  # noqa: N802
+        if role != Qt.ItemDataRole.EditRole or not index.isValid():
+            return False
+        column = str(self._df.columns[index.column()])
+        current = self._df.iat[index.row(), index.column()]
+        text = str(value).strip()
+        if isinstance(current, (int, float)) and not isinstance(current, bool):
+            try:
+                value = int(float(text.replace(",", ""))) if text else 0
+            except ValueError:
+                return False
+        else:
+            value = text
+        self._df.iat[index.row(), index.column()] = value
+        self.dataChanged.emit(index, index)
+        self.cellEdited.emit(index.row(), column)
+        return True
+
+    # at 위치에 행 삽입 (None 이면 맨 아래).
+    def add_row(self,values:dict,at:int|None=None)->int:
+        row=len(self._df.index) if at is None else max(0, min(at,len(self._df.index)))
+        self.beginInsertRows(QModelIndex(), row, row)
+        new_row = [values.get(str(col), "") for col in self._df.columns]
+        upper = self._df.iloc[:row]
+        lower = self._df.iloc[row:]
+        inserted = pd.DataFrame([new_row], columns=self._df.columns)
+        self._df = pd.concat([upper, inserted, lower], ignore_index=True)
+        self.endInsertRows()
+        return row
+
+    # row 위치의 행 삭제
+    def remove_row(self, row: int) -> bool:
+        if not (0 <= row < len(self._df.index)):
+            return False
+        self.beginRemoveRows(QModelIndex(), row, row)
+        self._df = self._df.drop(index=self._df.index[row]).reset_index(drop=True)
+        self.endRemoveRows()
+        return True
+
     def flags(self, index: QModelIndex) -> Qt.ItemFlag:
-        return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable
+        return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable| Qt.ItemFlag.ItemIsEditable
 
     # --- 산식 -------------------------------------------------------------
     def formula_at(self, index: QModelIndex) -> str:
