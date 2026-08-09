@@ -1,18 +1,50 @@
-"""임베딩 모델을 어휘 축소 + ONNX int8 로 변환해 번들 리소스로 저장한다.
-
-개발 PC 전용, 1회 실행. 인터넷이 되는 곳에서 실행하고 결과물을 커밋한다.
-런타임 코드에는 torch / transformers / huggingface_hub 가 들어가지 않는다.
-
-    python tools/export_model.py
-
-산출물: app/jogyeon_matcher/resources/model/
-    model_int8.onnx   추론용 (어휘 축소 + 동적 int8)
-    tokenizer.json    tokenizers(Rust) 로 읽는 토크나이저
-    meta.json         출처·설정·검증 결과 기록
-
-ONNX 그래프가 mean pooling 과 L2 정규화까지 포함하므로,
-런타임은 (input_ids, attention_mask) -> 정규화된 임베딩 을 바로 받는다.
-"""
+# 라벨 매칭에 쓰는 임베딩 모델을 앱에 넣을 수 있는 형태로 변환한다.
+#
+#
+# ■ 평소에는 실행할 필요가 없다
+#
+#   변환 결과물은 이미 app/jogyeon_matcher/resources/model/ 에 커밋되어 있다.
+#   앱을 실행하거나 빌드하는 데는 이 파일이 필요 없다.
+#
+#   다시 돌려야 하는 경우는 넷뿐이다.
+#     - 실제 조견표에 한자가 나와서 어휘 축소 수위를 낮춰야 할 때
+#     - 다른 임베딩 모델로 바꿀 때 (MODEL_ID 변경)
+#     - onnxruntime 을 크게 올려서 호환성 문제가 생겼을 때
+#     - 모델 파일이 손상·유실됐을 때
+#
+#
+# ■ 사용법 (인터넷 되는 개발 PC에서)
+#
+#   pip install -r requirements-dev.txt     # 약 3GB, 처음 한 번만
+#   python tools/export_model.py            # 2~3분 소요
+#
+#   실행하면 resources/model/ 을 통째로 지우고 새로 만든다.
+#   끝나면 반드시 아래 두 검증을 다시 돌려 확인할 것.
+#     python _experiments/exp09_injection_e2e.py    # 주입 정답지 22건
+#     python _experiments/exp07_rules_smoke.py      # 규칙·제약 스모크
+#
+#
+# ■ 무엇이 만들어지나  (app/jogyeon_matcher/resources/model/)
+#
+#   model_int8.onnx    58.5MB   추론용 모델
+#   tokenizer.json      3.6MB   문장을 토큰 번호로 바꾸는 사전
+#   meta.json             1KB   출처·설정·검증 결과 기록
+#
+#
+# ■ 왜 이런 변환이 필요한가
+#
+#   원본은 PyTorch 모델이라 그대로 쓰면 exe 번들이 1.5GB를 넘는다.
+#   두 단계를 거쳐 62MB로 줄인다.
+#
+#     1) 어휘 축소   250,002 -> 102,290  (한글·ASCII 라틴만 남김)
+#                    우리 라벨이 선택하지 않는 토큰이라 결과는 원본과 동일하다
+#     2) int8 양자화  448MB -> 58.5MB
+#
+#   변환 후에는 torch·transformers 없이 onnxruntime 만으로 돌아간다.
+#   덕분에 인터넷이 없는 폐쇄망 PC에도 모델을 통째로 넣어 배포할 수 있다.
+#
+#   mean pooling 과 L2 정규화도 ONNX 그래프 안에 넣었다. 그래서 앱 코드는
+#   (input_ids, attention_mask) 를 주면 바로 정규화된 임베딩을 받는다.
 
 from __future__ import annotations
 

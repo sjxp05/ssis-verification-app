@@ -89,11 +89,14 @@ class UploadPage(QWidget):
     def __init__(
         self,
         extractor: ValueExtractor | None = None,
+        label_reviewer: Callable[[UploadedFile], bool] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
         self.setObjectName("PageBody")
         self._extractor = extractor
+        # 값을 읽기 전에 작년 조견표와 라벨을 대조한다. False 를 돌려주면 중단한다.
+        self._label_reviewer = label_reviewer
         self._pool = QThreadPool.globalInstance()
 
         self._flow: FlowSpec | None = None
@@ -234,9 +237,22 @@ class UploadPage(QWidget):
     def _on_next(self) -> None:
         if self._state in (FILLED, FAILED):
             # '확인' 버튼: 파일이 다 준비됐거나 추출이 실패해 재시도하는 경우
-            self._start_extract(self._files())
+            files = self._files()
+            if not self._review_labels(files):
+                return  # 검토를 취소하면 값을 읽지 않는다
+            self._start_extract(files)
         elif self._state == READY and self._values is not None:
             self.valuesReady.emit(self._values)
+
+    def _review_labels(self, files: dict[str, UploadedFile]) -> bool:
+        # 서식이 바뀌었는데 그대로 값을 읽으면 조용히 틀린 값이 나온다.
+        # 추출 전에 작년 조견표와 라벨을 대조해 사람이 확인하게 한다.
+        sheet = files.get("sheet")
+        if self._label_reviewer is None or sheet is None:
+            return True
+        if self._flow is None or self._flow.key != UNIT_PRICE.key:
+            return True
+        return self._label_reviewer(sheet)
 
     # --- 내부 -------------------------------------------------------------
     def _set_state(self, state: str, reason: str = "") -> None:
