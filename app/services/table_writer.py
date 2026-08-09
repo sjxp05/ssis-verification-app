@@ -290,7 +290,7 @@ class TableWriter:
     # --- 계산 공식 -----------------------------------------------------------------------
 
     # 절사 (rounddown(절사할 숫자, -자릿수) 엑셀 함수와 유사하게 작동)
-    def _rounddown(x: float, digit: int) -> int:
+    def _rounddown(self, x: float, digit: int) -> int:
         scale = 10 ** (-digit)
         return int(x) // scale * scale
 

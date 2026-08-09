@@ -38,6 +38,7 @@ WAITING, FILLED, BUSY, READY, FAILED = "waiting", "filled", "busy", "ready", "fa
 _GENERATE_TEXT = "단가표 생성"
 _NEXT_TEXT = "다음 단계로  →"
 _BUSY_TEXT = "⟳  단가표를 생성하는 중..."
+_LOADING_TEXT = "⟳  불러오는 중..."
 
 
 GROUP_GRID_COLUMNS = 6
@@ -423,8 +424,18 @@ class ConstantsPage(QWidget):
             # '단가표 생성' 버튼: 값이 다 채워졌거나 생성이 실패해 재시도하는 경우
             self._start_table_write(self.values())
         elif self._state == READY and self._tables is not None:
-            # '다음 단계로' 버튼
+            # '다음 단계로' 버튼: 표를 화면에 채우는 동안(느림) 버튼만 잠깐 회색으로 보여준다.
+            # 상태(FSM)는 그대로 READY 로 두고, 순수 UI만 바꿨다가 화면 전환 후 되돌린다.
+            self._next.setEnabled(False)
+            self._next.setText(_LOADING_TEXT)
+            self._next.repaint()  # 바로 이어지는 무거운 작업 전에 강제로 다시 그려서 보이게 한다
             self.tablesReady.emit(self._tables)
+
+    def reset_next_button(self) -> None:
+        # TableViewerPage로 넘어간 뒤 호출: 로딩 표시로 바꿨던 버튼 모양을 되돌린다.
+        if self._state == READY:
+            self._next.setEnabled(True)
+            self._next.setText(_NEXT_TEXT)
 
     # --- 내부 -------------------------------------------------------------
     def _refresh_state(self) -> None:

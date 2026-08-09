@@ -85,6 +85,9 @@ class _ExtractTask(QRunnable):
 class UploadPage(QWidget):
     # valuesReady(ConstantValues): 다음 단계로 넘어가도 된다는 신호
     valuesReady = pyqtSignal(object)
+    # filesDiverged(bool): 지금 올라온 파일이 마지막으로 추출에 쓰인 파일과 다른지 여부.
+    # True면 2,3단계 값이 낡았을 수 있다는 뜻(단계 이동 잠금), False면 원래 파일로 되돌아왔다는 뜻(잠금 해제)
+    filesDiverged = pyqtSignal(bool)
 
     def __init__(
         self,
@@ -101,6 +104,9 @@ class UploadPage(QWidget):
         self._values: ConstantValues | None = None
         self._generation = 0
         self._state = WAITING
+        # 마지막으로 추출에 성공했을 때 올라와 있던 파일들과 그 결과값
+        self._confirmed_files: dict[str, UploadedFile] = {}
+        self._confirmed_values: ConstantValues | None = None
 
         self._build()
 
@@ -158,6 +164,8 @@ class UploadPage(QWidget):
         # 카드를 새로 만들고 상태를 처음으로 되돌린다.
         self._generation += 1  # 돌고 있던 추출 결과를 무효로 만든다
         self._values = None
+        self._confirmed_files = {}
+        self._confirmed_values = None
         self._cards.clear()
         while self._cards_layout.count():
             item = self._cards_layout.takeAt(0)
@@ -193,8 +201,7 @@ class UploadPage(QWidget):
         }  # type: ignore[misc]
 
     def _on_file_selected(self, key: str, _file: UploadedFile) -> None:
-        self._values = None
-        self._generation += 1  # 파일이 바뀌었으므로 이전 추출 결과를 버림
+        self._generation += 1  # 진행 중이던 추출이 있었다면 무효로 만든다
         if (
             self._flow is not None
             and self._flow.key == UNIT_PRICE.key
@@ -204,12 +211,24 @@ class UploadPage(QWidget):
             # flow 2가 나중에 자동으로 불러올 수 있도록 경로 저장
             recent_files.set_recent_path(key, _file.path)
         files = self._files()
-        self._set_state(FILLED if len(files) == len(self._cards) else WAITING)
+        # 추출에 성공한 적이 없으면(_confirmed_files 비어있음) 아직 비교할 대상 자체가 없다.
+        matches_confirmed = bool(self._confirmed_files) and files == self._confirmed_files
+        if matches_confirmed:
+            # 원래 추출에 썼던 파일 그대로 돌아온 경우: 다시 읽을 필요 없이 그 값을 그대로 쓴다.
+            self._values = self._confirmed_values
+            self._set_state(READY)
+        else:
+            self._values = None
+            self._set_state(FILLED if len(files) == len(self._cards) else WAITING)
+        diverged = bool(self._confirmed_files) and not matches_confirmed
+        self.filesDiverged.emit(diverged)
 
     def _start_extract(self, files: dict[str, UploadedFile]) -> None:
         if self._extractor is None:
             # 추출기를 안 붙인 경우: 파일 확인까지만 하고 READY 로 넘어간다
             self._values = {}
+            self._confirmed_files = dict(files)
+            self._confirmed_values = self._values
             self._set_state(READY)
             return
 
@@ -223,6 +242,8 @@ class UploadPage(QWidget):
         if generation != self._generation:
             return  # 중간에 파일이 바뀐 경우: 결과가 낡은 값이므로 다시 읽어야 함
         self._values = values
+        self._confirmed_files = dict(self._files())
+        self._confirmed_values = values
         self._set_state(READY)
 
     def _on_extract_failed(self, generation: int, reason: str) -> None:
