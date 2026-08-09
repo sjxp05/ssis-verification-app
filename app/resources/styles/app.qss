@@ -463,4 +463,94 @@ QLabel#BubbleFoot {
     color: ${TEXT_MUTED};
     border-color: ${BORDER};
 }
+/* ---------- 검증 사이드 패널 ---------- */
+QFrame#ValidationPanel {
+    background: ${SURFACE};
+    border: 1px solid ${BORDER};
+    border-radius: ${RADIUS};
+}
+QLabel#ValidationTitle {
+    font-size: 13px;
+    font-weight: 700;
+    color: ${TEXT};
+}
+QLabel#ValidationCaption {
+    font-size: 11px;
+    font-weight: 700;
+    color: ${TEXT_MUTED};
+}
+QLabel#ValidationBadge {
+    font-size: 12px;
+    font-weight: 700;
+    color: ${TEXT_MUTED};
+    background: ${STEP_BG};
+    border: 1px solid ${BORDER};
+    border-radius: ${RADIUS_SM};
+    padding: 8px 10px;
+}
+QLabel#ValidationBadge[state="pass"] {
+    color: ${SUCCESS_DARK};
+    background: ${SUCCESS_BG};
+    border-color: ${SUCCESS_BORDER};
+}
+QLabel#ValidationBadge[state="fail"] {
+    color: ${DANGER_DARK};
+    background: ${DANGER_BG};
+    border-color: ${DANGER_BORDER};
+}
+QListWidget#IssueList {
+    background: ${SURFACE};
+    border: 1px solid ${BORDER_SOFT};
+    border-radius: ${RADIUS_SM};
+    outline: none;
+    font-size: 12px;
+}
+QListWidget#IssueList::item {
+    padding: 7px 10px;
+    border-bottom: 1px solid ${BORDER_SOFT};
+    color: ${DANGER_DARK};
+}
+QListWidget#IssueList::item:hover {
+    background: ${DANGER_BG};
+}
+QListWidget#IssueList::item:selected {
+    background: ${DANGER_BG};
+    color: ${DANGER_DARK};
+    border-left: 3px solid ${DANGER};
+}
+QScrollArea#ValidationDetailArea {
+    background: #FAFBFC;
+    border: 1px solid ${BORDER_SOFT};
+    border-radius: ${RADIUS_SM};
+}
+QLabel#ValidationDetail {
+    font-family: ${FONT_MONO};
+    font-size: 12px;
+    color: ${TEXT};
+    background: #FAFBFC;
+    padding: 10px;
+}
 
+/* ---------- 작년 단가표 적용됨 (초록 버튼 상태) ---------- */
+QPushButton#GhostButton[state="loaded"] {
+    color: ${SUCCESS_DARK};
+    background: ${SUCCESS_BG};
+    border: 1px solid ${SUCCESS_BORDER};
+    font-weight: 700;
+}
+QPushButton#GhostButton[state="loaded"]:hover {
+    background: ${SUCCESS_SOFT};
+}
+
+/* ---------- 값 수정 직접 입력칸 ---------- */
+QLineEdit#FixInput {
+    background: ${SURFACE};
+    border: 1px solid ${BORDER};
+    border-radius: ${RADIUS_SM};
+    padding: 6px 10px;
+    font-size: 12px;
+    color: ${TEXT};
+}
+QLineEdit#FixInput:focus {
+    border-color: ${ACCENT};
+}

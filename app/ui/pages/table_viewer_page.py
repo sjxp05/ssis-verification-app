@@ -2,47 +2,65 @@
 #
 # pandas DataFrame 을 엑셀 레이아웃처럼 보여주고,
 # 셀을 클릭하면 그 값이 어떻게 나온 값인지 산식을 말풍선으로 띄운다.
+#
+# [검증] 표가 들어올 때 services.table_validator 로 검증을 돌려서
+#   - 오른쪽 사이드 패널에 전체 오류 목록을 띄우고
+#   - 오류가 난 셀은 빨간 배경으로 표시하고 (셀을 누르면 패널에 상세 설명)
+#   - 모든 셀 hover 툴팁에 부담률(작년 표를 불러오면 증가율도)을 보여준다.
+# 검증 기준값(상한액·부담률·월한도액)은 전부 이전 단계에서 서비스가
+# 조견표에서 추출한 values 를 그대로 쓴다 — set_table() 의 values 인자.
 
 from __future__ import annotations
-
+import os
 import pandas as pd
 from PyQt6.QtCore import QModelIndex, pyqtSignal
 from PyQt6.QtWidgets import (
+    QFileDialog,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
 
+from models.dataframe_model import DataFrameModel
+from services.table_validator import TableValidator, ValidationReport, read_prev_table
 from ui.components.card import Card
-from ui.components.button import PrimaryButton
+from ui.components.button import GhostButton, PrimaryButton
 from ui.components.tab_bar import SegmentedTabBar
 from ui.widgets.dataframe_table import DataFrameTable
+from ui.widgets.validation_panel import ValidationPanel
+from utils.qss import set_state
 
 TABS = {
     "unit_price": [
         {
             "label": "기본급여 단가표",
-            "title": "기본급여 단가표 생성",
+            "title": "기본급여 단가표 생성 및 검증",
             "card_title": "기본급여 단가표 미리보기",
         },
         {
             "label": "추가급여 단가표",
-            "title": "추가급여 단가표 생성",
+            "title": "추가급여 단가표 생성 및 검증",
             "card_title": "추가급여 단가표 미리보기",
         },
     ],
     "notice_verify": [
         {
             "label": "결제단가표",
-            "title": "결제단가표 생성",
+            "title": "결제단가표 생성 및 검증",
             "card_title": "결제단가표 미리보기",
         },
     ],
 }
-ACCENT_COLUMNS = ["등급코드", "코드", "항목코드"]
+ACCENT_COLUMNS = ["등급코드", "코드", "항목코드", "등급구분"]
 ACTION_TEXT = "Excel 파일로 저장"
+_PREV_TEXT = "작년 단가표 불러오기 (증가율)"
+_LOAD_TEXT = "단가표 불러오기 (검증)"
+_PREV_DONE_TEXT = "✓ 작년 단가표 적용됨"
+_PANEL_HIDE_TEXT = ">"
+_PANEL_SHOW_TEXT = "<"
 
 
 class TableViewerPage(QWidget):
@@ -53,7 +71,11 @@ class TableViewerPage(QWidget):
         super().__init__(parent)
         self.setObjectName("PageBody")
         self._flow = flow
-
+        self._validator = TableValidator()
+        self._values: dict | None = None  # 서비스에서 추출한 상수 (검증 기준)
+        self._reports: dict[int, ValidationReport] = {}  # 탭별 검증 결과
+        self._prev_tables: dict[int, pd.DataFrame] = {}  # 탭별 작년 표 (증가율용)
+        self._prev_names: dict[int, str] = {}  # 탭별 작년 표 파일명 (버튼 표시용)
         self._tabs = SegmentedTabBar([tab["label"] for tab in TABS[flow]], flow=flow)
         self._tabs.currentChanged.connect(self._on_tab_changed)
 
@@ -69,16 +91,33 @@ class TableViewerPage(QWidget):
         self._card_hint = QLabel()
         self._card_hint.setObjectName("CardHint")
 
+        self._prev_button = GhostButton(_PREV_TEXT)
+        self._prev_button.clicked.connect(self._on_load_prev)
+
+        self._load_button = GhostButton(_LOAD_TEXT)
+        self._load_button.clicked.connect(self._on_load_table)
+
+        self._panel_button = GhostButton(_PANEL_HIDE_TEXT)
+        self._panel_button.clicked.connect(self._toggle_panel)
+
         card_head = QHBoxLayout()
         card_head.addWidget(self._card_title)
         card_head.addStretch(1)
         card_head.addWidget(self._card_hint)
+        card_head.addWidget(self._load_button)
+        card_head.addWidget(self._prev_button)
+        card_head.addWidget(self._panel_button)
         self._card.add_layout(card_head)
 
         self._stack = QStackedWidget()
         self._tables: list[DataFrameTable] = []
         self._card.add_widget(self._stack)
         self._build_tables(flow)
+
+        self._panel = ValidationPanel()
+        self._panel.issueActivated.connect(self._on_issue_activated)
+        self._panel.fixRequested.connect(self._on_fix_requested)
+        self._panel.fixAllRequested.connect(self._on_fix_all)
 
         self._action = PrimaryButton("")
         self._action.clicked.connect(self._on_export)
@@ -88,10 +127,16 @@ class TableViewerPage(QWidget):
         header.addWidget(self._title)
         header.addWidget(self._subtitle)
 
-        content = QVBoxLayout()
+        # 표(왼쪽) + 검증 패널(오른쪽)
+        left = QVBoxLayout()
+        left.setSpacing(16)
+        left.addWidget(self._card, 1)
+        left.addWidget(self._action)
+
+        content = QHBoxLayout()
         content.setSpacing(16)
-        content.addWidget(self._card, 1)
-        content.addWidget(self._action)
+        content.addLayout(left, 1)
+        content.addWidget(self._panel)
 
         self._outer = QVBoxLayout(self)
         self._outer.setContentsMargins(28, 18, 28, 24)
@@ -108,9 +153,16 @@ class TableViewerPage(QWidget):
         if flow == self._flow:
             return
         self._flow = flow
+        self._reports.clear()
+        self._prev_tables.clear()
+        self._prev_names.clear()
         self._build_tabs(flow)
         self._build_tables(flow)
         self._on_tab_changed(flow, 0)
+
+    def set_values(self, values: dict | None) -> None:
+        # 검증 기준이 되는 서비스 추출값. set_table 보다 먼저(또는 함께) 넣는다.
+        self._values = values
 
     def set_table(
         self,
@@ -118,9 +170,13 @@ class TableViewerPage(QWidget):
         tab_index: int,
         df: pd.DataFrame,
         formulas: pd.DataFrame | dict | None = None,
+        values: dict | None = None,
     ) -> None:
         self.set_flow(flow)
+        if values is not None:
+            self._values = values
         self._tables[tab_index].set_dataframe(df, formulas)
+        self._run_validation(tab_index)
 
     # --- 내부 빌드 ----------------------------------------------------------
     def _build_tabs(self, flow: str) -> None:
@@ -137,13 +193,16 @@ class TableViewerPage(QWidget):
             self._stack.removeWidget(table)
             table.deleteLater()
         self._tables = []
+        self._reports.clear()
+        self._prev_tables.clear()
+        self._prev_names.clear()
 
         for index in range(len(TABS[flow])):
             table = DataFrameTable(
                 accent_columns=ACCENT_COLUMNS, show_row_numbers=False
             )
             table.cellSelected.connect(
-                lambda idx, tab=index: self.cellSelected.emit(tab, idx)
+                lambda idx, tab=index: self._on_cell_selected(tab, idx)
             )
             self._tables.append(table)
             self._stack.addWidget(table)
@@ -159,14 +218,178 @@ class TableViewerPage(QWidget):
         self._tabs.set_current(index)  # 버튼 상태
         self._on_tab_changed(flow, index)  # 제목·부제·표·저장 버튼 문구
 
+    # --- 검증 -------------------------------------------------------------
+    def _model_of(self, tab_index: int) -> DataFrameModel:
+        # DataFrameTable.model() 은 DataFrameModel 을 그대로 돌려준다
+        return self._tables[tab_index].model()
+
+    def _run_validation(self, tab_index: int) -> None:
+        df = self._tables[tab_index].dataframe()
+        report = self._validator.validate(
+            self._flow,
+            tab_index,
+            df,
+            self._values,
+            prev_df=self._prev_tables.get(tab_index),
+        )
+        self._reports[tab_index] = report
+
+        # 셀 강조 + 툴팁 지표를 모델에 주입
+        issue_cells = {
+            key: " / ".join(issue.reason for issue in issues)
+            for key, issues in report.cells.items()
+        }
+        self._model_of(tab_index).set_annotations(
+            issue_cells, report.metrics, report.warn_cells
+        )
+        if tab_index == self._tabs.current():
+            self._panel.set_report(report)
+        self._update_panel_button()
+
+    def _on_cell_selected(self, tab: int, index: QModelIndex) -> None:
+        # 기존 산식 말풍선 동작은 DataFrameTable 안에서 그대로 돌고,
+        # 여기서는 패널에 셀 상세(오류 설명 또는 지표)를 띄운다.
+        report = self._reports.get(tab)
+        if report is not None and index.isValid():
+            df = self._tables[tab].dataframe()
+            if 0 <= index.column() < len(df.columns):
+                self._panel.show_cell(index.row(), str(df.columns[index.column()]))
+        self.cellSelected.emit(tab, index)
+
+    def _on_issue_activated(self, row: int, column: str) -> None:
+        # 패널 목록에서 오류를 눌렀을 때: 표에서 그 셀을 선택하고 화면에 보이게 스크롤
+        tab = self._tabs.current()
+        table = self._tables[tab]
+        df = table.dataframe()
+        if column not in df.columns:
+            return
+        index = self._model_of(tab).index(row, int(df.columns.get_loc(column)))
+        table.setCurrentIndex(index)
+        table.scrollTo(index)
+        self._panel.show_cell(row, column)
+
+    def _on_fix_requested(self, row: int, column: str, value) -> None:
+        # 패널의 '추천값 적용'/'직접 입력' — 셀 값을 바꾸고 즉시 재검증한다.
+        # DataFrame 자체가 바뀌므로 엑셀 저장 시 수정된 값이 그대로 나간다.
+        tab = self._tabs.current()
+        if not self._model_of(tab).set_cell_value(row, column, value):
+            return
+        self._run_validation(tab)
+        self._panel.show_cell(row, column)
+
+    def _on_fix_all(self) -> None:
+        # 수정 가능한 오류(기대값이 있는 셀 오류)를 전부 추천값으로 바꾼다.
+        tab = self._tabs.current()
+        model = self._model_of(tab)
+        for _ in range(5):
+            report = self._reports.get(tab)
+            if report is None:
+                return
+            seen: set[tuple[int, str]] = set()
+            fixes = []
+            for issue in report.issues:
+                if issue.is_table_level() or not issue.column or issue.expected is None:
+                    continue
+                key = (issue.row, issue.column)
+                if key in seen:
+                    continue
+                seen.add(key)
+                fixes.append((issue.row, issue.column, issue.expected))
+            if not fixes:
+                break
+            for row, column, value in fixes:
+                model.set_cell_value(row, column, value)
+            self._run_validation(tab)
+ 
+        # 추천값이 없어 자동으로 못 고친 오류 안내
+        # (행 삭제로 인한 행 개수·소득형 결손, 등급구분 중복, 등급명 형식 등)
+        report = self._reports.get(tab)
+        remaining = list(report.issues) if report is not None else []
+        if remaining:
+            listed = "\n".join(f" · {issue.title()}" for issue in remaining[:8])
+            more = f"\n · … 외 {len(remaining) - 8}건" if len(remaining) > 8 else ""
+            QMessageBox.information(
+                self, "직접 수정이 필요한 오류",
+                "다음 오류는 추천값이 없어 자동으로 고칠 수 없습니다.\n"
+                "행 추가/삭제, 등급명·등급구분 수정은 원본 파일을 직접 고친 뒤\n"
+                "다시 불러와 주세요.\n\n"
+                f"{listed}{more}",
+            )
+
+    def _on_load_table(self) -> None:
+        # 외부 단가표(엑셀)를 현재 탭에 불러와서 바로 검증한다.
+        # 앱이 생성한 표 대신 저장돼 있던(또는 남이 만든) 단가표를 검사할 때 사용.
+        path, _ = QFileDialog.getOpenFileName(
+            self, "검증할 단가표 선택", "", "Excel 파일 (*.xlsx *.xls)"
+        )
+        if not path:
+            return
+        tab = self._tabs.current()
+        try:
+            df = read_prev_table(path)
+        except Exception as error:
+            QMessageBox.warning(self, "불러오기 실패", f"단가표를 읽지 못했습니다:\n{error}")
+            return
+        self._tables[tab].set_dataframe(df, None)
+        self._run_validation(tab)
+ 
+    def _on_load_prev(self) -> None:
+        # 작년 단가표를 불러오면 등급구분으로 짝지어 증가율을 툴팁에 덧붙인다.
+        path, _ = QFileDialog.getOpenFileName(
+            self, "작년 단가표 선택", "", "Excel 파일 (*.xlsx *.xls)"
+        )
+        if not path:
+            return
+        tab = self._tabs.current()
+        try:
+            self._prev_tables[tab] = read_prev_table(path)
+        except Exception as error:  # 형식이 다른 파일 등
+            QMessageBox.warning(self, "불러오기 실패", f"작년 단가표를 읽지 못했습니다:\n{error}")
+            return
+        self._prev_names[tab] = os.path.basename(path)
+        self._update_prev_button()
+        self._run_validation(tab)
+
+    def _toggle_panel(self) -> None:
+        # 검증 패널 접기/펼치기 — 접으면 표가 화면 전체 폭을 쓴다
+        self._panel.setVisible(not self._panel.isVisible())
+        self._update_panel_button()
+
+    def _update_panel_button(self) -> None:
+        if self._panel.isVisible():
+            self._panel_button.setText(_PANEL_HIDE_TEXT)
+            return
+        # 접힌 동안에도 오류가 있으면 버튼에 개수를 보여줘서 놓치지 않게 한다
+        report = self._reports.get(self._tabs.current())
+        count = len(report.issues) if report is not None else 0
+        if count:
+            self._panel_button.setText(f"{_PANEL_SHOW_TEXT} (오류 {count}건)")
+        else:
+            self._panel_button.setText(_PANEL_SHOW_TEXT)
+ 
+    def _update_prev_button(self) -> None:
+        # 현재 탭에 작년 단가표가 불러와져 있으면 버튼을 '적용됨' 상태(초록)로 바꾼다.
+        name = self._prev_names.get(self._tabs.current())
+        if name:
+            self._prev_button.setText(_PREV_DONE_TEXT)
+            self._prev_button.setToolTip(f"불러온 파일: {name}\n다시 누르면 다른 파일로 교체합니다.")
+            set_state(self._prev_button, "state", "loaded")
+        else:
+            self._prev_button.setText(_PREV_TEXT)
+            self._prev_button.setToolTip("")
+            set_state(self._prev_button, "state", "")
+
     # --- 동작 -------------------------------------------------------------
     def _on_tab_changed(self, flow: str, index: int) -> None:
         self.hide_bubbles()
         spec = TABS[flow][index]
         self._title.setText(spec["title"])
-        self._card_title.setText("단가표 미리보기")
+        self._card_title.setText(spec["card_title"])
         self._action.setText(ACTION_TEXT)
         self._stack.setCurrentIndex(index)
+        self._update_prev_button()
+        self._update_panel_button()
+        self._panel.set_report(self._reports.get(index))
 
     def _on_export(self) -> None:
         index = self._tabs.current()

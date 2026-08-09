@@ -225,7 +225,10 @@ class MainWindow(QMainWindow):
     def set_extracted_values(self, values: dict) -> None:
         self.constants_page.set_values(values)
 
+
     def set_tables(self, tables: dict[int, tuple[pd.DataFrame, object]]) -> None:
+        # 검증 기준값: 사용자가 확인·수정을 마친 최종 상수 (단가표 생성에 쓴 값과 동일)
+        self.table_viewer_page.set_values(self.constants_page.values())
         for index in range(self._table_count):
             if index not in tables:
                 self.table_viewer_page.set_table(self._flow.key, index, pd.DataFrame())

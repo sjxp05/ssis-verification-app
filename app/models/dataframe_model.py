@@ -14,6 +14,8 @@ from PyQt6.QtGui import QColor
 
 from resources.styles import theme
 
+ERROR_BG = "#FF7A7A"    # 오류 셀 (분명한 빨강 계열)
+WARNING_BG = "#F4D87B"  # 확인 필요 셀 (분명한 노랑 계열)
 
 class DataFrameModel(QAbstractTableModel):
     def __init__(
@@ -27,6 +29,10 @@ class DataFrameModel(QAbstractTableModel):
         self._df = df if df is not None else pd.DataFrame()
         self._formulas = formulas if formulas is not None else {}
         self._accent = set(accent_columns or [])
+        # 검증 결과: 오류 셀 / 확인 필요(⚠) 셀 / 행 지표 텍스트
+        self._issue_cells: dict[tuple[int, str], str] = {}
+        self._warn_cells: dict[tuple[int, str], str] = {}
+        self._row_metrics: dict[int, str] = {}
 
     # --- 데이터 교체 ------------------------------------------------------
     def set_dataframe(
@@ -37,11 +43,60 @@ class DataFrameModel(QAbstractTableModel):
         self.beginResetModel()
         self._df = df.reset_index(drop=True)
         self._formulas = formulas if formulas is not None else {}
+        self._issue_cells = {}
+        self._warn_cells = {}
+        self._row_metrics = {}
         self.endResetModel()
 
     def dataframe(self) -> pd.DataFrame:
         return self._df
 
+    # --- 셀 값 수정 (오류 수정 기능) ---------------------------------------
+    def set_cell_value(self, row: int, column: str, value) -> bool:
+        # 패널의 '추천값 적용'/'직접 입력'으로 셀 값을 바꾼다.
+        # _df 자체를 바꾸므로 이후 엑셀 저장(dataframe())에 그대로 반영된다.
+        if column not in self._df.columns:
+            return False
+        if not (0 <= row < len(self._df.index)):
+            return False
+        col = int(self._df.columns.get_loc(column))
+        current = self._df.iat[row, col]
+        try:
+            # 기존 셀이 숫자면 같은 타입으로 맞춘다 (int 컬럼에 float 안 섞이게)
+            if isinstance(current, (int, float)) and not isinstance(current, bool):
+                value = int(float(str(value).replace(",", "")))
+        except (ValueError, TypeError):
+            return False
+        self._df.iat[row, col] = value
+        index = self.index(row, col)
+        self.dataChanged.emit(index, index)
+        return True
+
+    # --- 검증 결과 주입 ---------------------------------------------------
+    def set_annotations(
+        self,
+        issue_cells: dict[tuple[int, str], str] | None,
+        row_metrics: dict[int, str] | None,
+        warn_cells: dict[tuple[int, str], str] | None = None,
+    ) -> None:
+        #issue_cells: (행, 컬럼명) -> 오류 요약 (셀 배경을 빨갛게 칠할 대상)
+        #row_metrics: 행 -> 부담률/증가율 지표 
+        #warn_cells: (행, 컬럼명) -> 확인 필요 사유 (노란 셀로 표시)
+        self._issue_cells = dict(issue_cells or {})
+        self._warn_cells = dict(warn_cells or {})
+        self._row_metrics = dict(row_metrics or {})
+        if len(self._df.index) and len(self._df.columns):
+            self.dataChanged.emit(
+                self.index(0, 0),
+                self.index(len(self._df.index) - 1, len(self._df.columns) - 1),
+            )
+ 
+    def has_issue(self, index: QModelIndex) -> bool:
+        if not index.isValid():
+            return False
+        column = str(self._df.columns[index.column()])
+        return (index.row(), column) in self._issue_cells
+    
     # --- 기본 구현 --------------------------------------------------------
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # noqa: N802
         return 0 if parent.isValid() else len(self._df.index)
@@ -76,11 +131,25 @@ class DataFrameModel(QAbstractTableModel):
             )
             return int(flag | Qt.AlignmentFlag.AlignVCenter)
 
-        if role == Qt.ItemDataRole.ForegroundRole and column in self._accent:
-            return QColor(theme.ACCENT)
+        # if role == Qt.ItemDataRole.ForegroundRole and column in self._accent:
+        #     return QColor(theme.ACCENT)
+
+        #검증 표시 셀: 오류는 빨강, 확인 필요는 노랑(오류가 우선)
+        if role == Qt.ItemDataRole.BackgroundRole:
+            if (index.row(), column) in self._issue_cells:
+                return QColor(ERROR_BG)
+            if (index.row(), column) in self._warn_cells:
+                return QColor(WARNING_BG)
+            return None
+ 
+        if role == Qt.ItemDataRole.ForegroundRole:
+            # 오류·경고 셀은 배경색으로만 구분하고 글씨는 기본색(검정)을 유지한다
+            if column in self._accent:
+                return QColor(theme.ACCENT)
+            return None
 
         if role == Qt.ItemDataRole.ToolTipRole:
-            return self.formula_at(index) or None
+            return self._tooltip(index, column) or None
 
         return None
 
@@ -112,6 +181,22 @@ class DataFrameModel(QAbstractTableModel):
         return f"{index.row() + 1}행 · {self._df.columns[index.column()]}"
 
     # --- 내부 -------------------------------------------------------------
+    def _tooltip(self, index: QModelIndex, column: str) -> str:
+        parts = []
+        issue = self._issue_cells.get((index.row(), column))
+        if issue:
+            parts.append(f"✕ {issue}")
+        warn = self._warn_cells.get((index.row(), column))
+        if warn:
+            parts.append(f"⚠ {warn}")
+        metric = self._row_metrics.get(index.row())
+        if metric:
+            parts.append(metric)
+        formula = self.formula_at(index)
+        if formula:
+            parts.append(formula)
+        return "\n\n".join(parts)
+    
     @staticmethod
     def _display(value: Any) -> str:
         if value is None or (isinstance(value, float) and pd.isna(value)):
