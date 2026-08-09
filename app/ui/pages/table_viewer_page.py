@@ -59,6 +59,7 @@ ACTION_TEXT = "Excel 파일로 저장"
 _PREV_TEXT = "작년 단가표 불러오기 (증가율)"
 _LOAD_TEXT = "단가표 불러오기 (검증)"
 _PREV_DONE_TEXT = "✓ 작년 단가표 적용됨"
+_LOAD_DONE_TEXT = "✓ 단가표 불러옴"
 _PANEL_HIDE_TEXT = ">"
 _PANEL_SHOW_TEXT = "<"
 
@@ -75,7 +76,10 @@ class TableViewerPage(QWidget):
         self._values: dict | None = None  # 서비스에서 추출한 상수 (검증 기준)
         self._reports: dict[int, ValidationReport] = {}  # 탭별 검증 결과
         self._prev_tables: dict[int, pd.DataFrame] = {}  # 탭별 작년 표 (증가율용)
+        self._loaded_names: dict[int, str] = {}  # 탭별 '단가표 불러오기' 파일명
         self._prev_names: dict[int, str] = {}  # 탭별 작년 표 파일명 (버튼 표시용)
+        self._loaded_names: dict[int, str] = {}  # 탭별 '단가표 불러오기' 파일명
+        self._original_tables: dict[int, tuple] = {}  # 불러오기 전 원래 표 (취소 시 복원용
         self._tabs = SegmentedTabBar([tab["label"] for tab in TABS[flow]], flow=flow)
         self._tabs.currentChanged.connect(self._on_tab_changed)
 
@@ -156,6 +160,8 @@ class TableViewerPage(QWidget):
         self._reports.clear()
         self._prev_tables.clear()
         self._prev_names.clear()
+        self._loaded_names.clear()
+        self._original_tables.clear()
         self._build_tabs(flow)
         self._build_tables(flow)
         self._on_tab_changed(flow, 0)
@@ -176,6 +182,10 @@ class TableViewerPage(QWidget):
         if values is not None:
             self._values = values
         self._tables[tab_index].set_dataframe(df, formulas)
+        self._run_validation(tab_index)
+        self._loaded_names.pop(tab_index, None)
+        self._original_tables.pop(tab_index, None)
+        self._update_load_button()
         self._run_validation(tab_index)
 
     # --- 내부 빌드 ----------------------------------------------------------
@@ -318,29 +328,54 @@ class TableViewerPage(QWidget):
 
     def _on_load_table(self) -> None:
         # 외부 단가표(엑셀)를 현재 탭에 불러와서 바로 검증한다.
-        # 앱이 생성한 표 대신 저장돼 있던(또는 남이 만든) 단가표를 검사할 때 사용.
+        # 다른 파일로 바꾸려면 한 번 눌러 취소한 뒤 다시 불러오면 된다.
+        tab = self._tabs.current()
+ 
+        if tab in self._loaded_names:
+            # 적용 취소: 불러오기 전 표로 복원
+            df, formulas = self._original_tables.pop(tab, (None, None))
+            self._loaded_names.pop(tab, None)
+            if df is not None:
+                self._tables[tab].set_dataframe(df, formulas)
+                self._run_validation(tab)
+            self._update_load_button()
+            return
+ 
         path, _ = QFileDialog.getOpenFileName(
             self, "검증할 단가표 선택", "", "Excel 파일 (*.xlsx *.xls)"
         )
         if not path:
             return
-        tab = self._tabs.current()
         try:
             df = read_prev_table(path)
         except Exception as error:
             QMessageBox.warning(self, "불러오기 실패", f"단가표를 읽지 못했습니다:\n{error}")
             return
+        # 취소 시 되돌릴 수 있게 현재(생성된) 표를 저장해 둔다
+        model = self._model_of(tab)
+        self._original_tables[tab] = (model.dataframe().copy(), model._formulas)
+        self._loaded_names[tab] = os.path.basename(path)
         self._tables[tab].set_dataframe(df, None)
+        self._update_load_button()
         self._run_validation(tab)
  
     def _on_load_prev(self) -> None:
         # 작년 단가표를 불러오면 등급구분으로 짝지어 증가율을 툴팁에 덧붙인다.
+        # 이미 적용된 상태에서 다시 누르면 적용 취소(증가율 제거).
+        tab = self._tabs.current()
+ 
+        if tab in self._prev_names:
+            self._prev_tables.pop(tab, None)
+            self._prev_names.pop(tab, None)
+            self._update_prev_button()
+            self._run_validation(tab)  # 증가율 지표가 빠진 상태로 재계산
+            return
+ 
         path, _ = QFileDialog.getOpenFileName(
             self, "작년 단가표 선택", "", "Excel 파일 (*.xlsx *.xls)"
         )
         if not path:
             return
-        tab = self._tabs.current()
         try:
             self._prev_tables[tab] = read_prev_table(path)
         except Exception as error:  # 형식이 다른 파일 등
@@ -379,6 +414,18 @@ class TableViewerPage(QWidget):
             self._prev_button.setToolTip("")
             set_state(self._prev_button, "state", "")
 
+    def _update_load_button(self) -> None:
+        # 현재 탭에 외부 단가표가 불러와져 있으면 초록 '불러옴' 상태로 바꾼다.
+        name = self._loaded_names.get(self._tabs.current())
+        if name:
+            self._load_button.setText(_LOAD_DONE_TEXT)
+            self._load_button.setToolTip(f"불러온 파일: {name}\n다시 누르면 원래 표로 되돌립니다.")
+            set_state(self._load_button, "state", "loaded")
+        else:
+            self._load_button.setText(_LOAD_TEXT)
+            self._load_button.setToolTip("")
+            set_state(self._load_button, "state", "")
+
     # --- 동작 -------------------------------------------------------------
     def _on_tab_changed(self, flow: str, index: int) -> None:
         self.hide_bubbles()
@@ -388,6 +435,7 @@ class TableViewerPage(QWidget):
         self._action.setText(ACTION_TEXT)
         self._stack.setCurrentIndex(index)
         self._update_prev_button()
+        self._update_load_button()
         self._update_panel_button()
         self._panel.set_report(self._reports.get(index))
 
