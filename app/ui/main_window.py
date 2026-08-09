@@ -62,6 +62,8 @@ class MainWindow(QMainWindow):
         self.resize(1180, 820)
         self._flow: FlowSpec | None = None
         self._table_count = 0
+        # 업로드 화면에서 파일이 바뀌어 2,3단계를 잠갔을 때, 되돌릴 max_reached 값
+        self._locked_max_reached: int | None = None
 
         today = date.today()
         self._header = HeaderBar(
@@ -83,6 +85,7 @@ class MainWindow(QMainWindow):
 
         self.upload_page = UploadPage(value_extractor)
         self.upload_page.valuesReady.connect(self._on_values_ready)
+        self.upload_page.filesDiverged.connect(self._on_upload_files_diverged)
 
         self.constants_page = ConstantsPage(table_writer)
         self.constants_page.tablesReady.connect(self._on_tables_ready)
@@ -202,6 +205,7 @@ class MainWindow(QMainWindow):
         self._steps = StepIndicator(list(flow.steps))
         self._steps.stepClicked.connect(self.go_to_step)
         self._step_layout.addWidget(self._steps)
+        self._locked_max_reached = None
 
     def _on_step_clicked(self, index: int) -> None:
         # 스텝바에서 이미 지나온 단계를 눌렀을 때
@@ -242,6 +246,19 @@ class MainWindow(QMainWindow):
         self.constants_page.set_values(values)
         self.go_to_step(Screen.CONSTANTS.step)
 
+    def _on_upload_files_diverged(self, diverged: bool) -> None:
+        # 업로드 화면에서 파일이 원래 추출에 쓰인 파일과 달라졌을 때: 2,3단계 이동을 막는다.
+        # 원래 파일로 되돌아오면 막았던 만큼 다시 풀어 준다 (2,3단계 값은 그대로 남아 있음).
+        if self._steps is None:
+            return
+        if diverged:
+            if self._locked_max_reached is None:
+                self._locked_max_reached = self._steps.max_reached()
+            self._steps.set_max_reached(Screen.UPLOAD.step)
+        elif self._locked_max_reached is not None:
+            self._steps.set_max_reached(self._locked_max_reached)
+            self._locked_max_reached = None
+
     def _on_values_changed(self) -> None:
         # 상수를 고치면 이미 만든 단가표는 낡은 값이므로 3단계를 다시 잠근다.
         if self._steps is not None:
@@ -255,6 +272,7 @@ class MainWindow(QMainWindow):
         # 상수 확인 화면에서 단가표 생성을 마치고 '다음 단계로'를 눌렀을 때
         self.set_tables(tables)
         self.go_to_step(Screen.TABLES.step)
+        self.constants_page.reset_next_button()
 
     def _on_export(self, tab_index: int, df: pd.DataFrame) -> None:
         if df.empty:

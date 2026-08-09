@@ -38,6 +38,7 @@ WAITING, FILLED, BUSY, READY, FAILED = "waiting", "filled", "busy", "ready", "fa
 _GENERATE_TEXT = "단가표 생성"
 _NEXT_TEXT = "다음 단계로  →"
 _BUSY_TEXT = "⟳  단가표를 생성하는 중..."
+_LOADING_TEXT = "⟳  불러오는 중..."
 
 
 GROUP_GRID_COLUMNS = 6
@@ -74,22 +75,6 @@ TABS = {
 }
 
 
-# 임시 단가표 생성 함수: 결제단가 구현하기 전 까지 사용
-def _build_notice_tables(values: dict) -> dict[int, tuple[pd.DataFrame, None]]:
-    # 결제단가표 Mock Data — 검증 파이프라인이 붙기 전까지 탭 1개만 채운다.
-    NOTICE_ITEMS = [
-        ("P001", "기본형", 30_500),
-        ("P002", "추가형", 45_750),
-    ]
-
-    rows = [
-        {"안": i + 1, "항목코드": code, "항목명": name, "금액": amount}
-        for i, (code, name, amount) in enumerate(NOTICE_ITEMS)
-    ]
-    df = pd.DataFrame(rows)
-    return {0: (df, None)}
-
-
 class _TableWriteSignals(QObject):
     finished = pyqtSignal(int, object)  # generation, Tables
     failed = pyqtSignal(int, str)  # generation, 사유
@@ -114,10 +99,14 @@ class _TableWriteTask(QRunnable):
     def run(self) -> None:
         try:
             if self._flow_key == "unit_price":
-                tables = self._table_writer.write_basic_add_tables(self._values)
+                tables = self._table_writer.write_basic_add_tables(
+                    values=self._values,
+                )
             else:
-                # 임시로 결제단가 만들어 주는 함수 사용
-                tables = _build_notice_tables(self._values)
+                tables = self._table_writer.write_payment_table(
+                    service_prices=self._values,
+                    basic_df=None,  # TODO: 여기에 기본급여 단가표 혹은 단가표 엑셀파일의 path를 넣어줄 것
+                )
         except Exception as error:
             self.signals.failed.emit(
                 self._generation, str(error) or type(error).__name__
@@ -435,8 +424,18 @@ class ConstantsPage(QWidget):
             # '단가표 생성' 버튼: 값이 다 채워졌거나 생성이 실패해 재시도하는 경우
             self._start_table_write(self.values())
         elif self._state == READY and self._tables is not None:
-            # '다음 단계로' 버튼
+            # '다음 단계로' 버튼: 표를 화면에 채우는 동안(느림) 버튼만 잠깐 회색으로 보여준다.
+            # 상태(FSM)는 그대로 READY 로 두고, 순수 UI만 바꿨다가 화면 전환 후 되돌린다.
+            self._next.setEnabled(False)
+            self._next.setText(_LOADING_TEXT)
+            self._next.repaint()  # 바로 이어지는 무거운 작업 전에 강제로 다시 그려서 보이게 한다
             self.tablesReady.emit(self._tables)
+
+    def reset_next_button(self) -> None:
+        # TableViewerPage로 넘어간 뒤 호출: 로딩 표시로 바꿨던 버튼 모양을 되돌린다.
+        if self._state == READY:
+            self._next.setEnabled(True)
+            self._next.setText(_NEXT_TEXT)
 
     # --- 내부 -------------------------------------------------------------
     def _refresh_state(self) -> None:
