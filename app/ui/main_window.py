@@ -28,6 +28,7 @@ from ui.pages.constants_page import ConstantsPage
 from ui.pages.main_page import MainPage
 from ui.pages.table_viewer_page import TableViewerPage
 from ui.pages.upload_page import UploadPage, ValueExtractor
+from ui.pages.gosi_constants_page import GosiConstantsPage
 
 STEPS = ["조견표 업로드", "단가 정보 확인", "단가표 생성 및 저장"]
 
@@ -92,6 +93,11 @@ class MainWindow(QMainWindow):
         self.constants_page.valuesChanged.connect(self._on_values_changed)
         self.constants_page.valuesKept.connect(self._on_values_kept)
 
+        self.notice_page = GosiConstantsPage(table_writer=table_writer, flow="notice_verify")
+        self.notice_page.tablesReady.connect(self._on_tables_ready)
+        self.notice_page.valuesChanged.connect(self._on_values_changed)
+        self.notice_page.valuesKept.connect(self._on_values_kept)
+
         self.table_viewer_page = TableViewerPage()
         self.table_viewer_page.exportRequested.connect(self._on_export)
 
@@ -101,6 +107,7 @@ class MainWindow(QMainWindow):
             self.upload_page,
             self.constants_page,
             self.table_viewer_page,
+            self.notice_page
         ):
             self._stack.addWidget(page)
 
@@ -186,7 +193,14 @@ class MainWindow(QMainWindow):
                 self.table_viewer_page.reset_tab(
                     self._flow.key, 0
                 )  # 상수 값이 바뀐 경우에만 '기본급여' 탭으로 초기화
-        self._stack.setCurrentIndex(Screen.for_step(step))
+        if step==Screen.CONSTANTS.step:
+            if self._flow.key =="notice_verify":
+                self._stack.setCurrentWidget(self.notice_page)
+            else:
+                self._stack.setCurrentWidget(self.constants_page)
+        else:
+            self._stack.setCurrentIndex(Screen.for_step(step))
+
         self._steps.set_current(step)
 
     # --- 흐름 준비 --------------------------------------------------------
@@ -195,6 +209,7 @@ class MainWindow(QMainWindow):
         self._install_steps(flow)
         self.upload_page.set_flow(flow)
         self.constants_page.set_flow(flow.key)
+        self.notice_page.set_flow(flow.key)
         self.table_viewer_page.set_flow(flow.key)
         self._table_count = 0
 
@@ -243,7 +258,19 @@ class MainWindow(QMainWindow):
     # --- 동작 -------------------------------------------------------------
     def _on_values_ready(self, values: ConstantValues) -> None:
         # 업로드 화면에서 문서를 다 읽었을 때
-        self.constants_page.set_values(values)
+        if self._flow.key == "notice_verify":
+            if hasattr(values, "to_dict"):
+                self.notice_page.set_reference(values.to_dice())
+            else:
+                self.notice_page.set_reference(values)
+            upload_files = self.upload_page._files()
+            gosi_file = upload_files.get("guide")
+
+            if gosi_file and hasattr(gosi_file, "path"):
+                self.notice_page.load_notice(gosi_file.path)
+        
+        else:
+            self.constants_page.set_values(values)
         self.go_to_step(Screen.CONSTANTS.step)
 
     def _on_upload_files_diverged(self, diverged: bool) -> None:
