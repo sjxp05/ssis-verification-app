@@ -260,7 +260,7 @@ class MainWindow(QMainWindow):
         # 업로드 화면에서 문서를 다 읽었을 때
         if self._flow.key == "notice_verify":
             if hasattr(values, "to_dict"):
-                self.notice_page.set_reference(values.to_dice())
+                self.notice_page.set_reference(values.to_dict())
             else:
                 self.notice_page.set_reference(values)
             upload_files = self.upload_page._files()
@@ -300,6 +300,15 @@ class MainWindow(QMainWindow):
         self.set_tables(tables)
         self.go_to_step(Screen.TABLES.step)
         self.constants_page.reset_next_button()
+
+    def _on_gosi_prices_confirmed(self, prices: dict) -> None:
+        # 고시 검증 2단계에서 '다음 단계로' 버튼을 눌렀을 때 실행됨
+        QMessageBox.information(
+            self, 
+            "검증 완료", 
+            "고시 데이터 검증 및 단가 확인이 완료되었습니다!\n(결제단가표 생성 로직은 추후 연결됩니다.)"
+        )
+        self.go_home()
 
     def _on_export(self, tab_index: int, df: pd.DataFrame) -> None:
         if df.empty:
