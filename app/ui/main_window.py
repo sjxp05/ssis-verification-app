@@ -234,6 +234,9 @@ class MainWindow(QMainWindow):
     def _review_uploaded_sheet(self, sheet: UploadedFile) -> bool:
         # 값을 읽기 전에 작년 조견표와 라벨을 대조한다.
         # 진행해도 되면 True, 담당자가 중단을 택하면 False.
+        #
+        # 건너뛰는 경우에도 반드시 이유를 알린다. 조용히 통과시키면 기능이
+        # 꺼진 것과 구분되지 않는다.
         baseline = self._baseline_path(sheet.path)
         if baseline is None:
             recent_files.set_recent_path(BASELINE_KEY, sheet.path)
@@ -243,13 +246,18 @@ class MainWindow(QMainWindow):
         try:
             report = match_workbooks(baseline, sheet.path)
         except Exception as error:
-            QApplication.restoreOverrideCursor()
             return self._ask_continue_after_failure(error)
         finally:
             QApplication.restoreOverrideCursor()
 
         if not report.review_items and not report.structural_alerts and not report.value_anomalies:
             recent_files.set_recent_path(BASELINE_KEY, sheet.path)
+            QMessageBox.information(
+                self,
+                "라벨 대조 완료",
+                f"{baseline.name} 과(와) 대조했습니다.\n"
+                f"라벨 {report.summary.total_labels}건이 모두 일치해 확인할 항목이 없습니다.",
+            )
             return True
 
         dialog = ReviewDialog(report, self)
@@ -262,13 +270,24 @@ class MainWindow(QMainWindow):
         return True
 
     def _baseline_path(self, target: Path) -> Path | None:
-        # 기억된 작년 조견표. 없으면 한 번 물어보고, 사양하면 대조를 건너뛴다.
+        # 기억된 작년 조견표. 없으면 물어본다.
         stored = recent_files.get_recent_path(BASELINE_KEY)
         if stored is not None and stored != Path(target).resolve():
             return stored
 
         if stored is not None:
-            return None  # 같은 파일을 다시 올린 경우
+            # 작년 파일로 기억된 것과 같은 파일을 올린 경우.
+            # 대조할 상대가 자기 자신이라 의미가 없다.
+            answer = QMessageBox.question(
+                self,
+                "작년 조견표 대조",
+                f"올리신 파일이 작년 조견표로 기억된 파일과 같습니다.\n"
+                f"({stored.name})\n\n"
+                "대조할 것이 없어 건너뜁니다.\n"
+                "다른 파일을 기준으로 대조하시겠습니까?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            return self._pick_baseline() if answer == QMessageBox.StandardButton.Yes else None
 
         answer = QMessageBox.question(
             self,
@@ -277,9 +296,9 @@ class MainWindow(QMainWindow):
             "작년 파일을 선택하시겠습니까?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
         )
-        if answer != QMessageBox.StandardButton.Yes:
-            return None
+        return self._pick_baseline() if answer == QMessageBox.StandardButton.Yes else None
 
+    def _pick_baseline(self) -> Path | None:
         path, _ = QFileDialog.getOpenFileName(
             self, "작년 조견표 선택", "", "Excel 파일 (*.xlsx)"
         )
