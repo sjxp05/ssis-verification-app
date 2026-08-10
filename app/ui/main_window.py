@@ -7,10 +7,8 @@ from pathlib import Path
 from enum import IntEnum
 
 import pandas as pd
-from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QApplication,
-    QDialog,
     QFileDialog,
     QLineEdit,
     QMainWindow,
@@ -20,24 +18,19 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from jogyeon_matcher import match_workbooks
-from jogyeon_matcher.audit import decision_log
 from services.table_writer import TableWriter
-from models.dto import ConstantValues, UploadedFile
+from models.dto import ConstantValues
 from models.flows import FlowSpec, UNIT_PRICE
 from services import recent_files
 from ui.components.header import HeaderBar
-from ui.dialogs.review_dialog import ReviewDialog
 from ui.components.step_indicator import StepIndicator
+from ui.dialogs.review_flow import LabelReviewFlow
 from ui.pages.constants_page import ConstantsPage
 from ui.pages.main_page import MainPage
 from ui.pages.table_viewer_page import TableViewerPage
 from ui.pages.upload_page import UploadPage, ValueExtractor
 
 STEPS = ["조견표 업로드", "단가 정보 확인", "단가표 생성 및 저장"]
-
-# 라벨 대조 기준이 되는 작년 조견표 경로를 기억해 두는 키
-BASELINE_KEY = "jogyeon_baseline"
 
 
 class Screen(IntEnum):
@@ -89,7 +82,9 @@ class MainWindow(QMainWindow):
         self.main_page = MainPage()
         self.main_page.flowRequested.connect(self.start_flow)
 
-        self.upload_page = UploadPage(value_extractor, self._review_uploaded_sheet)
+        # 값을 읽기 전에 작년 조견표와 문구를 대조시킨다
+        self._label_review = LabelReviewFlow(self)
+        self.upload_page = UploadPage(value_extractor, self._label_review.run)
         self.upload_page.valuesReady.connect(self._on_values_ready)
 
         self.constants_page = ConstantsPage(table_writer)
@@ -229,89 +224,6 @@ class MainWindow(QMainWindow):
             focused.clearFocus()
         self.table_viewer_page.hide_bubbles()  # 표 바깥을 누르면 말풍선도 닫는다
         super().mousePressEvent(event)
-
-    # --- 라벨 검토 --------------------------------------------------------
-    def _review_uploaded_sheet(self, sheet: UploadedFile) -> bool:
-        # 값을 읽기 전에 작년 조견표와 라벨을 대조한다.
-        # 진행해도 되면 True, 담당자가 중단을 택하면 False.
-        #
-        # 건너뛰는 경우에도 반드시 이유를 알린다. 조용히 통과시키면 기능이
-        # 꺼진 것과 구분되지 않는다.
-        baseline = self._baseline_path(sheet.path)
-        if baseline is None:
-            recent_files.set_recent_path(BASELINE_KEY, sheet.path)
-            return True
-
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        try:
-            report = match_workbooks(baseline, sheet.path)
-        except Exception as error:
-            return self._ask_continue_after_failure(error)
-        finally:
-            QApplication.restoreOverrideCursor()
-
-        if not report.review_items and not report.structural_alerts and not report.value_anomalies:
-            recent_files.set_recent_path(BASELINE_KEY, sheet.path)
-            QMessageBox.information(
-                self,
-                "라벨 대조 완료",
-                f"{baseline.name} 과(와) 대조했습니다.\n"
-                f"라벨 {report.summary.total_labels}건이 모두 일치해 확인할 항목이 없습니다.",
-            )
-            return True
-
-        dialog = ReviewDialog(report, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            return False
-
-        for decision in dialog.decisions():
-            decision_log.record(decision)
-        recent_files.set_recent_path(BASELINE_KEY, sheet.path)
-        return True
-
-    def _baseline_path(self, target: Path) -> Path | None:
-        # 기억된 작년 조견표. 없으면 물어본다.
-        stored = recent_files.get_recent_path(BASELINE_KEY)
-        if stored is not None and stored != Path(target).resolve():
-            return stored
-
-        if stored is not None:
-            # 작년 파일로 기억된 것과 같은 파일을 올린 경우.
-            # 대조할 상대가 자기 자신이라 의미가 없다.
-            answer = QMessageBox.question(
-                self,
-                "작년 조견표 대조",
-                f"올리신 파일이 작년 조견표로 기억된 파일과 같습니다.\n"
-                f"({stored.name})\n\n"
-                "대조할 것이 없어 건너뜁니다.\n"
-                "다른 파일을 기준으로 대조하시겠습니까?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            )
-            return self._pick_baseline() if answer == QMessageBox.StandardButton.Yes else None
-
-        answer = QMessageBox.question(
-            self,
-            "작년 조견표 대조",
-            "작년 조견표와 대조하면 문구가 바뀐 항목을 미리 확인할 수 있습니다.\n"
-            "작년 파일을 선택하시겠습니까?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
-        return self._pick_baseline() if answer == QMessageBox.StandardButton.Yes else None
-
-    def _pick_baseline(self) -> Path | None:
-        path, _ = QFileDialog.getOpenFileName(
-            self, "작년 조견표 선택", "", "Excel 파일 (*.xlsx)"
-        )
-        return Path(path) if path else None
-
-    def _ask_continue_after_failure(self, error: Exception) -> bool:
-        answer = QMessageBox.warning(
-            self,
-            "라벨 대조 실패",
-            f"작년 조견표와 대조하지 못했습니다.\n{error}\n\n대조 없이 값을 읽을까요?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-        )
-        return answer == QMessageBox.StandardButton.Yes
 
     def set_extracted_values(self, values: dict) -> None:
         self.constants_page.set_values(values)

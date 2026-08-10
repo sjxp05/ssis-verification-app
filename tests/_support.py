@@ -27,10 +27,10 @@ ANSWER_KEY = FIXTURES / "injection_answer_key.xlsx"
 # 엑셀 픽스처는 저장소에 올리지 않는다(.gitignore 의 *.xlsx).
 # 클론 직후에는 파일이 없으므로, 없을 때 무엇을 해야 하는지 알려준다.
 _HOW_TO_GET = {
-    BASELINE.name: "python tests/fixtures/generate_synthetic_jogyeon.py 로 생성",
-    TARGET.name: "python tests/fixtures/generate_synthetic_jogyeon.py 로 생성",
-    ANSWER_KEY.name: "python tests/fixtures/generate_synthetic_jogyeon.py 로 생성",
-    LABEL_CASES.name: "생성 스크립트가 없다. 담당자에게 파일을 받아 넣을 것",
+    BASELINE.name: "python tests/fixtures/generate_synthetic_jogyeon.py",
+    TARGET.name: "python tests/fixtures/generate_synthetic_jogyeon.py",
+    ANSWER_KEY.name: "python tests/fixtures/generate_synthetic_jogyeon.py",
+    LABEL_CASES.name: "python tests/fixtures/generate_label_tests.py",
 }
 
 
