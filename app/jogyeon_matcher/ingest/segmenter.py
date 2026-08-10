@@ -65,17 +65,38 @@ class Fingerprint:
     def diff(self, other: Fingerprint) -> list[str]:
         issues = []
         if self.shape != other.shape:
-            issues.append(f"크기 {other.shape} -> {self.shape}")
+            was, now = other.shape, self.shape
+            issues.append(f"표 크기 {was[0]}행 {was[1]}열 → {now[0]}행 {now[1]}열")
         if self.header_sequence != other.header_sequence:
             if sorted(self.header_sequence) == sorted(other.header_sequence):
                 issues.append(
-                    f"헤더 순서 변경: {list(other.header_sequence)} -> {list(self.header_sequence)}"
+                    f"머리글 순서 바뀜: {' · '.join(other.header_sequence)}"
+                    f" → {' · '.join(self.header_sequence)}"
                 )
             else:
-                issues.append("헤더 구성 변경")
+                issues.append("머리글 구성이 달라짐")
         if self.column_types != other.column_types:
-            issues.append(f"열 타입 패턴 {other.column_types} -> {self.column_types}")
+            issues.append(self._column_type_summary(other))
         return issues
+
+    def _column_type_summary(self, other: Fingerprint) -> str:
+        # 열이 수십 개라 패턴을 통째로 찍으면 읽을 수 없다. 바뀐 열만 짚는다.
+        korean = {"num": "숫자", "text": "문자", "mixed": "혼합", "empty": "빈칸"}
+        changed = [
+            f"{i + 1}번째 {korean.get(was, was)}→{korean.get(now, now)}"
+            for i, (was, now) in enumerate(zip(other.column_types, self.column_types))
+            if was != now
+        ]
+        if len(self.column_types) != len(other.column_types):
+            note = f"열이 {len(other.column_types)}개에서 {len(self.column_types)}개로"
+            return f"{note}, " + (", ".join(changed[:2]) if changed else "내용 종류도 달라짐")
+        if not changed:
+            return "열 내용 종류가 달라짐"
+
+        head = ", ".join(changed[:3])
+        if len(changed) > 3:
+            head += f" 외 {len(changed) - 3}개 열"
+        return f"열 내용 종류 바뀜: {head}"
 
 
 def _is_number(text: str) -> bool:
@@ -166,7 +187,15 @@ def fingerprint(region: TableRegion) -> Fingerprint:
     return Fingerprint(region.table_id, region.shape, headers, tuple(types))
 
 
-def compare_sheets(baseline: dict, target: dict) -> list[StructuralAlert]:
+def compare_sheets(
+    baseline: dict, target: dict, required: tuple[str, ...] = ()
+) -> list[StructuralAlert]:
+    """작년 ↔ 올해 표 구조 비교.
+
+    치명으로 올리는 것은 값 추출이 실제로 불가능해지는 경우뿐이다. 담당자가
+    작업용으로 남긴 시트가 사라지거나 표가 더 쪼개지는 일은 정상 범위이고,
+    그런 것까지 막으면 정상적인 조견표로도 진행이 안 된다.
+    """
     alerts: list[StructuralAlert] = []
     for sheet, target_regions in target.items():
         base_regions = baseline.get(sheet)
@@ -177,9 +206,8 @@ def compare_sheets(baseline: dict, target: dict) -> list[StructuralAlert]:
         if len(base_regions) != len(target_regions):
             alerts.append(StructuralAlert(
                 "TABLE_COUNT_CHANGED", sheet,
-                f"표 개수가 {len(base_regions)}개에서 {len(target_regions)}개로 바뀌었습니다. "
-                "표 대응이 어긋날 수 있으므로 값 검증 결과를 반드시 확인하세요.",
-                fatal=True,
+                f"표가 {len(base_regions)}개에서 {len(target_regions)}개로 늘거나 줄어, "
+                "이 시트는 값 비교를 건너뜁니다.",
             ))
             continue
 
@@ -189,29 +217,42 @@ def compare_sheets(baseline: dict, target: dict) -> list[StructuralAlert]:
                 alerts.append(StructuralAlert(code, sheet, issue, tgt.table_id))
 
     for sheet in baseline:
-        if sheet not in target:
+        if sheet in target:
+            continue
+        if sheet in required:
             alerts.append(StructuralAlert(
-                "SHEET_MISSING", sheet, "작년에 있던 시트가 없습니다.", fatal=True
+                "SHEET_MISSING", sheet,
+                "값을 읽어야 하는 시트인데 올해 파일에 없습니다.", fatal=True,
+            ))
+        else:
+            alerts.append(StructuralAlert(
+                "SHEET_REMOVED", sheet, "작년 파일에만 있던 시트 (값 추출에 쓰지 않음)",
             ))
     return alerts
 
 
-# 앵커가 표 스코프 안에서 유일한지. 추출기가 부분문자열로 찾으므로 검사도 같은
-# 기준이어야 한다. 완전일치로만 세면 '(본인부담금 상한액)'과 '추가급여 상한액'이
-# 공존해도 통과하고, 추출기는 둘 중 아무거나 집는다.
+# 앵커로 값을 특정할 수 있는지. 판정 기준을 추출기와 맞춘다.
+#
+#   _find_one 은 앵커를 부분문자열로 찾은 뒤 '서로 다른 행'에 걸쳐 있을 때만
+#   실패한다. 같은 행에 여러 개면 첫 번째를 쓰고 정상 동작한다.
+#
+# 실제 조견표의 '기준중위소득70%이하 / 120%이하 / 180%이하 / 180%초과' 처럼
+# 한 행에 나란한 밴드 헤더가 정상이므로, 셀 개수로 세면 멀쩡한 파일이 막힌다.
 def check_anchor_uniqueness(
     regions: list[TableRegion], anchors: tuple[str, ...]
 ) -> list[StructuralAlert]:
     alerts = []
     for region in regions:
-        texts = [normalize(t) for t, _ in region.text_cells()]
+        cells = [(normalize(t), loc) for t, loc in region.text_cells()]
         for anchor in anchors:
-            hits = [t for t in texts if normalize(anchor) in t]
-            if len(hits) > 1:
+            key = normalize(anchor)
+            rows = {loc.row for text, loc in cells if key in text}
+            if len(rows) > 1:
+                hits = sorted({text for text, _ in cells if key in text})
                 alerts.append(StructuralAlert(
                     "ANCHOR_NOT_UNIQUE", region.sheet,
-                    f"'{anchor}' 를 포함한 셀이 표 안에 {len(hits)}개 있습니다: {hits}. "
-                    "어느 셀에서 값을 읽을지 결정할 수 없습니다.",
+                    f"'{anchor}' 를 포함한 셀이 서로 다른 {len(rows)}개 행에 있습니다: "
+                    f"{hits}. 어느 행에서 값을 읽을지 결정할 수 없어 값 추출이 실패합니다.",
                     region.table_id, fatal=True,
                 ))
     return alerts

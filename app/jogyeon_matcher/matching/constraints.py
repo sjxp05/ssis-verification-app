@@ -25,19 +25,40 @@ EXTRA_PENALTY = 0.6      # 한쪽에 숫자가 덧붙기만 함
 LOW_MARGIN_THRESHOLD = 0.05
 
 
+_YEAR = re.compile(r"^(?:19|20)\d{2}$")
+
+
+def _is_year(token: str) -> bool:
+    """19xx·20xx 는 판별자가 아니라 시점 표기다.
+
+    조견표는 해마다 연도가 바뀌므로 '2024 A값' 과 '2025 A값' 은 같은 항목의
+    올해판이다. 이걸 '10구간' 대 '11구간' 과 같은 충돌로 보면 담당자가 가장
+    확인하고 싶어 하는 변화가 오히려 후보에서 사라진다.
+    """
+    return bool(_YEAR.match(token))
+
+
 def numbers_of(label: str) -> Counter:
     return Counter(_NUMBER.findall(label))
 
 
 # 숫자 관계. 모든 불일치가 같은 무게는 아니다.
-#     10구간 ↔ 11구간     {10} vs {11}     값 충돌   -> conflict
-#     A값   ↔ 2027 A값   {}   vs {2027}   부가 표기 -> extra
-# 포함 관계까지 같은 계수로 누르면 정당한 개칭이 후보에서 밀려난다.
+#     10구간     ↔ 11구간      {10}   vs {11}     값 충돌   -> conflict
+#     A값        ↔ 2027 A값    {}     vs {2027}   부가 표기 -> extra
+#     2024 A값   ↔ 2025 A값    연도만 다름          해마다 정상 -> same
+# 포함 관계나 연도 차이까지 같은 계수로 누르면 정당한 개칭이 후보에서 밀려난다.
 def numeric_relation(left: str, right: str) -> str:
     a, b = numbers_of(left), numbers_of(right)
     if a == b:
         return "same"
-    if not (a - b) or not (b - a):
+
+    # 연도를 뺀 나머지가 같으면 시점 표기만 바뀐 것으로 본다
+    a_rest = Counter({k: v for k, v in a.items() if not _is_year(k)})
+    b_rest = Counter({k: v for k, v in b.items() if not _is_year(k)})
+    if a_rest == b_rest:
+        return "same"
+
+    if not (a_rest - b_rest) or not (b_rest - a_rest):
         return "extra"
     return "conflict"
 
