@@ -70,6 +70,19 @@ class MatchItem:
     matched_label: str | None = None
 
 
+@dataclass
+class MissingValue:
+    """올해 파일에서 못 읽는 값. 이게 있으면 그 단가표를 만들 수 없다."""
+
+    label: str  # 작년에 쓰던 문구
+    sheet: str
+    produces: str  # 이 문구로 읽던 값
+    tables: tuple[str, ...]  # 못 만들게 되는 표
+    reason: str  # 못 찾음 / 여러 행에 흩어짐
+    candidates: list[Candidate] = field(default_factory=list)
+    baseline_location: CellLocation | None = None
+
+
 # 표 개수·앵커 유일성·헤더 순서 이상
 @dataclass
 class StructuralAlert:
@@ -106,11 +119,30 @@ class MatchReport:
     summary: Summary = field(default_factory=Summary)
     structural_alerts: list[StructuralAlert] = field(default_factory=list)
     value_anomalies: list[ValueAnomaly] = field(default_factory=list)
+    missing_values: list[MissingValue] = field(default_factory=list)
     items: list[MatchItem] = field(default_factory=list)
 
     @property
     def review_items(self) -> list[MatchItem]:
         return [i for i in self.items if i.status is not Status.AUTO_PASS]
+
+    @property
+    def changed_items(self) -> list[MatchItem]:
+        """작년에 있던 문구가 올해 달라진 것."""
+        return [i for i in self.review_items if "NEW_IN_TARGET" not in i.flags]
+
+    @property
+    def blocked_tables(self) -> list[str]:
+        """지금 상태로는 만들 수 없는 표."""
+        tables: list[str] = []
+        for missing in self.missing_values:
+            tables += [t for t in missing.tables if t not in tables]
+        return tables
+
+    @property
+    def new_labels(self) -> list[MatchItem]:
+        """올해 새로 생긴 문구. 값 추출에 쓰이지 않으면 그냥 두면 된다."""
+        return [i for i in self.items if "NEW_IN_TARGET" in i.flags]
 
     @property
     def blocked(self) -> bool:

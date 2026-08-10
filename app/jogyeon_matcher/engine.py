@@ -18,13 +18,14 @@ from pathlib import Path
 
 import numpy as np
 
-from .config import anchors
+from .config import anchors, required_values
 from .contracts.schemas import (
     Candidate,
     LabelRef,
     MatchItem,
     MatchPath,
     MatchReport,
+    MissingValue,
     Status,
     StructuralAlert,
     Summary,
@@ -59,25 +60,94 @@ def match_workbooks(
     base_regions = {s: segmenter.find_tables(s, f) for s, f in baseline.sheets.items()}
     target_regions = {s: segmenter.find_tables(s, f) for s, f in target.sheets.items()}
 
-    report.structural_alerts += segmenter.compare_sheets(base_regions, target_regions)
+    report.structural_alerts += segmenter.compare_sheets(
+        base_regions, target_regions, anchors.JOGYEON_SHEET_NAMES
+    )
     for regions in target_regions.values():
         report.structural_alerts += segmenter.check_anchor_uniqueness(
             regions, anchors.SCALAR_ANCHORS
         )
     report.value_anomalies += value_checks.compare_regions(base_regions, target_regions)
 
-    for sheet in baseline.sheets:
-        if sheet in target.sheets:
-            report.items += _match_sheet(
-                sheet,
-                _collect_labels(base_regions.get(sheet, [])),
-                _collect_labels(target_regions.get(sheet, [])),
-                config,
-                report,
-            )
+    base_labels = {s: _collect_labels(base_regions.get(s, [])) for s in baseline.sheets}
+    target_labels = {s: _collect_labels(target_regions.get(s, [])) for s in target.sheets}
+    matchers: dict[str, HybridMatcher | None] = {}
 
+    for sheet in baseline.sheets:
+        if sheet not in target.sheets:
+            continue
+        matcher = HybridMatcher(list(target_labels[sheet]), config) if target_labels[sheet] else None
+        matchers[sheet] = matcher
+        report.items += _match_sheet(
+            sheet, base_labels[sheet], target_labels[sheet], matcher, report
+        )
+
+    report.missing_values = _find_missing(target_labels, matchers, base_labels)
     report.summary = _summarize(report.items)
     return report
+
+
+# 올해 파일에서 값을 읽을 수 있는지 미리 확인한다.
+#
+# 추출기와 똑같은 방식으로 찾아본다. 부분문자열로 찾되 서로 다른 행에 흩어져 있으면
+# 추출기가 실패하고(_find_one), 등급·구간 같은 행·열 이름은 셀 내용이 정확히 같아야 한다.
+# 여기서 걸리면 그 표를 만들 수 없으므로 담당자가 반드시 짚어야 한다.
+def _find_missing(
+    target_labels: dict[str, dict[str, LabelRef]],
+    matchers: dict[str, HybridMatcher | None],
+    base_labels: dict[str, dict[str, LabelRef]],
+) -> list[MissingValue]:
+    missing: list[MissingValue] = []
+    for required in required_values.REQUIRED:
+        labels = target_labels.get(required.sheet, {})
+        key = normalize(required.label)
+
+        if required.exact:
+            reason = "" if key in labels else "올해 파일에서 찾지 못했습니다"
+        else:
+            hits = [ref for norm, ref in labels.items() if key in norm]
+            rows = {ref.location.row for ref in hits if ref.location}
+            if not hits:
+                reason = "올해 파일에서 찾지 못했습니다"
+            elif len(rows) > 1:
+                reason = f"서로 다른 {len(rows)}개 행에 나뉘어 있어 어디서 읽을지 정할 수 없습니다"
+            else:
+                reason = ""
+        if not reason:
+            continue
+
+        baseline_ref = base_labels.get(required.sheet, {}).get(key)
+        missing.append(MissingValue(
+            label=required.label,
+            sheet=required.sheet,
+            produces=required.produces,
+            tables=required.tables,
+            reason=reason,
+            candidates=_suggest(key, matchers.get(required.sheet), labels),
+            baseline_location=baseline_ref.location if baseline_ref else None,
+        ))
+    return missing
+
+
+# 못 찾은 문구를 대신할 만한 올해 문구 후보
+def _suggest(key: str, matcher: HybridMatcher | None, labels: dict[str, LabelRef]) -> list[Candidate]:
+    if matcher is None or not labels:
+        return []
+    keys = matcher.labels
+    final, sparse, dense = matcher.score_components(key)
+    adjusted, veto_flags = constraints.apply_vetoes(key, keys, final)
+    return [
+        Candidate(
+            rank=rank,
+            base_label=labels[keys[i]].raw,
+            final=float(adjusted[i]),
+            bm25=float(sparse[i]),
+            embedding=float(dense[i]),
+            base_location=labels[keys[i]].location,
+            flags=list(veto_flags[i]),
+        )
+        for rank, i in enumerate(np.argsort(-adjusted)[:TOP_K], start=1)
+    ]
 
 
 def _summarize(items: list[MatchItem]) -> Summary:
@@ -105,7 +175,7 @@ def _match_sheet(
     sheet: str,
     base_labels: dict[str, LabelRef],
     target_labels: dict[str, LabelRef],
-    config: HybridConfig,
+    matcher: HybridMatcher | None,
     report: MatchReport,
 ) -> list[MatchItem]:
     for norm_form, originals in find_normalization_collisions(
@@ -116,14 +186,13 @@ def _match_sheet(
             f"서로 다른 라벨이 정규화 후 같아집니다: {originals} -> {norm_form!r}",
         ))
 
-    matcher = HybridMatcher(list(target_labels), config) if target_labels else None
     items: list[MatchItem] = []
     claimed: set[str] = set()
     reviewed: list[tuple[MatchItem, np.ndarray]] = []
 
     for index, ref in enumerate(base_labels.values()):
         item, matched, scores = _match_one(
-            f"{sheet}-{index:03d}", ref, target_labels, matcher, config
+            f"{sheet}-{index:03d}", ref, target_labels, matcher
         )
         if matched:
             claimed.add(matched)
@@ -150,7 +219,6 @@ def _match_one(
     ref: LabelRef,
     target_labels: dict[str, LabelRef],
     matcher: HybridMatcher | None,
-    config: HybridConfig,
 ) -> tuple[MatchItem, str | None, np.ndarray | None]:
     matched = _match_deterministic(ref, target_labels)
     if matched:
@@ -167,7 +235,7 @@ def _match_one(
         return MatchItem(item_id, ref, Status.UNMATCHED, MatchPath.HYBRID), None, None
 
     scores, candidates = _rank_candidates(ref.normalized, target_labels, matcher)
-    passes = bool(candidates) and candidates[0].final >= config.cutoff
+    passes = bool(candidates) and candidates[0].final >= matcher.config.cutoff
     item = MatchItem(
         item_id, ref,
         Status.NEEDS_REVIEW if passes else Status.UNMATCHED,
