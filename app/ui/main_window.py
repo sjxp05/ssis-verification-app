@@ -24,6 +24,7 @@ from models.flows import FlowSpec, UNIT_PRICE
 from services import recent_files
 from ui.components.header import HeaderBar
 from ui.components.step_indicator import StepIndicator
+from ui.dialogs.review_flow import LabelReviewFlow
 from ui.pages.constants_page import ConstantsPage
 from ui.pages.main_page import MainPage
 from ui.pages.table_viewer_page import TableViewerPage
@@ -83,7 +84,9 @@ class MainWindow(QMainWindow):
         self.main_page = MainPage()
         self.main_page.flowRequested.connect(self.start_flow)
 
-        self.upload_page = UploadPage(value_extractor)
+        # 값을 읽기 전에 작년 조견표와 문구를 대조시킨다
+        self._label_review = LabelReviewFlow(self)
+        self.upload_page = UploadPage(value_extractor, self._label_review.run)
         self.upload_page.valuesReady.connect(self._on_values_ready)
         self.upload_page.filesDiverged.connect(self._on_upload_files_diverged)
 

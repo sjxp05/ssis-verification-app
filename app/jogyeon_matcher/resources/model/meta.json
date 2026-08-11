@@ -1,0 +1,21 @@
+{
+  "model_id": "intfloat/multilingual-e5-small",
+  "opset": 17,
+  "quantization": "dynamic int8 (QInt8, weights only)",
+  "vocab_pruning": {
+    "allowed_scripts": [
+      "hangul",
+      "latin"
+    ],
+    "ascii_only_latin": true,
+    "vocab_size": 102290,
+    "original_vocab_size": 250002
+  },
+  "prefix": "query: ",
+  "pooling": "mean pooling + L2 normalize (그래프 내장)",
+  "embedding_dim": 384,
+  "verification": {
+    "cosine_vs_original_fp32_min": 0.986919,
+    "cosine_vs_original_fp32_mean": 0.988893
+  }
+}

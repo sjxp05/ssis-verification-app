@@ -6,44 +6,30 @@ import re
 
 from models.dto import UploadedFile
 
-JOGYEON_SHEET_NAMES = ["인정조사", "산정특례", "종합조사"]
-
-# 조견표에서 찾는 문구 상수로 정리 - 서식 변경시 여기만 변경
-BASE_PRICE = "기본단가"
-A_VALUE = "A값"
-BASIC_RATE = "기본 부담률"
-CAP_LABEL = "상한액"
-GRADE_HEADER = "활동지원등급"
-INCOME_HEADER = "기준중위소득"
-JH_BASIC = "주간활동 기본형"
-JH_EXTENDED = "주간활동 확장형"
-
-IJ_GRADES = tuple(f"{i}등급" for i in range(1, 5))
-JH_ZONES = tuple(f"{i}등급" for i in range(1, 16))
-JH_LABELS = tuple(f"{i}구간" for i in range(1, 16))
-RATE_GRADES = ("다", "라", "마", "바")
-# 조견표 위쪽 테이블에는 없는 가형/나형의 고정 금액
-# 기초수급자(가)는 항상 면제, 차상위(나)는 정액 부담, 추가급여는 기초·차상위 모두 면제
-FIXED_BASIC_RATE = {"가": 0, "나": 20000}
-FIXED_ADD_RATE = {"가": 0, "나": 0}
-
-ADD_ITEMS = (
-    "최중증1인가구",
-    "1등급1인가구",
-    "2등급이하1인가구",
-    "최중증취약가구",
-    "1등급취약가구",
-    "2등급이하취약가구",
-    "출산",
-    "자립준비",
-    "학교생활",
-    "직장생활",
-    "보호자일시부재",
-    "나머지가구구성원의직장생활등",
+# 조견표에서 찾는 문구는 라벨 매처와 함께 쓰므로 config/anchors.py 에 모아 두었다.
+from jogyeon_matcher.config.anchors import (  # noqa: F401  (외부에서 이 모듈 경유로 참조)
+    A_VALUE,
+    ADD_ITEMS,
+    BASE_PRICE,
+    BASIC_RATE,
+    CAP_LABEL,
+    FIXED_ADD_RATE,
+    FIXED_BASIC_RATE,
+    GRADE_HEADER,
+    IJ_GRADES,
+    INCOME_HEADER,
+    JH_BASIC,
+    JH_EXTENDED,
+    JH_LABELS,
+    JH_ZONES,
+    JOGYEON_SHEET_NAMES,
+    RATE_GRADES,
 )
+from jogyeon_matcher.matching.normalizer import sanitize
 
-# 공백·줄바꿈·비단절공백
-_WS = re.compile(r"[\s ]+")
+# 공백류. 비가시 문자(ZWSP·BOM 등)는 문자로 열거하지 않고 sanitize 가 유니코드
+# 카테고리로 걷어낸다. 열거 방식은 항상 누락이 생긴다.
+_WS = re.compile(r"\s+")
 
 
 class ExtractError(Exception):
@@ -51,14 +37,14 @@ class ExtractError(Exception):
 
 
 class ValueExtractor:
-    # _WS 처리
+    # 비교용으로 공백과 비가시 문자를 걷어낸다
     def _squeeze(self, text):
-        return _WS.sub("", str(text))
+        return _WS.sub("", sanitize(text))
 
     # 파일 읽고 원본(df)과 공백 제거한 검색용 사본(norm)을 함께 반환
     def _load(self, file_path, sheet_name):
         df = pd.read_excel(file_path, sheet_name, engine="openpyxl", header=None)
-        norm = df.astype(str).apply(lambda s: s.str.replace(_WS, "", regex=True))
+        norm = df.astype(str).map(self._squeeze)
         return df, norm
 
     # 키워드가 나오는 모든 칸을 읽는 순서(위→아래, 왼→오른쪽)로 반환

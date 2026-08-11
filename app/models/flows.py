@@ -12,7 +12,7 @@ class UploadSlot:
     extensions: tuple[str, ...]
     icon: str = "📄"
     # True면 services.recent_files 에 저장된 최근 경로가 있을 때 업로드를 건너뛸 후보
-    # (자동 불러오기는 아직 미구현 — services/recent_files.py, upload_page.py 의 관련 TODO 참고)
+    # (경로 저장은 구현됨. 카드 자동 채움은 미구현 — upload_page.py 의 TODO 참고)
     remember_last: bool = False
 
 

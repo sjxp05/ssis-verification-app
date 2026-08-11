@@ -5,6 +5,10 @@ __pycache__/
 
 .agents/
 .claude/
+CLAUDE.md
 .vscode/
 
 *.xlsx
+
+# 아키텍처 결정용 임시 실험 — 폴더째 삭제 가능, 커밋 대상 아님
+_experiments/

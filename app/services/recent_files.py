@@ -1,23 +1,47 @@
-# 최근 사용한 파일 경로 저장소 (자리만 마련해 둔 상태. 아직 미구현)
+# 최근 사용한 파일 경로 저장소
 #
-# 2번째 flow의 조견표와 기본급여 단가표는 여기 저장된 경로를 먼저 확인
-# -> 있으면 자동으로 불러오기
-# -> 없거나 파일이 사라졌을 때만 UploadPage 에서 직접 업로드를 받도록 바꿀 예정.
-# 연동 지점: models.flows.UploadSlot.remember_last, ui.pages.upload_page.UploadPage.reset()
-#
-# TODO: 실제 저장 위치(예: 사용자 설정 폴더의 json 파일)를 정하고 구현을 채운다.
+# 조견표 라벨 대조는 작년 파일이 있어야 하므로, 마지막에 읽은 조견표 경로를 남긴다.
+# 파일이 사라졌으면 기록이 있어도 None 을 돌려준다.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
+
+from utils.appdata import user_data_dir
+
+STORE_NAME = "recent_files.json"
+
+
+def _store() -> Path:
+    return user_data_dir() / STORE_NAME
+
+
+def _load() -> dict[str, str]:
+    path = _store()
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def get_recent_path(key: str) -> Path | None:
-    # TODO: 저장소에서 key 에 해당하는 경로를 읽어 반환
-    # 기록이 없거나 파일이 더 이상 존재하지 않으면 None
-    return None
+    raw = _load().get(key)
+    if not raw:
+        return None
+    path = Path(raw)
+    return path if path.exists() else None
 
 
 def set_recent_path(key: str, path: Path) -> None:
-    # TODO: key: path 를 저장소에 기록한다 (마지막 값으로 덮어쓰기)
-    pass
+    data = _load()
+    data[key] = str(Path(path).resolve())
+    try:
+        _store().write_text(
+            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+    except OSError:
+        pass  # 경로 기억은 편의 기능이므로 실패해도 작업을 막지 않는다
