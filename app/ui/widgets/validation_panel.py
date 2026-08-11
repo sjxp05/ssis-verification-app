@@ -209,8 +209,9 @@ class ValidationPanel(QFrame):
         if not text:
             return
         # 숫자면 숫자로, 아니면 문자 그대로 (등급명·등급구분 같은 문자 셀도 수정 가능)
+        # int/float 여부는 set_cell_value가 실제 셀 dtype을 보고 결정하므로 여기서는 자르지 않는다.
         try:
-            value = int(float(text.replace(",", "")))
+            value = float(text.replace(",", ""))
         except ValueError:
             value = text
         row, column = self._current_cell

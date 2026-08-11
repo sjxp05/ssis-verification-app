@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import numpy as np
 import pandas as pd
 from PyQt6.QtCore import QAbstractTableModel, QModelIndex, Qt, pyqtSignal
 from PyQt6.QtGui import QColor
@@ -65,9 +66,10 @@ class DataFrameModel(QAbstractTableModel):
         col = int(self._df.columns.get_loc(column))
         current = self._df.iat[row, col]
         try:
-            # 기존 셀이 숫자면 같은 타입으로 맞춘다 (int 컬럼에 float 안 섞이게)
-            if isinstance(current, (int, float)) and not isinstance(current, bool):
-                value = int(float(str(value).replace(",", "")))
+            # 기존 셀이 숫자면 같은 타입으로 맞춘다 (int 컬럼은 int로, float 컬럼은 소수점 유지)
+            if pd.api.types.is_number(current) and not isinstance(current, bool):
+                parsed = float(str(value).replace(",", ""))
+                value = int(parsed) if isinstance(current, (int, np.integer)) else parsed
         except (ValueError, TypeError):
             return False
         self._df.iat[row, col] = value
@@ -135,7 +137,7 @@ class DataFrameModel(QAbstractTableModel):
             return int(flag | Qt.AlignmentFlag.AlignVCenter)
 
         if role==Qt.ItemDataRole.EditRole:
-            if value is None or (isinstance(value,float) and pd.insa(value)):
+            if value is None or (isinstance(value,float) and pd.isna(value)):
                 return ""
             if isinstance(value,float) and value.is_integer():
                 return str(int(value))
@@ -172,11 +174,12 @@ class DataFrameModel(QAbstractTableModel):
         text = str(value).strip()
         if not text:
             return False
-        if isinstance(current, (int, float)) and not isinstance(current, bool):
+        if pd.api.types.is_number(current) and not isinstance(current, bool):
             try:
-                value = int(float(text.replace(",", ""))) if text else 0
+                parsed = float(text.replace(",", "")) if text else 0.0
             except ValueError:
                 return False
+            value = int(parsed) if isinstance(current, (int, np.integer)) else parsed
         else:
             value = text
         self._df.iat[index.row(), index.column()] = value
