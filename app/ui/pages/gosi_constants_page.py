@@ -23,7 +23,7 @@ _NEXT_TEXT = "다음 단계로  →"
 _BUSY_TEXT = "⟳  결제단가표를 생성하는 중..."
 _LOADING_TEXT = "⟳  불러오는 중..."
 
-_ONLY_DIFF_ON = "다른 것만 보기"
+_ONLY_DIFF_ON = "불일치만 보기"
 _ONLY_DIFF_OFF = "전체 보기"
 _DOC_HIDE_TEXT = "고시 원문 접기"
 _DOC_SHOW_TEXT = "고시 원문 펼치기"
@@ -115,6 +115,9 @@ class GosiConstantsPage(QWidget):
         self._doc_button = GhostButton(_DOC_HIDE_TEXT)
         self._doc_button.clicked.connect(self._toggle_document)
 
+        for b in (self._diff_button, self._doc_button):
+            b.setFixedSize(130, 32)
+            
         card_head = QHBoxLayout()
         card_head.addWidget(self._card_title)
         card_head.addStretch(1)
