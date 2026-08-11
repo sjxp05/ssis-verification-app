@@ -69,7 +69,11 @@ class _ExtractTask(QRunnable):
 
     def run(self) -> None:
         try:
-            values = self._extractor.extract_jogyeon_values(self._files["sheet"])
+            # self._files["sheet"] -> 슬롯이 없으면 KeyError 대신 읽을 수 있는 메시지 표시
+            sheet = self._files.get("sheet")
+            if sheet is None:
+                raise ValueError("조견표(sheet) 파일이 없습니다.")
+            values = self._extractor.extract_jogyeon_values(sheet)
         except Exception as error:
             self.signals.failed.emit(
                 self._generation, str(error) or type(error).__name__
@@ -97,6 +101,7 @@ class UploadPage(QWidget):
 
         self._flow: FlowSpec | None = None
         self._cards: dict[str, UploadCard] = {}
+        self._pinned: set[str] = set()
         self._values: ConstantValues | None = None
         self._generation = 0
         self._state = WAITING
@@ -169,6 +174,7 @@ class UploadPage(QWidget):
         self._confirmed_files = {}
         self._confirmed_values = None
         self._cards.clear()
+        self._pinned.clear() 
         while self._cards_layout.count():
             item = self._cards_layout.takeAt(0)
             if item.widget() is not None:
@@ -192,17 +198,20 @@ class UploadPage(QWidget):
             )
             self._cards[slot.key] = card
             self._cards_layout.addWidget(card)
-            
+
             if recent_files.get_recent_path(slot.key):
                 has_cache = True
-            show_btn = has_cache and (self._flow.key == "notice_verify")
-            self._load_cache_btn.setVisible(show_btn)
-            self._set_state(WAITING)
+        show_btn = has_cache and (self._flow.key == "notice_verify")
+        self._load_cache_btn.setVisible(show_btn)
+        self._set_state(WAITING)
 
     def values(self) -> ConstantValues | None:
         return self._values
 
     # --- 동작 -------------------------------------------------------------
+    def files(self) -> dict[str, UploadedFile]:
+        return self._files()
+
     def _files(self) -> dict[str, UploadedFile]:
         return {
             key: card.file() for key, card in self._cards.items() if card.file()
@@ -218,6 +227,10 @@ class UploadPage(QWidget):
             # flow 1(조견표 -> 단가표 생성)에서 조견표를 올리면
             # flow 2가 나중에 자동으로 불러올 수 있도록 경로 저장
             recent_files.set_recent_path(key, _file.path)
+        self._refresh_files_state()
+
+    # _on_file_selected 안에 있던 상태 재계산을 꺼내서 재사용 가능하게 분리
+    def _refresh_files_state(self) -> None:
         files = self._files()
         # 추출에 성공한 적이 없으면(_confirmed_files 비어있음) 아직 비교할 대상 자체가 없다.
         matches_confirmed = bool(self._confirmed_files) and files == self._confirmed_files
@@ -268,24 +281,29 @@ class UploadPage(QWidget):
             self.valuesReady.emit(self._values)
 
     def _load_cached_files(self) -> None:
-        import os
-        from services import recent_files
-
+        loaded = False
         for key, card in self._cards.items():
             cached_path = recent_files.get_recent_path(key)
-            if cached_path and os.path.exists(str(cached_path)):
-                if hasattr(card, "set_path"):
-                    card.set_path(str(cached_path))
-                card.set_locked(True)  # 재업 못하게 막기
-                
+            if not cached_path or not os.path.exists(str(cached_path)):
+                continue
+            if hasattr(card, "set_path"):
+                card.set_path(str(cached_path))
+            self._pinned.add(key)
+            loaded = True
+
+        if not loaded:
+            return
         # 다 불러왔으면 버튼 숨기기
         self._load_cache_btn.setVisible(False)
+        # set_path 가 fileSelected 를 쏘지 않는 구현일 수 있어 상태를 직접 다시 계산한다.
+        self._refresh_files_state()
+
     # --- 내부 -------------------------------------------------------------
     def _set_state(self, state: str, reason: str = "") -> None:
         self._state = state
         busy = state == BUSY
-        for card in self._cards.values():
-            card.set_locked(busy)
+        for key, card in self._cards.items():
+            card.set_locked(busy or key in self._pinned)
 
         self._next.setEnabled(state in (FILLED, READY, FAILED))
         self._next.setText(
@@ -307,7 +325,7 @@ class UploadPage(QWidget):
             )
         else:
             self._hint.setText(
-                f"문서를 읽지 못했습니다: {reason}\n올바른 형식의 파일을 업로드해 주세요."
+                f"문서를 읽지 못했습니다.\n{reason}\n올바른 형식의 파일인지 확인해 주세요."
             )
 
         set_state(self._hint, "state", state)
