@@ -10,6 +10,7 @@ from string import Template
 NAVY = "#1B3A63"  # 헤더 / 테이블 헤더 / 주요 버튼
 NAVY_DARK = "#14304F"  # hover, pressed
 NAVY_LIGHT = "#2C5488"
+SCROLLBAR_THUMB = "#6787B4"  # 스크롤바 핸들 (NAVY보다 명도 높고 채도 낮음)
 ACCENT = "#2B6CB0"  # 코드 컬럼 등 강조 텍스트
 ACCENT_SOFT = "#CFE3F5"  # pill 버튼 배경
 
@@ -29,15 +30,15 @@ TEXT_ON_NAVY = "#FFFFFF"
 TEXT_ON_NAVY_MUTED = "#C7D3E2"
 
 DANGER = "#DC2626"  # 잘못된 값 / 확장자 불일치
-DANGER_DARK = "#991B1B"  
-DANGER_BG = "#FEF2F2"  
-DANGER_BORDER = "#FECACA" 
+DANGER_DARK = "#991B1B"
+DANGER_BG = "#FEF2F2"
+DANGER_BORDER = "#FECACA"
 
 SUCCESS = "#16A34A"  # 업로드 완료
-SUCCESS_DARK = "#166534"  
-SUCCESS_BG = "#F0FDF4"  
+SUCCESS_DARK = "#166534"
+SUCCESS_BG = "#F0FDF4"
 SUCCESS_BORDER = "#86EFAC"
-SUCCESS_SOFT = "#DCFCE7" 
+SUCCESS_SOFT = "#DCFCE7"
 
 ERROR_BG = "#FF7A7A"    # 오류 셀 (분명한 빨강 계열)
 WARNING_BG = "#F4D87B"  # 확인 필요 셀 (분명한 노랑 계열)

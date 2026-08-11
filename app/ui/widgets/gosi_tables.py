@@ -1,0 +1,100 @@
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem, QAbstractItemView, QHeaderView
+from PyQt6.QtGui import QBrush, QColor
+
+COMPARE_COLUMNS = [("항목", False, True), ("조견표", True, False), ("고시", True, False), ("결과", False, False)]
+PRICE_COLUMNS = [("급여", False, False), ("구분", False, True), ("금액", True, False), ("가산수당", True, False)]
+RESULT_COLORS = {"일치": "#2F855A", "불일치": "#C53030", "조견표에 없음": "#96620F"}
+
+
+class GosiBaseTable(QTableWidget):
+    rowSelected = pyqtSignal(dict)  # 행 클릭 시 출처(ref) 표시 시스널
+
+    def __init__(self, columns, parent=None):
+        super().__init__(0, len(columns), parent)
+        self.setObjectName("DataTable")
+        self.setHorizontalHeaderLabels([c[0] for c in columns])
+        self.verticalHeader().setVisible(False)
+        self.setAlternatingRowColors(True)
+        self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        
+        self._columns_spec = columns
+
+        header = self.horizontalHeader()
+        header.setStretchLastSection(False)
+        for col, spec in enumerate(columns):
+            header.setSectionResizeMode(
+                col, QHeaderView.ResizeMode.Stretch if spec[2] else QHeaderView.ResizeMode.ResizeToContents
+            )
+            
+        self.itemSelectionChanged.connect(self._on_selection)
+
+    def _fit_height(self):
+        self.resizeRowsToContents()
+        height = self.horizontalHeader().height() + 2 * self.frameWidth()
+        for row in range(self.rowCount()):
+            height += self.rowHeight(row)
+        self.setFixedHeight(max(height, 60))
+
+    def _add_row(self, values, ref=None, color=None):
+        row = self.rowCount()
+        self.insertRow(row)
+        for col, value in enumerate(values):
+            item = QTableWidgetItem(str(value))
+            if col < len(self._columns_spec) and self._columns_spec[col][1]:
+                item.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+            if col == 0 and ref:
+                item.setData(Qt.ItemDataRole.UserRole, ref)
+            if color:
+                item.setForeground(color)
+            self.setItem(row, col, item)
+
+    def _on_selection(self):
+        items = self.selectedItems()
+        if not items:
+            return
+        first = self.item(items[0].row(), 0)
+        ref = first.data(Qt.ItemDataRole.UserRole) if first else None
+        if ref:
+            self.rowSelected.emit(ref)
+
+
+class CompareTableWidget(GosiBaseTable):
+    def __init__(self, parent=None):
+        super().__init__(COMPARE_COLUMNS, parent)
+
+    def fill_data(self, compare_data: dict, only_diff: bool = False):
+        self.setRowCount(0)
+        rows = compare_data.get("행") or []
+        for item in rows:
+            if only_diff and item["결과"] == "일치":
+                continue
+            color = QBrush(QColor(RESULT_COLORS.get(item["결과"], "#16212B")))
+            self._add_row([
+                item["항목"],
+                f"{item['조견표']:,}원" if isinstance(item["조견표"], (int, float)) else "—",
+                f"{item['고시']:,}원" if isinstance(item["고시"], (int, float)) else "—",
+                item["결과"],
+            ], item["출처"], None if item["결과"] == "일치" else color)
+        self._fit_height()
+
+
+class PriceTableWidget(GosiBaseTable):
+    """서비스 단가 확인 탭에 쓰이는 테이블"""
+    def __init__(self, parent=None):
+        super().__init__(PRICE_COLUMNS, parent)
+
+    def fill_data(self, prices_data: dict):
+        self.setRowCount(0)
+        for service, items in prices_data.items():
+            for key, item in items.items():
+                bonus = item.get("가산수당")
+                self._add_row([
+                    service, key, 
+                    f"{item['금액']:,}원", 
+                    f"{bonus:,}원" if bonus else ""
+                ], item["출처"])
+        self._fit_height()

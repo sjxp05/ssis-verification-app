@@ -264,12 +264,12 @@ QScrollBar:vertical {
     margin: 0;
 }
 QScrollBar::handle:vertical {
-    background: #C3C9D1;
+    background: ${SCROLLBAR_THUMB};
     border-radius: 5px;
     min-height: 30px;
 }
 QScrollBar::handle:vertical:hover {
-    background: #A9B1BB;
+    background: ${NAVY_LIGHT};
 }
 QScrollBar::add-line, QScrollBar::sub-line {
     height: 0;
@@ -280,7 +280,7 @@ QScrollBar:horizontal {
     height: 10px;
 }
 QScrollBar::handle:horizontal {
-    background: #C3C9D1;
+    background: ${SCROLLBAR_THUMB};
     border-radius: 5px;
     min-width: 30px;
 }
@@ -568,4 +568,57 @@ QPushButton#RowButton:hover {
 }
 QPushButton#RowButton:pressed {
     color: ${NAVY};
+
+/* 고시 원문 뷰어 */
+QTextBrowser#NoticeDocument {
+    background: ${SURFACE};
+    border: 1px solid ${BORDER};
+    border-radius: ${RADIUS_SM};
+    padding: 10px;
+}
+
+/* 스플릿 뷰 핸들러(좌우 분할 구분선) */
+QSplitter::handle {
+    background: ${BORDER_SOFT};
+    width: 4px;
+}
+QSplitter::handle:hover {
+    background: ${NAVY_LIGHT};
+}
+
+/* 우측 패널 스크롤 영역 (파이썬 인라인 스타일 대체) */
+QScrollArea#NoticeScrollArea,
+QWidget#NoticeScrollViewport,
+QWidget#NoticeScrollBody {
+    background: transparent;
+    border: none;
+}
+
+/* 대조 결과 요약 텍스트 */
+QLabel#CompareSummary {
+    font-size: 14px;
+    font-weight: 700;
+    padding: 12px;
+    border-radius: ${RADIUS_SM};
+}
+QLabel#CompareSummary[state="pass"] {
+    color: ${SUCCESS_DARK};
+    background: ${SUCCESS_BG};
+    border: 1px solid ${SUCCESS_BORDER};
+}
+QLabel#CompareSummary[state="fail"] {
+    color: ${DANGER_DARK};
+    background: ${DANGER_BG};
+    border: 1px solid ${DANGER_BORDER};
+}
+
+/* 검증 상세 내역 및 안내 문구 */
+QLabel#FindingDetail {
+    font-size: 12px;
+    color: ${TEXT_MUTED};
+    background: ${SURFACE};
+    border: 1px solid ${BORDER_SOFT};
+    border-radius: ${RADIUS_SM};
+    padding: 12px;
+    line-height: 1.5;
 }

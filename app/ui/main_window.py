@@ -29,8 +29,10 @@ from ui.pages.constants_page import ConstantsPage
 from ui.pages.main_page import MainPage
 from ui.pages.table_viewer_page import TableViewerPage
 from ui.pages.upload_page import UploadPage, ValueExtractor
+from ui.pages.gosi_constants_page import GosiConstantsPage
 
 STEPS = ["조견표 업로드", "단가 정보 확인", "단가표 생성 및 저장"]
+NOTICE_VERIFY = "notice_verify"
 
 
 class Screen(IntEnum):
@@ -74,7 +76,6 @@ class MainWindow(QMainWindow):
 
         self._header.backRequested.connect(self.go_home)
 
-        # 흐름마다 단계 문구가 달라서 StepIndicator 는 통째로 갈아 끼운다.
         self._step_holder = QWidget()
         self._step_layout = QVBoxLayout(self._step_holder)
         self._step_layout.setContentsMargins(0, 0, 0, 0)
@@ -95,6 +96,11 @@ class MainWindow(QMainWindow):
         self.constants_page.valuesChanged.connect(self._on_values_changed)
         self.constants_page.valuesKept.connect(self._on_values_kept)
 
+        self.notice_page = GosiConstantsPage(table_writer=table_writer, flow=NOTICE_VERIFY)
+        self.notice_page.tablesReady.connect(self._on_tables_ready)
+        self.notice_page.valuesChanged.connect(self._on_values_changed)
+        self.notice_page.valuesKept.connect(self._on_values_kept)
+
         self.table_viewer_page = TableViewerPage()
         self.table_viewer_page.exportRequested.connect(self._on_export)
 
@@ -104,6 +110,7 @@ class MainWindow(QMainWindow):
             self.upload_page,
             self.constants_page,
             self.table_viewer_page,
+            self.notice_page
         ):
             self._stack.addWidget(page)
 
@@ -158,11 +165,26 @@ class MainWindow(QMainWindow):
         self.table_viewer_page.hide_bubbles()
         super().moveEvent(event)
 
-    # --- 화면 전환 --------------------------------------------------------
+
+    # 2단계(값 확인)
+    def _constants_page(self) -> QWidget:
+        if self._flow is not None and self._flow.key == NOTICE_VERIFY:
+            return self.notice_page
+        return self.constants_page
+
+
+    def _page_for_step(self, step: int) -> QWidget:
+        # 스택에 넣은 순서가 아니라 단계로 화면 선택
+        if step == Screen.UPLOAD.step:
+            return self.upload_page
+        if step == Screen.CONSTANTS.step:
+            return self._constants_page()
+        return self.table_viewer_page
+
     def go_home(self) -> None:
         # 메인 화면으로. 진행 중이던 흐름은 그대로 두었다가 다시 들어오면 이어간다.
         self.table_viewer_page.hide_bubbles()
-        self._stack.setCurrentIndex(Screen.HOME)
+        self._stack.setCurrentWidget(self.main_page)
         self._header.set_title("사회보장정보원 단가표 생성 앱")
         self._header.set_back_visible(False)
         self._step_holder.setVisible(False)
@@ -184,12 +206,14 @@ class MainWindow(QMainWindow):
             return
         step = max(0, min(step, len(self._flow.steps) - 1))
         self.table_viewer_page.hide_bubbles()
+
         if step == Screen.TABLES.step:
-            if self.constants_page.modified_keys() != []:
-                self.table_viewer_page.reset_tab(
-                    self._flow.key, 0
-                )  # 상수 값이 바뀐 경우에만 '기본급여' 탭으로 초기화
-        self._stack.setCurrentIndex(Screen.for_step(step))
+            # 고시 검증 화면에는 modified_keys 가 없으므로 있을 때만 물어보
+            modified_keys = getattr(self._constants_page(), "modified_keys", None)
+            if modified_keys is not None and modified_keys() != []:
+                self.table_viewer_page.reset_tab(self._flow.key, 0)
+
+        self._stack.setCurrentWidget(self._page_for_step(step))
         self._steps.set_current(step)
 
     # --- 흐름 준비 --------------------------------------------------------
@@ -198,6 +222,7 @@ class MainWindow(QMainWindow):
         self._install_steps(flow)
         self.upload_page.set_flow(flow)
         self.constants_page.set_flow(flow.key)
+        self.notice_page.set_flow(flow.key)
         self.table_viewer_page.set_flow(flow.key)
         self._table_count = 0
 
@@ -210,23 +235,12 @@ class MainWindow(QMainWindow):
         self._step_layout.addWidget(self._steps)
         self._locked_max_reached = None
 
-    def _on_step_clicked(self, index: int) -> None:
-        # 스텝바에서 이미 지나온 단계를 눌렀을 때
-        if index == 0:
-            # 조견표 업로드 화면은 이 창 밖에 있음 -> 바깥에서 처리하도록 넘긴다
-            self.uploadRequested.emit()
-            return
-        self.go_to_step(index)
 
-    def mousePressEvent(self, event):  # noqa: N802 (Qt 시그니처)
-        # 빈 곳을 누르면 입력칸에서 포커스(깜빡이는 커서)를 뗀다.
-        #
-        # 입력칸·버튼처럼 클릭을 직접 받는 위젯이 아니면 이벤트가 여기까지 올라온다.
-        # 포커스가 풀리면서 ValueField 의 editingFinished 가 걸려 숫자도 다시 포맷된다.
+    def mousePressEvent(self, event):
         focused = QApplication.focusWidget()
         if isinstance(focused, QLineEdit):
             focused.clearFocus()
-        self.table_viewer_page.hide_bubbles()  # 표 바깥을 누르면 말풍선도 닫는다
+        self.table_viewer_page.hide_bubbles()
         super().mousePressEvent(event)
 
     def set_extracted_values(self, values: dict) -> None:
@@ -235,7 +249,10 @@ class MainWindow(QMainWindow):
 
     def set_tables(self, tables: dict[int, tuple[pd.DataFrame, object]]) -> None:
         # 검증 기준값: 사용자가 확인·수정을 마친 최종 상수 (단가표 생성에 쓴 값과 동일)
-        self.table_viewer_page.set_values(self.constants_page.values())
+        # 고시 검증 화면의 values() 는 출처까지 담은 중첩 dict 라, 평평한 return_values() 사용
+        page = self._constants_page()
+        flat_values = page.return_values() if hasattr(page, "return_values") else page.values()
+        self.table_viewer_page.set_values(flat_values)
         for index in range(self._table_count):
             if index not in tables:
                 self.table_viewer_page.set_table(self._flow.key, index, pd.DataFrame())
@@ -246,7 +263,37 @@ class MainWindow(QMainWindow):
     # --- 동작 -------------------------------------------------------------
     def _on_values_ready(self, values: ConstantValues) -> None:
         # 업로드 화면에서 문서를 다 읽었을 때
-        self.constants_page.set_values(values)
+        if self._flow.key == NOTICE_VERIFY:
+            reference_dict = {}
+            raw_data = values if isinstance(values, list) else [values]
+
+            # 데이터 평평하게 펴기
+            for tab in raw_data:
+                for key, val in tab.items():
+                    if isinstance(val, dict):
+                        for sub_key, sub_val in val.items():
+                            reference_dict[f"{key}.{sub_key}"] = sub_val
+                    else:
+                        reference_dict[key] = val
+            self.notice_page.set_reference(reference_dict)
+
+            # 슬롯 파일 받아오기
+            upload_files = self.upload_page.files()
+            gosi_file = upload_files.get("guide")
+            sheet_file = upload_files.get("sheet")
+            table_file = upload_files.get("unit_price_table")
+
+            if table_file and hasattr(table_file, "path"):
+                self.notice_page.set_unit_price_path(table_file.path)
+
+            if sheet_file and hasattr(sheet_file, "path"):
+                self.notice_page.set_sheet_path(sheet_file.path)
+
+            if gosi_file and hasattr(gosi_file, "path"):
+                self.notice_page.load_notice(gosi_file.path)
+
+        else:
+            self.constants_page.set_values(values)
         self.go_to_step(Screen.CONSTANTS.step)
 
     def _on_upload_files_diverged(self, diverged: bool) -> None:
@@ -275,7 +322,16 @@ class MainWindow(QMainWindow):
         # 상수 확인 화면에서 단가표 생성을 마치고 '다음 단계로'를 눌렀을 때
         self.set_tables(tables)
         self.go_to_step(Screen.TABLES.step)
-        self.constants_page.reset_next_button()
+        self._constants_page().reset_next_button()
+
+    def _on_gosi_prices_confirmed(self, prices: dict) -> None:
+        # 고시 검증 2단계에서 '다음 단계로' 버튼을 눌렀을 때 실행됨
+        QMessageBox.information(
+            self,
+            "검증 완료",
+            "고시 데이터 검증 및 단가 확인이 완료되었습니다!\n(결제단가표 생성 로직은 추후 연결됩니다.)"
+        )
+        self.go_home()
 
     def _on_export(self, tab_index: int, df: pd.DataFrame) -> None:
         if df.empty:

@@ -12,3 +12,5 @@ CLAUDE.md
 
 # 아키텍처 결정용 임시 실험 — 폴더째 삭제 가능, 커밋 대상 아님
 _experiments/
+
+.recent_paths_cache.json
