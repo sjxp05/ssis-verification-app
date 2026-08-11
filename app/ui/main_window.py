@@ -75,7 +75,6 @@ class MainWindow(QMainWindow):
 
         self._header.backRequested.connect(self.go_home)
 
-        # 흐름마다 단계 문구가 달라서 StepIndicator 는 통째로 갈아 끼운다.
         self._step_holder = QWidget()
         self._step_layout = QVBoxLayout(self._step_holder)
         self._step_layout.setContentsMargins(0, 0, 0, 0)

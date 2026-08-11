@@ -30,12 +30,13 @@ _DOC_SHOW_TEXT = "고시 원문 펼치기"
 
 TABS = {
     "notice_verify": [
-        {"label": "월 한도액", "title": "고시와 조견표의 월한도액 정보가 맞는지 확인해 주세요.", "card_title": "월 한도액 대조"},
+        {"label": "조견표 대조", "title": "고시와 조견표의 값이 맞는지 확인해 주세요.", "card_title": "조견표 ↔ 고시 대조"},
         {"label": "서비스 단가", "title": "서비스별 단가가 맞는지 확인해주세요.", "card_title": "서비스 단가 확인"},
     ],
 }
 
-TAB_CHAPTERS = {0: ("제2장",), 1: ("제3장", "제4장")}
+
+TAB_CHAPTERS = {0: ("제2장", "제3장", "부"), 1: ("제3장", "제4장")}
 COMPARE_COLUMNS = [("항목", False, True), ("조견표", True, False), ("고시", True, False), ("결과", False, False)]
 PRICE_COLUMNS = [("급여", False, False), ("구분", False, True), ("금액", True, False), ("가산수당", True, False)]
 RESULT_COLORS = {"일치": "#2F855A", "불일치": "#C53030", "조견표에 없음": "#96620F"}
@@ -214,7 +215,6 @@ class GosiConstantsPage(QWidget):
         self._result = None
         self._path = None
         self._reference = {}
-        # 흐름을 바꿨다 돌아오면 _refresh_state() 가 낡은 표를 보고 READY 로 판단하던 문제 수정
         self._unit_price_path = None
         self._sheet_path = None
         # 이미 만들어 둔 표와 돌고 있던 생성 작업은 낡은 값이므로 함께 버린다.
@@ -300,7 +300,6 @@ class GosiConstantsPage(QWidget):
         self._compare_table.fill_data(compare_data, self._only_diff)
         self._price_table.fill_data(prices_data)
 
-        # 문서를 새로 넣으면 장 필터가 풀리므로 지금 탭에 맞게 다시 필터 걸어줌
         self._doc.set_blocks((self._result or {}).get("블록", []))
         self._doc.set_visible_chapters(TAB_CHAPTERS.get(self._tab_index, ()))
 
@@ -392,7 +391,7 @@ class GosiConstantsPage(QWidget):
             self._tables = {}
             self._set_state(READY)
             return
-
+        
         # 파일 확인을 먼저 끝낸 뒤에 BUSY 로 들어간다.
         if not self._unit_price_path or not os.path.exists(self._unit_price_path):
             self._set_state(FAILED, "기본급여 단가표 파일을 찾지 못했습니다.\n"

@@ -16,6 +16,9 @@ ANCHORS = {
     # 조견표 대조용
     "월한도액": {"제목": "월 한도액", "표안": ["활동지원급여 구간", "종합점수"]},
     "주간활동": {"제목": "월 한도액", "표안": ["주간활동 기본형"]},
+
+    "인정조사기본급여": {"제목": "부 칙", "표안": ["활동지원등급", "기본급여"]},
+    "추가급여": {"제목": "부 칙", "표안": ["추가급여"]},
 }
 
 # 결제단가표로 넘길 서비스 목록
@@ -26,6 +29,32 @@ REF_KEY_FORMATS = {
     "기본형": "종합조사 월한도액 (기본형).{구간}구간",
     "확장형": "종합조사 월한도액 (확장형).{구간}구간",
 }
+
+REF_INJEONG_FORMAT = "인정조사 월한도액 (기본형).{등급}"
+REF_ADD_FORMAT = "추가급여 월한도액.{항목}"
+
+PRICE_KEY_ALIASES = {
+    "활동보조.일반": "기본단가",
+}
+
+REF_IGNORE_KEYS = {"사업년도", "차수"}
+
+# 순서 바뀌어도 버티는 것들 ..
+_ADD_TIERS = (("400점이상", 0), ("380점미만", 2))
+_ADD_BY_HOUSEHOLD = {
+    "독거": ("최중증1인가구", "1등급1인가구", "2등급이하1인가구"),
+    "가구구성원": ("최중증취약가구", "1등급취약가구", "2등급이하취약가구"),
+}
+
+# 순서 중요(변경 금지!!)
+_ADD_BY_PHRASE = (
+    ("나머지", "나머지가구구성원의직장생활등"),
+    ("일시적으로부재", "보호자일시부재"),
+    ("자립", "자립준비"),
+    ("학교에다니는", "학교생활"),
+    ("직장에다니는", "직장생활"),
+    ("출산", "출산"),
+)
 
 # 금액으로 인정할 최소 자릿수. '1회당' 같은 문구를 금액으로 오인하지 않게 한다.
 _MONEY = re.compile(r"([\d,]{4,})원")
@@ -42,7 +71,20 @@ FIX_GUIDE = (
 
 # 셀 안의 모든 텍스트 조각(hp:t)을 이어붙인다
 def _cell_text(tc):
+    lines = []
+    for p in tc.iter(f"{HP}p"):
+        line = "".join(t.text or "" for t in p.iter(f"{HP}t")).strip()
+        if line:
+            lines.append(line)
+    if lines:
+        return "\n".join(lines)
+    # 문단 없이 텍스트만 들어있는 셀(드묾)에 대한 대비
     return "".join(t.text or "" for t in tc.iter(f"{HP}t")).strip()
+
+
+# 공백·줄바꿈을 모두 없앤 형태. 표를 찾거나 분류를 알아볼 때 쓴다.
+def _squeeze(text):
+    return re.sub(r"\s+", "", text or "")
 
 
 # "text" 문단텍스트와 "table" tbl요소 구분해 목록 반환
@@ -132,15 +174,19 @@ def find_table(tables, service, anchors=None):
     more_specific = [a["제목"] for n, a in anchors.items()
                      if n != service and a["제목"] != title and title in a["제목"]]
 
+    squeezed_title = _squeeze(title)
+    squeezed_inner = [_squeeze(k) for k in inner]
+    squeezed_more = [_squeeze(x) for x in more_specific]
+
     hits = []
     for t in tables:
-        heading = _heading(t)
-        if title not in heading:
+        heading = _squeeze(_heading(t))
+        if squeezed_title not in heading:
             continue
-        if any(other in heading for other in more_specific):
+        if any(other in heading for other in squeezed_more):
             continue
-        flat = " ".join(c for row in t["격자"] for c in row)
-        if all(k in flat for k in inner):
+        flat = _squeeze(" ".join(c for row in t["격자"] for c in row))
+        if all(k in flat for k in squeezed_inner):
             hits.append(t)
 
     if len(hits) != 1:
@@ -192,9 +238,10 @@ def _read_hwaldong(hwpx_path, table):
             raise ValueError(
                 f"활동보조 행에서 금액 2개(시간당+가산수당)를 기대했으나 {nums}: {raw}")
         # 라벨의 키워드로 분류
-        if "심야" in label:
+        squeezed = _squeeze(label)
+        if "심야" in squeezed:
             key = "심야"
-        elif "공휴일" in label or "근로자의 날" in label:
+        elif "공휴일" in squeezed or "근로자의날" in squeezed:
             key = "공휴일"
         else:
             key = "일반"
@@ -223,8 +270,8 @@ def _read_mokyok(hwpx_path, table):
             raise ValueError(f"방문목욕 행에서 금액 1개를 기대했으나 {nums}: {raw}")
         # 주의: 가정내입욕 라벨에도 "차량 내 온수"라는 문구가 들어있으므로
         # "차량"이 아니라 목욕 장소를 나타내는 특징 문구로 구분한다
-        squeezed = label.replace(" ", "")
-        if "이동목욕용" in label and "차량내에서" in squeezed:
+        squeezed = _squeeze(label)
+        if "이동목욕용" in squeezed and "차량내에서" in squeezed:
             key = "차량내입욕"
         elif "가정내에서" in squeezed:
             key = "가정내입욕"
@@ -250,7 +297,7 @@ def _read_ganho(hwpx_path, table):
             continue
         if len(nums) != 1:
             raise ValueError(f"방문간호 행에서 금액 1개를 기대했으나 {nums}: {raw}")
-        squeezed = label.replace(" ", "")
+        squeezed = _squeeze(label)
         if "30분미만" in squeezed:
             key = "30분미만"
         elif "60분미만" in squeezed:
@@ -277,14 +324,17 @@ def _read_jisiseo(hwpx_path, table):
         nums = _amounts(raw)
         if not nums:
             continue
-        if "의료법" in label or "의료기관" in label:
+        squeezed = _squeeze(label)
+        if "의료법" in squeezed or "의료기관" in squeezed:
             org = "의료기관"
-        elif "지역보건법" in label or "보건소" in label:
+        elif "지역보건법" in squeezed or "보건소" in squeezed:
             org = "보건기관"
         else:
             raise ValueError(f"지시서 발급기관을 인식할 수 없습니다: {label}")
         ways = []
-        for m in re.finditer(r"(대상자가.*?방문|의사가\s*가정을\s*방문)", label):
+        
+        for m in re.finditer(r"(대상자가.*?방문|의사가\s*가정을\s*방문)",
+                             " ".join(label.split())):
             ways.append("방문" if m.group().startswith("대상자") else "의사내방")
         if len(ways) != len(nums):
             raise ValueError(
@@ -318,6 +368,77 @@ def _read_wolhando(hwpx_path, table):
             "출처": _make_source(hwpx_path, table, r, 2, row[0], " ".join(row))}
     if not result:
         raise ValueError("활동지원급여 월 한도액 표에서 구간을 하나도 읽지 못했습니다.")
+    return result
+
+
+def _read_injeong(hwpx_path, table):
+    columns = {}
+    for row in table["격자"]:
+        found = {}
+        for c, cell in enumerate(row):
+            m = re.search(r"(\d+)\s*등급", _squeeze(cell))
+            if m and c > 0:
+                found.setdefault(f"{m.group(1)}등급", c)
+        if len(found) >= 2:
+            columns = found
+            break
+    if not columns:
+        raise ValueError("인정조사 기본급여 표에서 등급 머리행을 찾지 못했습니다.")
+
+    result = {}
+    for r, row in enumerate(table["격자"]):
+        if "기본급여" not in _squeeze(row[0] if row else ""):
+            continue
+        for grade, c in columns.items():
+            nums = _amounts(row[c] if c < len(row) else "")
+            if len(nums) != 1:
+                raise ValueError(
+                    f"인정조사 기본급여 '{grade}' 칸에서 금액 1개를 기대했으나 {nums}")
+            result[grade] = {
+                "금액": nums[0],
+                "출처": _make_source(hwpx_path, table, r, c,
+                                   f"기본급여 {grade}", " ".join(row)),
+            }
+    if not result:
+        raise ValueError("인정조사 기본급여 행을 찾지 못했습니다.")
+    return result
+
+
+def _add_item_name(label):
+    squeezed = _squeeze(label)
+    for phrase, name in _ADD_BY_PHRASE:
+        if phrase in squeezed:
+            return name
+    for mark, names in _ADD_BY_HOUSEHOLD.items():
+        if mark not in squeezed:
+            continue
+        for phrase, index in _ADD_TIERS:
+            if phrase in squeezed:
+                return names[index]
+        return names[1]  # 380~399점 구간 (표기가 ～ / ~ 로 갈려 문구 대신 소거법)
+    return None
+
+
+def _read_add_benefit(hwpx_path, table):
+    result = {}
+    for r, row in enumerate(table["격자"]):
+        label = row[0] if row else ""
+        nums = _amounts(" ".join(row))
+        if not nums:
+            continue  # 머리행
+        name = _add_item_name(label)
+        if name is None:
+            raise ValueError(f"추가급여 항목을 알아보지 못했습니다: {label}")
+        if len(nums) != 1:
+            raise ValueError(f"추가급여 '{name}' 행에서 금액 1개를 기대했으나 {nums}")
+        if name in result:
+            raise ValueError(f"추가급여 '{name}' 항목이 중복 추출되었습니다: {label}")
+        result[name] = {
+            "금액": nums[0],
+            "출처": _make_source(hwpx_path, table, r, 1, label, " ".join(row)),
+        }
+    if not result:
+        raise ValueError("추가급여 표에서 항목을 하나도 읽지 못했습니다.")
     return result
 
 
@@ -447,6 +568,17 @@ def _validate_limits(limits):
                 f"·  확장형  {show_price(item['확장형'])}",
                 item["확장형"]["출처"]))
 
+    injeong = limits.get("인정조사기본급여") or {}
+    grades = sorted(injeong, key=lambda g: int(re.sub(r"\D", "", g) or 0))
+    amounts = [injeong[g]["금액"] for g in grades]
+    if amounts and (amounts != sorted(amounts, reverse=True)
+                    or len(set(amounts)) != len(amounts)):
+        issues.append(_issue(
+            "인정조사 기본급여",
+            "등급 순으로 금액이 줄지 않습니다.\n"
+            + "\n".join(f"·  {g}  {show_price(injeong[g])}" for g in grades),
+            injeong[grades[0]]["출처"]))
+
     ordered = [base[s]["금액"] for s in sorted(base)]
     if ordered != sorted(ordered, reverse=True) or len(set(ordered)) != len(ordered):
         issues.append(_issue("활동지원급여",
@@ -461,7 +593,23 @@ def flatten_limits(limits):
         for kind, key_format in REF_KEY_FORMATS.items():
             if kind in item:
                 flat[key_format.format(구간=segment)] = item[kind]
+    for grade, item in (limits.get("인정조사기본급여") or {}).items():
+        flat[REF_INJEONG_FORMAT.format(등급=grade)] = item
+    for name, item in (limits.get("추가급여") or {}).items():
+        flat[REF_ADD_FORMAT.format(항목=name)] = item
     return flat
+
+
+def flatten_prices(prices):
+    return {f"{service}.{key}": item
+            for service, items in (prices or {}).items()
+            for key, item in items.items()
+            if f"{service}.{key}" in PRICE_KEY_ALIASES}
+
+
+def _norm_key(key):
+    return re.sub(r"[\s()（）\[\]「」『』·・,\.\-_/]", "", str(key))
+
 
 # 조견표에서 온 값을 금액(int)으로 맞춰서 일치여부  처리
 def _as_amount(value):
@@ -475,14 +623,35 @@ def _as_amount(value):
 
 # 고시 값과 조견표 값을 대조한다.
 # 조견표에만 있는 키(본인부담률·상한액 등 고시에 없는 항목)는 대조 대상에서 제외
-def compare_with_reference(limits, reference):
+def compare_with_reference(limits, reference, prices=None):
     reference = reference or {}
     gosi = flatten_limits(limits)
+    gosi.update(flatten_prices(prices))
+
+    ref_index = {}
+    for ref_key in reference:
+        ref_index.setdefault(_norm_key(ref_key), ref_key)
+    used_ref_keys = set()
+
     rows, mismatched, missing = [], 0, 0
 
     for key in sorted(gosi, key=_sort_key):
         item = gosi[key]
-        raw = reference.get(key)
+        # [수정 4] 기존: ref_value = reference.get(key) 를 그대로 == 비교
+        # [수정 12] 정확히 같은 키 -> 별칭 -> 공백·기호를 지운 형태 순으로 찾는다
+        matched_key = None
+        for candidate in (key, PRICE_KEY_ALIASES.get(key)):
+            if candidate and candidate in reference:
+                matched_key = candidate
+                break
+        else:
+            for candidate in (key, PRICE_KEY_ALIASES.get(key)):
+                if candidate and _norm_key(candidate) in ref_index:
+                    matched_key = ref_index[_norm_key(candidate)]
+                    break
+        if matched_key is not None:
+            used_ref_keys.add(matched_key)
+        raw = reference.get(matched_key) if matched_key is not None else None
         ref_value = _as_amount(raw)
         if raw is None:
             state = "조견표에 없음"
@@ -500,7 +669,7 @@ def compare_with_reference(limits, reference):
         "일치": sum(1 for r in rows if r["결과"] == "일치"),
         "불일치": mismatched,
         "조견표에 없음": missing,
-        "대조 안 함": sorted(set(reference) - set(gosi)),
+        "대조 안 함": sorted(set(reference) - used_ref_keys - REF_IGNORE_KEYS),
     }
 
 
@@ -536,10 +705,12 @@ def read_gosi_prices(hwpx_path, tables=None, issues=None):
 
 
 # 고시에서 월 한도액을 읽는다 (조견표 대조 전용).
-def read_gosi_limits(hwpx_path, tables=None, issues=None):
+def read_gosi_limits(hwpx_path, tables=None, issues=None):  # [수정 5] 월한도액/주간활동도 동일
     tables = tables if tables is not None else parse_tables(hwpx_path)
     readers = {"활동지원급여": ("월한도액", _read_wolhando),
-               "주간활동": ("주간활동", _read_jugan)}
+               "주간활동": ("주간활동", _read_jugan),
+               "인정조사기본급여": ("인정조사기본급여", _read_injeong),
+               "추가급여": ("추가급여", _read_add_benefit)}
     limits = {}
     for name, (anchor, reader) in readers.items():
         try:
@@ -568,5 +739,5 @@ def read_gosi(hwpx_path, reference=None):
         "단가": prices,          # 결제단가표로 넘길 값
         "월한도액": limits,       # 조견표 대조용 (넘기지 않는다)
         "검증": issues,
-        "대조": compare_with_reference(limits, reference),
+        "대조": compare_with_reference(limits, reference, prices),  # [수정 12] 단가 포함
     }
