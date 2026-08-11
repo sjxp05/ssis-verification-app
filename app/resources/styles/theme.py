@@ -40,6 +40,9 @@ SUCCESS_BG = "#F0FDF4"
 SUCCESS_BORDER = "#86EFAC"
 SUCCESS_SOFT = "#DCFCE7"
 
+ERROR_BG = "#FF7A7A"    # 오류 셀 (분명한 빨강 계열)
+WARNING_BG = "#F4D87B"  # 확인 필요 셀 (분명한 노랑 계열)
+
 # --- Metric --------------------------------------------------------------
 RADIUS = "6px"
 RADIUS_SM = "4px"

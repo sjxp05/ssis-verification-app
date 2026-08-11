@@ -554,6 +554,20 @@ QLineEdit#FixInput {
 QLineEdit#FixInput:focus {
     border-color: ${ACCENT};
 }
+/* ---------- 행 추가/삭제 (+/-) — 기호만, 박스 없음 ---------- */
+QPushButton#RowButton {
+    background: transparent;
+    border: none;
+    color: ${TEXT_MUTED};
+    font-size: 18px;
+    font-weight: 700;
+    padding: 0px;
+}
+QPushButton#RowButton:hover {
+    color: ${ACCENT};
+}
+QPushButton#RowButton:pressed {
+    color: ${NAVY};
 
 /* 고시 원문 뷰어 */
 QTextBrowser#NoticeDocument {
