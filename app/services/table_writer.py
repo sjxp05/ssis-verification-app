@@ -1,9 +1,6 @@
 from collections import Counter
 from pandas import DataFrame
 
-# 임시로 사용할 고시검증 반환값
-from services.tmp.service_master import SERVICE_MASTER
-
 # 기본급여 단가표 컬럼명 - 서식 변경시 여기만 변경
 COL_SEQ = "안"
 COL_BUSINESS_TYPE_ID = "사업유형ID"
@@ -218,6 +215,48 @@ BUSINESS = {
 
 # 결제단가표에 포함하지 않는 등급 (부적합)
 EXCLUDED_GRADES = {"9999"}
+
+# 각 서비스 유형별 시간 분리 방법
+TIME_DIVISIONS = {
+    "활동보조": [30, 60],
+    "방문목욕": [40, 60],
+    "방문간호": [0, 30, 60],
+    "방문간호지시서": [60],
+}
+
+# 활동보조/방문간호 서비스종류 구분
+SERVICE_KINDS = {
+    "활동보조": ["사회활동지원", "신체활동지원", "가사활동지원", "기타서비스"],
+    "방문간호": ["기본간호", "치료간호", "교육상담"],
+}
+
+# 방문간호 시간 매핑
+NURSING_TIME_CODES = {"30분미만": 0, "30분이상60분미만": 30, "60분이상": 60}
+
+# 서비스유형 코드
+SERVICE_TYPE_CODES = {
+    "활동보조": "ST0001",
+    "방문간호": "ST0002",
+    "방문목욕": "ST0003",
+    "방문간호지시서": "ST0004",
+}
+
+# 서비스종류 코드
+SERVICE_KIND_CODES = {
+    "사회활동지원": "SK0001",
+    "신체활동지원": "SK0002",
+    "가사활동지원": "SK0003",
+    "기타서비스": "SK0004",
+    "기본간호": "SK0005",
+    "치료간호": "SK0006",
+    "교육상담": "SK0007",
+    "차량내입욕": "SK0008",
+    "가정내입욕": "SK0009",
+    "의료기관 방문": "SK0010",
+    "의료기관 의사내방": "SK0011",
+    "보건기관 방문": "SK0012",
+    "보건기관 의사내방": "SK0013",
+}
 
 # 활동보조 4x2=8, 방문간호 3x3=9, 방문목욕 2x2=4, 지시서 4x1=4
 EXPECTED_SERVICE_ROW_COUNTS = {
@@ -592,6 +631,75 @@ class TableWriter:
 
         return df.sort_values(COL_GRADE_CODE).to_dict("records")
 
+    # 서비스단가를 결제단가표로 생성하기 쉽게 3단계 dict로 재구성
+    def _format_service_prices(self, prices: dict) -> dict:
+        formatted_prices = {}
+
+        for key, value in prices.items():
+            if key.find(".") != -1:
+                prefix, suffix = key.split(".")
+
+                if prefix == "활동보조":
+                    formatted_prices.setdefault(
+                        prefix,
+                        {
+                            service_kind: {time: {} for time in TIME_DIVISIONS[prefix]}
+                            for service_kind in SERVICE_KINDS[prefix]
+                        },
+                    )
+                    for service_kind in SERVICE_KINDS[prefix]:
+                        for time in TIME_DIVISIONS[prefix]:
+                            price = value
+                            if time == 30:
+                                price = self._rounddown((price * 0.5), -1)
+                            formatted_prices[prefix][service_kind][time].update(
+                                {"day": price} if suffix == "일반" else {"night": price}
+                            )
+
+                elif prefix == "방문간호":
+                    formatted_prices.setdefault(
+                        prefix,
+                        {service_kind: {} for service_kind in SERVICE_KINDS[prefix]},
+                    )
+
+                    for service_kind in SERVICE_KINDS[prefix]:
+                        formatted_prices[prefix][service_kind].update(
+                            {NURSING_TIME_CODES[suffix]: {"day": value, "night": value}}
+                        )
+
+                elif prefix == "방문목욕":
+                    formatted_prices.setdefault(prefix, {})
+
+                    for time in TIME_DIVISIONS[prefix]:
+                        price = value
+                        if time == 40:
+                            price = self._rounddown(value * 0.8, -1)
+
+                        formatted_prices[prefix].update(
+                            {
+                                suffix: {
+                                    time: {"day": price, "night": price}
+                                    for time in TIME_DIVISIONS[prefix]
+                                }
+                            }
+                        )
+
+                else:
+                    formatted_prices.setdefault(prefix, {})
+                    suffix = suffix.replace("_", " ")
+
+                    formatted_prices[prefix].update(
+                        {
+                            suffix: {
+                                time: {"day": price, "night": price}
+                                for time in TIME_DIVISIONS[prefix]
+                            }
+                        }
+                    )
+
+        print(formatted_prices)
+        return formatted_prices
+
     # 각 등급별로 유형별 조합 수와 단가 상식(0원 이하, 심야<주간 금지)을 검증
     def _validate_service_rows(self, rows: list[dict]) -> None:
 
@@ -612,65 +720,27 @@ class TableWriter:
     # TODO: 고시 검증 값을 어떤 형태로 받는지에 따라 수정할 것
     # (서비스 유형 x 종류 x 시간대) 조합 25개 행 만들기
     def _build_service_rows(self, prices: dict) -> list[dict]:
+        formatted_prices = self._format_service_prices(prices)
+
         rows = []
-        for svc in SERVICE_MASTER:
-            rule = svc["단가"]
 
-            for sk_code, sk_name in svc["종류"]:
-                if rule["방식"] == "시간비율":
-                    src = rule["원천"].get(sk_code) or rule["원천"]["공통"]
-                    base = prices[src[0]][src[1]]
-
-                    for time_code, ratio in rule["시간대"]:
-                        day = self._rounddown(base * ratio, -1)
-
-                        if "심야배율" in rule:
-                            night = self._rounddown(day * rule["심야배율"], -1)
-                            # 기준 시간대(비율 1.0)에서만 고시 명시값과 직접 비교 가능
-                            if ratio == 1.0:
-                                chk = rule["심야확인"]
-                                stated = prices[chk[0]][chk[1]]
-                                if night != stated:
-                                    raise ValueError(
-                                        f"{svc['서비스유형명']} 심야단가 계산값이 고시 명시값과 다릅니다.\n"
-                                        f"  계산값     : {night:,}원 = 주간 {day:,}원 x {rule['심야배율']} (10원 미만 절사)\n"
-                                        f"  고시 명시값: {stated:,}원\n"
-                                        f"조치: 고시 문서에서 해당 금액이나 심야배율을 확인하세요."
-                                    )
-                        else:
-                            night = day  # 심야 구분이 없는 서비스는 주간과 동일
-
-                        rows.append(
-                            {
-                                PAYMENT_COL_SERVICE_TYPE_ID: svc["서비스유형ID"],
-                                PAYMENT_COL_SERVICE_TYPE_NAME: svc["서비스유형명"],
-                                PAYMENT_COL_SERVICE_KIND: sk_code,
-                                PAYMENT_COL_SERVICE_KIND_NAME: sk_name,
-                                PAYMENT_COL_SERVICE_TIME: time_code,
-                                PAYMENT_COL_SERVICE_TIME_NAME: TIME_NAMES[time_code],
-                                PAYMENT_COL_UNIT_PRICE: day,
-                                PAYMENT_COL_UNIT_PRICE_NIGHT: night,
-                            }
-                        )
-
-                elif rule["방식"] == "시간대별금액":
-                    for time_code, src in rule["시간대"]:
-                        amount = prices[src[0]][src[1]]
-                        rows.append(
-                            {
-                                PAYMENT_COL_SERVICE_TYPE_ID: svc["서비스유형ID"],
-                                PAYMENT_COL_SERVICE_TYPE_NAME: svc["서비스유형명"],
-                                PAYMENT_COL_SERVICE_KIND: sk_code,
-                                PAYMENT_COL_SERVICE_KIND_NAME: sk_name,
-                                PAYMENT_COL_SERVICE_TIME: time_code,
-                                PAYMENT_COL_SERVICE_TIME_NAME: TIME_NAMES[time_code],
-                                PAYMENT_COL_UNIT_PRICE: amount,
-                                PAYMENT_COL_UNIT_PRICE_NIGHT: amount,  # 심야 구분 없음
-                            }
-                        )
-
-                else:
-                    raise ValueError(f"알 수 없는 단가 계산 방식: {rule['방식']}")
+        for service_type, value in formatted_prices.items():
+            for service_kind, value2 in value.items():
+                for time, value3 in value2.items():
+                    rows.append(
+                        {
+                            PAYMENT_COL_SERVICE_TYPE_ID: SERVICE_TYPE_CODES[
+                                service_type
+                            ],
+                            PAYMENT_COL_SERVICE_TYPE_NAME: service_type,
+                            PAYMENT_COL_SERVICE_KIND: SERVICE_KIND_CODES[service_kind],
+                            PAYMENT_COL_SERVICE_KIND_NAME: service_kind,
+                            PAYMENT_COL_SERVICE_TIME: time,
+                            PAYMENT_COL_SERVICE_TIME_NAME: TIME_NAMES[time],
+                            PAYMENT_COL_UNIT_PRICE: value3["day"],
+                            PAYMENT_COL_UNIT_PRICE_NIGHT: value3["night"],
+                        }
+                    )
 
         self._validate_service_rows(rows)  # 조합 수 25개인지, 단가 율 검증
         return rows
@@ -791,6 +861,15 @@ class TableWriter:
             raise ValueError("[ERROR] 기본급여 단가표 읽기 실패")
         grades = self._prepare_basic_grades(basic_df)
 
+        ## service_prices 형식
+        """
+        {'활동보조.일반': 17270, '활동보조.심야': 25900, '활동보조.공휴일': 25900, 
+        '방문목욕.차량내입욕': 88990, '방문목욕.가정내입욕': 80230, 
+        '방문간호.30분미만': 42880, '방문간호.30분이상60분미만': 53770, '방문간호.60분이상': 64690, 
+        '방문간호지시서.의료기관_방문': 23180, '방문간호지시서.의료기관_의사내방': 71280, 
+        '방문간호지시서.보건기관_방문': 6260, '방문간호지시서.보건기관_의사내방': 13500}
+        """
+
         service_rows = self._build_service_rows(service_prices)
 
         business_year = service_prices.get(PAYMENT_COL_BUSINESS_YEAR, 2026)
@@ -799,3 +878,59 @@ class TableWriter:
         df = self._build_payment_rows(grades, service_rows, business_year, chasu)
 
         return {0: (df, None)}
+
+
+"""
+현재 출력 형태
+{
+    "활동보조": {
+        "사회활동지원": {
+            30: {"day": 8630, "night": 12950},
+            60: {"day": 17270, "night": 25900},
+        },
+        "가사활동지원": {
+            30: {"day": 8630, "night": 12950},
+            60: {"day": 17270, "night": 25900},
+        },
+        "신체활동지원": {
+            30: {"day": 8630, "night": 12950},
+            60: {"day": 17270, "night": 25900},
+        },
+        "기타서비스": {
+            30: {"day": 8630, "night": 12950},
+            60: {"day": 17270, "night": 25900},
+        },
+    },
+    "방문목욕": {
+        "차량내입욕": {
+            40: {"day": 88990, "night": 88990},
+            60: {"day": 88990, "night": 88990},
+        },
+        "가정내입욕": {
+            40: {"day": 80230, "night": 80230},
+            60: {"day": 80230, "night": 80230},
+        },
+    },
+    '방문간호': {
+        '기본간호': {
+            0: {'day': 42880, 'night': 42880}, 
+            30: {'day': 53770, 'night': 53770}, 
+            60: {'day': 64690, 'night': 64690}}, 
+        '치료간호': {
+            0: {'day': 42880, 'night': 42880}, 
+            30: {'day': 53770, 'night': 53770}, 
+            60: {'day': 64690, 'night': 64690}}, 
+        '교육상담': {
+            0: {'day': 42880, 'night': 42880}, 
+            30: {'day': 53770, 'night': 53770}, 
+            60: {'day': 64690, 'night': 64690}
+        }
+    },
+    "방문간호지시서": {
+        "의료기관 방문": {60: {"day": 80230, "night": 80230}},
+        "의료기관 의사내방": {60: {"day": 80230, "night": 80230}},
+        "보건기관 방문": {60: {"day": 80230, "night": 80230}},
+        "보건기관 의사내방": {60: {"day": 80230, "night": 80230}},
+    },
+}
+"""
