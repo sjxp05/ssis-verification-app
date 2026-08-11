@@ -1,9 +1,11 @@
 from __future__ import annotations
 import os
+import copy
+from PyQt6.QtGui import QColor
 from PyQt6.QtCore import QObject, QRunnable, QThreadPool, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QHBoxLayout, QLabel, QMessageBox, QScrollArea, QSplitter,
-    QStackedWidget, QVBoxLayout, QWidget,
+    QStackedWidget, QVBoxLayout, QWidget, QAbstractItemView
 )
 import pandas as pd
 
@@ -14,7 +16,7 @@ from ui.components.button import GhostButton, PrimaryButton
 from ui.components.tab_bar import SegmentedTabBar
 from utils.qss import set_state
 from ui.widgets.gosi_panel import GosiDocumentViewer
-from ui.widgets.gosi_tables import CompareTableWidget, PriceTableWidget
+from ui.widgets.gosi_tables import CompareTableWidget, PriceTableWidget, PriceEditDelegate, _to_int
 
 WAITING, FILLED, BUSY, READY, FAILED = "waiting", "filled", "busy", "ready", "failed"
 
@@ -40,6 +42,8 @@ TAB_CHAPTERS = {0: ("제2장", "제3장", "부"), 1: ("제3장", "제4장")}
 COMPARE_COLUMNS = [("항목", False, True), ("조견표", True, False), ("고시", True, False), ("결과", False, False)]
 PRICE_COLUMNS = [("급여", False, False), ("구분", False, True), ("금액", True, False), ("가산수당", True, False)]
 RESULT_COLORS = {"일치": "#2F855A", "불일치": "#C53030", "조견표에 없음": "#96620F"}
+
+EDITABLE_PRICE_COLS = (2, 3)  # 금액(2열), 가산수당(3열)
 
 class _TableWriteSignals(QObject):
     finished = pyqtSignal(int, object)
@@ -89,6 +93,7 @@ class GosiConstantsPage(QWidget):
         self._tab_index = 0
         self._doc_sizes: list[int] | None = None
         self._state = WAITING
+        self._price_overrides: dict[tuple[str, str, str], int] = {}
 
         self._build_ui()
         self._on_tab_changed(flow, 0)
@@ -167,18 +172,32 @@ class GosiConstantsPage(QWidget):
     # --- API --------------------------------------------------------------
     # 데이터 반환 함수
     def return_values(self) -> dict:
-        raw_prices = (self._result or {}).get("단가", {})
         formatted = {}
 
-        for service, items in raw_prices.items():
-            # service = "방문간호", "방문목욕", "활동보조" 등
+        for service, items in self._prices().items():
+            if not isinstance(items, dict): continue
+            
             for key, item in items.items():
-                # key = "30분미만", "일반", "심야" 등
-                flat_key = f"{service}.{key}"
-                formatted[flat_key] = item["금액"]
+                if not isinstance(item, dict): continue
+                
+                amount = _to_int(item.get("금액"))
+                if amount is not None:
+                    formatted[f"{service}.{key}"] = amount
 
         return formatted
 
+    def _prices(self) -> dict:
+        raw = (self._result or {}).get("단가") or {}
+        if not self._price_overrides:
+            return raw
+ 
+        merged = copy.deepcopy(raw)
+        for (service, key, col_name), value in self._price_overrides.items():
+            if service not in merged: merged[service] = {}
+            if key not in merged[service]: merged[service][key] = {}
+            merged[service][key][col_name] = value
+        return merged
+    
     def set_reference(self, values: dict | None) -> None:
         self._reference = values or {}
         if self._result:
@@ -200,6 +219,7 @@ class GosiConstantsPage(QWidget):
             return
         self._result = result
         self._path = path
+        self._price_overrides.clear()
         self._fill_all()
         self._refresh_state()
 
@@ -224,11 +244,13 @@ class GosiConstantsPage(QWidget):
         self._tables = None
         self._generation += 1
         self._only_diff = False
+        self._price_overrides.clear()
         self._diff_button.setText(_ONLY_DIFF_ON)
         set_state(self._diff_button, "state", "")
         self._fill_all()
         self._set_state(WAITING)
 
+    
     # --- 내부 빌드 및 채우기 로직 (간소화) --------------------------------------
 
     def _section(self, title: str, widget: QWidget) -> QWidget:
@@ -252,12 +274,14 @@ class GosiConstantsPage(QWidget):
         body = QWidget()
         body.setLayout(column)
         body.setObjectName("NoticeScrollBody")
+        body.setStyleSheet("background-color: transparent;")
 
         area = QScrollArea()
         area.setWidgetResizable(True)
         area.setFrameShape(QScrollArea.Shape.NoFrame)
         area.setObjectName("NoticeScrollArea")
         area.viewport().setObjectName("NoticeScrollViewport")
+        area.setStyleSheet("background-color: transparent;")
         area.setWidget(body)
         return area
 
@@ -281,6 +305,17 @@ class GosiConstantsPage(QWidget):
     def _build_price_panel(self) -> QWidget:
         self._price_table = PriceTableWidget()
         self._price_table.rowSelected.connect(self._doc.render_document)
+        self._price_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.DoubleClicked
+            | QAbstractItemView.EditTrigger.EditKeyPressed
+        )
+
+        self._price_delegate = PriceEditDelegate(0, 10_000_000, 100, self)
+        for col in EDITABLE_PRICE_COLS:
+            self._price_table.setItemDelegateForColumn(col, self._price_delegate)
+        
+        self._price_table.itemChanged.connect(self._on_item_changed) 
+        self._price_table.setToolTip("금액/가산수당 셀을 더블클릭하면 수정 가능합니다.")
 
         self._issue_label = QLabel()
         self._issue_label.setObjectName("FindingDetail")
@@ -298,10 +333,23 @@ class GosiConstantsPage(QWidget):
             self._subtitle.setText("고시 파일을 불러오면 대조 결과가 여기에 표시됩니다.")
 
         compare_data = (self._result or {}).get("대조") or {}
-        prices_data = (self._result or {}).get("단가", {})
-
         self._compare_table.fill_data(compare_data, self._only_diff)
-        self._price_table.fill_data(prices_data)
+
+        self._price_table.blockSignals(True) 
+        self._price_table.fill_data(self._prices())
+
+        for row in range(self._price_table.rowCount()):
+            for col in EDITABLE_PRICE_COLS:
+                item = self._price_table.item(row, col)
+                if item:
+                    item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
+                    keys = self._row_keys(row)
+                    if keys and (keys[0], keys[1], PRICE_COLUMNS[col][0]) in self._price_overrides:
+                        item.setBackground(QColor("#FFE79D"))
+                        item.setToolTip("수정한 값입니다.")
+
+        self._price_table.blockSignals(False)
+
 
         self._doc.set_blocks((self._result or {}).get("블록", []))
         self._doc.set_visible_chapters(TAB_CHAPTERS.get(self._tab_index, ()))
@@ -342,6 +390,66 @@ class GosiConstantsPage(QWidget):
             return "검증 통과 — 확인이 필요한 항목이 없습니다."
         blocks = [f"[{item['항목']}]\n{str(item['메시지']).strip()}" for item in issues]
         return "\n\n".join(blocks) + "\n\n" + gosi_verifier.FIX_GUIDE
+
+    # --- 단가 직접 수정 로직 ---
+    def _cell_key(self, item) -> str:
+        if item is None: return ""
+        stored = item.data(Qt.ItemDataRole.UserRole)
+        return str(stored if stored not in (None, "") else item.text() or "").strip()
+
+    def _row_keys(self, row: int) -> tuple[str, str] | None:
+        key = self._cell_key(self._price_table.item(row, 1))
+        if not key: return None
+        service = self._cell_key(self._price_table.item(row, 0))
+        cursor = row
+        while not service and cursor > 0: # 병합된 셀(급여명) 찾기
+            cursor -= 1
+            service = self._cell_key(self._price_table.item(cursor, 0))
+        return (service, key) if service else None
+
+    def _on_item_changed(self, item) -> None:
+        if item is None: return
+        row, col = item.row(), item.column()
+        if col not in EDITABLE_PRICE_COLS: return
+
+        keys = self._row_keys(row)
+        if keys is None: return
+        service, key = keys
+        col_name = PRICE_COLUMNS[col][0]
+
+        new_val = _to_int(item.text())
+        entry = ((self._result or {}).get("단가", {}).get(service) or {}).get(key) or {}
+        origin_val = _to_int(entry.get(col_name))
+
+        if new_val is None:
+            new_val = origin_val if origin_val is not None else 0
+
+        # 최소 0원 ~ 최대 천만원 범위 강제
+        new_val = min(max(new_val, 0), 10_000_000)
+
+        # 원본과 똑같이 입력했으면 수정 이력에서 지움
+        if origin_val is not None and new_val == origin_val:
+            self._price_overrides.pop((service, key, col_name), None)
+            edited = False
+        else:
+            self._price_overrides[(service, key, col_name)] = new_val
+            edited = True
+
+        self._price_table.blockSignals(True)
+        item.setText(f"{new_val:,}")
+        item.setData(Qt.ItemDataRole.UserRole, new_val)
+        if edited:
+            item.setBackground(QColor("#FFE79D"))
+            item.setToolTip("직접 수정한 값입니다.")
+        else:
+            item.setData(Qt.ItemDataRole.BackgroundRole, None)
+            item.setToolTip("")
+        self._price_table.blockSignals(False)
+
+        # 낡은 단가표 폐기 및 버튼 상태 갱신
+        self._tables = None
+        self._refresh_state()
+        self.valuesChanged.emit()
 
     # --- 동작 및 상태 제어 --------------------------------------------------
     def _on_tab_changed(self, flow: str, index: int) -> None:

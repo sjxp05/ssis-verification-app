@@ -622,3 +622,12 @@ QLabel#FindingDetail {
     padding: 12px;
     line-height: 1.5;
 }
+
+#CellEditor {
+    background: ${SURFACE};
+    color: ${NAVY};
+    border: 1px solid ${NAVY};
+    border-radius: 0;
+    padding: 0 6px;
+    margin: 0;
+}

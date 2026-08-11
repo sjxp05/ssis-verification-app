@@ -1,11 +1,50 @@
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem, QAbstractItemView, QHeaderView
-from PyQt6.QtGui import QBrush, QColor
+from PyQt6.QtGui import QBrush, QColor, QIntValidator
+from PyQt6.QtWidgets import QLineEdit, QStyledItemDelegate
 
 COMPARE_COLUMNS = [("항목", False, True), ("조견표", True, False), ("고시", True, False), ("결과", False, False)]
 PRICE_COLUMNS = [("급여", False, False), ("구분", False, True), ("금액", True, False), ("가산수당", True, False)]
 RESULT_COLORS = {"일치": "#2F855A", "불일치": "#C53030", "조견표에 없음": "#96620F"}
 
+def _to_int(value) -> int | None:
+    if value is None or isinstance(value, bool): return None
+    if isinstance(value, (int, float)): return int(round(value))
+    text = str(value).replace(",", "").replace("원", "").strip()
+    if not text: return None
+    try: return int(round(float(text)))
+    except ValueError: return None
+    
+
+class PriceEditDelegate(QStyledItemDelegate):
+    def __init__(self, minimum=0, maximum=10_000_000, step=100, parent=None):
+        super().__init__(parent)
+        self._min, self._max, self._step = minimum, maximum, step
+
+    def createEditor(self, parent, option, index):
+        editor = QLineEdit(parent)
+        editor.setObjectName("CellEditor")
+        editor.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        editor.setStyleSheet("background-color: #FFFFFF; color: #000000; padding: 0 4px;")
+        return editor
+
+    def setEditorData(self, editor, index):
+        value = index.data(Qt.ItemDataRole.UserRole)
+        if value is None:
+            value = _to_int(index.data(Qt.ItemDataRole.DisplayRole)) or 0
+        editor.setText(str(int(value)) if value else "")
+        editor.selectAll()
+
+    def setModelData(self, editor, model, index):
+        text = editor.text().strip()
+        if not text:
+            model.setData(index, "", Qt.ItemDataRole.EditRole)
+            return
+
+        value = _to_int(text)
+        if value is None:
+            return   
+        model.setData(index, min(max(value, self._min), self._max), Qt.ItemDataRole.EditRole)
 
 class GosiBaseTable(QTableWidget):
     rowSelected = pyqtSignal(dict)  # 행 클릭 시 출처(ref) 표시 시스널
@@ -83,7 +122,6 @@ class CompareTableWidget(GosiBaseTable):
 
 
 class PriceTableWidget(GosiBaseTable):
-    """서비스 단가 확인 탭에 쓰이는 테이블"""
     def __init__(self, parent=None):
         super().__init__(PRICE_COLUMNS, parent)
 
@@ -94,7 +132,7 @@ class PriceTableWidget(GosiBaseTable):
                 bonus = item.get("가산수당")
                 self._add_row([
                     service, key, 
-                    f"{item['금액']:,}원", 
-                    f"{bonus:,}원" if bonus else ""
+                    f"{item['금액']:,}", 
+                    f"{bonus:,}" if bonus else ""
                 ], item["출처"])
         self._fit_height()
