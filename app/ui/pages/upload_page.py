@@ -188,7 +188,7 @@ class UploadPage(QWidget):
 
             # TODO 부분 구현
             if slot.key == "unit_price_table" or getattr(slot, "remember_last", False):
-                cached_path = recent_files.get_recent_path("unit_price_table")
+                cached_path = recent_files.get_recent_path(slot.key)
                 
                 if cached_path and os.path.exists(str(cached_path)):
                     # 1. 파일이 있으면 UploadCard에 경로를 밀어 넣어 채워진 상태로 만들기.
