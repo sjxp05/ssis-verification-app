@@ -1,7 +1,7 @@
 from __future__ import annotations
 import os
 import copy
-from PyQt6.QtGui import QColor
+from PyQt6.QtGui import QColor, QBrush
 from PyQt6.QtCore import QObject, QRunnable, QThreadPool, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QHBoxLayout, QLabel, QMessageBox, QScrollArea, QSplitter,
@@ -345,7 +345,7 @@ class GosiConstantsPage(QWidget):
                     item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
                     keys = self._row_keys(row)
                     if keys and (keys[0], keys[1], PRICE_COLUMNS[col][0]) in self._price_overrides:
-                        item.setBackground(QColor("#FFE79D"))
+                        item.setBackground(QBrush(QColor("#FFE79D")))
                         item.setToolTip("수정한 값입니다.")
 
         self._price_table.blockSignals(False)
@@ -391,20 +391,22 @@ class GosiConstantsPage(QWidget):
         blocks = [f"[{item['항목']}]\n{str(item['메시지']).strip()}" for item in issues]
         return "\n\n".join(blocks) + "\n\n" + gosi_verifier.FIX_GUIDE
 
-    # --- 단가 직접 수정 로직 ---
-    def _cell_key(self, item) -> str:
-        if item is None: return ""
-        stored = item.data(Qt.ItemDataRole.UserRole)
-        return str(stored if stored not in (None, "") else item.text() or "").strip()
 
     def _row_keys(self, row: int) -> tuple[str, str] | None:
-        key = self._cell_key(self._price_table.item(row, 1))
+        key_item = self._price_table.item(row, 1)
+        if not key_item: return None
+        
+        key = key_item.text().strip()
         if not key: return None
-        service = self._cell_key(self._price_table.item(row, 0))
+
+        service = ""
         cursor = row
-        while not service and cursor > 0: # 병합된 셀(급여명) 찾기
+        while not service and cursor >= 0: 
+            svc_item = self._price_table.item(cursor, 0)
+            if svc_item:
+                service = svc_item.text().strip()
             cursor -= 1
-            service = self._cell_key(self._price_table.item(cursor, 0))
+
         return (service, key) if service else None
 
     def _on_item_changed(self, item) -> None:
@@ -439,7 +441,7 @@ class GosiConstantsPage(QWidget):
         item.setText(f"{new_val:,}")
         item.setData(Qt.ItemDataRole.UserRole, new_val)
         if edited:
-            item.setBackground(QColor("#FFE79D"))
+            item.setBackground(QBrush(QColor("#FFE79D")))
             item.setToolTip("직접 수정한 값입니다.")
         else:
             item.setData(Qt.ItemDataRole.BackgroundRole, None)

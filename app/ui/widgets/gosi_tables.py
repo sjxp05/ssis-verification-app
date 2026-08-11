@@ -1,7 +1,7 @@
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem, QAbstractItemView, QHeaderView
 from PyQt6.QtGui import QBrush, QColor, QIntValidator
-from PyQt6.QtWidgets import QLineEdit, QStyledItemDelegate
+from PyQt6.QtWidgets import QLineEdit, QStyledItemDelegate, QStyle
 
 COMPARE_COLUMNS = [("항목", False, True), ("조견표", True, False), ("고시", True, False), ("결과", False, False)]
 PRICE_COLUMNS = [("급여", False, False), ("구분", False, True), ("금액", True, False), ("가산수당", True, False)]
@@ -21,12 +21,19 @@ class PriceEditDelegate(QStyledItemDelegate):
         super().__init__(parent)
         self._min, self._max, self._step = minimum, maximum, step
 
+    def paint(self, painter, option, index):
+        background = index.data(Qt.ItemDataRole.BackgroundRole)
+        if background is not None and not (option.state & QStyle.StateFlag.State_Selected):
+            painter.fillRect(option.rect, background)
+        super().paint(painter, option, index)
+
     def createEditor(self, parent, option, index):
         editor = QLineEdit(parent)
         editor.setObjectName("CellEditor")
         editor.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         editor.setStyleSheet("background-color: #FFFFFF; color: #000000; padding: 0 4px;")
         return editor
+
 
     def setEditorData(self, editor, index):
         value = index.data(Qt.ItemDataRole.UserRole)
