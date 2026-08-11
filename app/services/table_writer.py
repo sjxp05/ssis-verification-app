@@ -643,61 +643,60 @@ class TableWriter:
                     formatted_prices.setdefault(
                         prefix,
                         {
-                            service_kind: {time: {} for time in TIME_DIVISIONS[prefix]}
-                            for service_kind in SERVICE_KINDS[prefix]
+                            time: {
+                                service_kind: {}
+                                for service_kind in SERVICE_KINDS[prefix]
+                            }
+                            for time in TIME_DIVISIONS[prefix]
                         },
                     )
-                    for service_kind in SERVICE_KINDS[prefix]:
-                        for time in TIME_DIVISIONS[prefix]:
+                    for time in TIME_DIVISIONS[prefix]:
+                        for service_kind in SERVICE_KINDS[prefix]:
                             price = value
                             if time == 30:
                                 price = self._rounddown((price * 0.5), -1)
-                            formatted_prices[prefix][service_kind][time].update(
+                            formatted_prices[prefix][time][service_kind].update(
                                 {"day": price} if suffix == "일반" else {"night": price}
                             )
 
                 elif prefix == "방문간호":
-                    formatted_prices.setdefault(
-                        prefix,
-                        {service_kind: {} for service_kind in SERVICE_KINDS[prefix]},
+                    formatted_prices.setdefault(prefix, {})
+
+                    formatted_prices[prefix].update(
+                        {
+                            NURSING_TIME_CODES[suffix]: {
+                                service_kind: {"day": value, "night": value}
+                                for service_kind in SERVICE_KINDS[prefix]
+                            }
+                        }
                     )
 
-                    for service_kind in SERVICE_KINDS[prefix]:
-                        formatted_prices[prefix][service_kind].update(
-                            {NURSING_TIME_CODES[suffix]: {"day": value, "night": value}}
-                        )
-
                 elif prefix == "방문목욕":
-                    formatted_prices.setdefault(prefix, {})
+                    formatted_prices.setdefault(
+                        prefix, {time: {} for time in TIME_DIVISIONS[prefix]}
+                    )
 
                     for time in TIME_DIVISIONS[prefix]:
                         price = value
                         if time == 40:
                             price = self._rounddown(value * 0.8, -1)
 
-                        formatted_prices[prefix].update(
-                            {
-                                suffix: {
-                                    time: {"day": price, "night": price}
-                                    for time in TIME_DIVISIONS[prefix]
-                                }
-                            }
+                        formatted_prices[prefix][time].update(
+                            {suffix: {"day": price, "night": price}}
                         )
 
                 else:
-                    formatted_prices.setdefault(prefix, {})
-                    suffix = suffix.replace("_", " ")
-
-                    formatted_prices[prefix].update(
-                        {
-                            suffix: {
-                                time: {"day": price, "night": price}
-                                for time in TIME_DIVISIONS[prefix]
-                            }
-                        }
+                    formatted_prices.setdefault(
+                        prefix, {time: {} for time in TIME_DIVISIONS[prefix]}
                     )
 
-        print(formatted_prices)
+                    suffix = suffix.replace("_", " ")
+
+                    for time in TIME_DIVISIONS[prefix]:
+                        formatted_prices[prefix][time].update(
+                            {suffix: {"day": price, "night": price}}
+                        )
+
         return formatted_prices
 
     # 각 등급별로 유형별 조합 수와 단가 상식(0원 이하, 심야<주간 금지)을 검증
@@ -717,16 +716,15 @@ class TableWriter:
             elif r[PAYMENT_COL_UNIT_PRICE_NIGHT] < r[PAYMENT_COL_UNIT_PRICE]:
                 raise ValueError(f"단위기준심야단가가 단위기준단가보다 낮습니다: {r}")
 
-    # TODO: 고시 검증 값을 어떤 형태로 받는지에 따라 수정할 것
     # (서비스 유형 x 종류 x 시간대) 조합 25개 행 만들기
     def _build_service_rows(self, prices: dict) -> list[dict]:
         formatted_prices = self._format_service_prices(prices)
 
         rows = []
 
-        for service_type, value in formatted_prices.items():
-            for service_kind, value2 in value.items():
-                for time, value3 in value2.items():
+        for service_type, values_per_type in formatted_prices.items():
+            for time, values_per_time in values_per_type.items():
+                for service_kind, values_per_kind in values_per_time.items():
                     rows.append(
                         {
                             PAYMENT_COL_SERVICE_TYPE_ID: SERVICE_TYPE_CODES[
@@ -737,8 +735,8 @@ class TableWriter:
                             PAYMENT_COL_SERVICE_KIND_NAME: service_kind,
                             PAYMENT_COL_SERVICE_TIME: time,
                             PAYMENT_COL_SERVICE_TIME_NAME: TIME_NAMES[time],
-                            PAYMENT_COL_UNIT_PRICE: value3["day"],
-                            PAYMENT_COL_UNIT_PRICE_NIGHT: value3["night"],
+                            PAYMENT_COL_UNIT_PRICE: values_per_kind["day"],
+                            PAYMENT_COL_UNIT_PRICE_NIGHT: values_per_kind["night"],
                         }
                     )
 
