@@ -259,12 +259,27 @@ class MainWindow(QMainWindow):
     def _on_values_ready(self, values: ConstantValues) -> None:
         # 업로드 화면에서 문서를 다 읽었을 때
         if self._flow.key == "notice_verify":
-            if hasattr(values, "to_dict"):
-                self.notice_page.set_reference(values.to_dict())
-            else:
-                self.notice_page.set_reference(values)
+            reference_dict = {}
+            raw_data = values if isinstance(values, list) else [values]
+
+            for tab in raw_data:
+                for key, val in tab.items():
+                    if isinstance(val, dict):
+                        for sub_key, sub_val in val.items():
+                            reference_dict[f"{key}.{sub_key}"] = sub_val
+                    else:
+                        reference_dict[key] = val
+            self.notice_page.set_reference(reference_dict)
+    
+            # if hasattr(values, "to_dict"):
+            #     self.notice_page.set_reference(values.to_dict())
+            # else:
+            #     self.notice_page.set_reference(values)
             upload_files = self.upload_page._files()
             gosi_file = upload_files.get("guide")
+            sheet_file = upload_files.get("sheet")
+            if sheet_file and hasattr(sheet_file, "path"):
+                self.notice_page.set_sheet_path(sheet_file.path)
 
             if gosi_file and hasattr(gosi_file, "path"):
                 self.notice_page.load_notice(gosi_file.path)

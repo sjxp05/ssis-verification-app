@@ -8,3 +8,5 @@ __pycache__/
 .vscode/
 
 *.xlsx
+
+.recent_paths_cache.json

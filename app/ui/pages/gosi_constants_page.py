@@ -2,12 +2,12 @@ from __future__ import annotations
 import os
 from PyQt6.QtCore import QObject, QRunnable, QThreadPool, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
-    QAbstractItemView, QHBoxLayout, QHeaderView, QLabel,
-    QMessageBox, QScrollArea, QSplitter, QStackedWidget,
-    QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QHBoxLayout, QLabel, QMessageBox, QScrollArea, QSplitter, 
+    QStackedWidget, QVBoxLayout, QWidget,
 )
+import pandas as pd
 
-from services import gosi_verifier
+from services import gosi_verifier, recent_files
 from services.table_writer import TableWriter
 from ui.components.card import Card
 from ui.components.button import GhostButton, PrimaryButton
@@ -45,19 +45,19 @@ class _TableWriteSignals(QObject):
     failed = pyqtSignal(int, str)
 
 class _TableWriteTask(QRunnable):
-
-    def __init__(self, table_writer: TableWriter, service_prices: dict, generation: int) -> None:
+    def __init__(self, table_writer: TableWriter, service_prices: dict, basic_df, generation: int) -> None:
         super().__init__()
         self.signals = _TableWriteSignals()
         self._table_writer = table_writer
         self._service_prices = service_prices
+        self._basic_df = basic_df
         self._generation = generation
 
     def run(self) -> None:
         try:
             tables = self._table_writer.write_payment_table(
                 service_prices=self._service_prices,
-                basic_df=None,  # TODO: 기본급여 단가표(또는 단가표 엑셀 path)를 넣을 것
+                basic_df=self._basic_df,
             )
         except Exception as error:
             self.signals.failed.emit(self._generation, str(error) or type(error).__name__)
@@ -155,12 +155,29 @@ class GosiConstantsPage(QWidget):
         self._outer.addLayout(content, 1)
 
     # --- API --------------------------------------------------------------
+    # 데이터 반환 함수 
+    def return_values(self) -> dict:
+        raw_prices = (self._result or {}).get("단가", {})
+        formatted = {}
+        
+        for service, items in raw_prices.items():
+            # service = "방문간호", "방문목욕", "활동보조" 등
+            for key, item in items.items():
+                # key = "30분미만", "일반", "심야" 등
+                flat_key = f"{service}.{key}"
+                formatted[flat_key] = item["금액"]
+                
+        return formatted
+    
     def set_reference(self, values: dict | None) -> None:
         self._reference = values or {}
         if self._result:
             self._result["대조"] = gosi_verifier.compare_with_reference(self._result["월한도액"], self._reference)
             self._fill_all()
             self._refresh_state()
+
+    def set_sheet_path(self, path:str) -> None:
+        self._sheet_path = path
 
     def load_notice(self, path: str) -> None:
         try:
@@ -314,7 +331,7 @@ class GosiConstantsPage(QWidget):
 
     def _on_next(self) -> None:
         if self._state in (FILLED, FAILED):
-            self._start_table_write(self.values())
+            self._start_table_write(self.return_values())
         elif self._state == READY and self._tables is not None:
             self._next.setEnabled(False)
             self._next.setText(_LOADING_TEXT)
@@ -328,7 +345,21 @@ class GosiConstantsPage(QWidget):
             return
         self._set_state(BUSY)
         self._generation += 1
-        task = _TableWriteTask(self._table_writer, service_prices, self._generation)
+        # 메뉴 1에서 캐싱된 단가표가 있으면 가져오기
+        basic_path = recent_files.get_recent_path("unit_price_table")
+
+        if not basic_path or not os.path.exists(str(basic_path)):
+            # basic_path = getattr(self, "_sheet_path", None)
+            self._set_state(FAILED, "기본급여 단가표를 찾을 수 없습니다. 메뉴 1을 먼저 실행하세요.")
+            return
+
+        basic_df = None
+        try:
+            basic_df = pd.read_excel(basic_path)
+        except Exception as e:
+            self._set_state(FAILED, f"기본급여 단가표 읽기 실패: {e}")
+            return
+        task = _TableWriteTask(self._table_writer, service_prices, basic_df, self._generation)
         task.signals.finished.connect(self._on_table_complete)
         task.signals.failed.connect(self._on_table_failed)
         self._pool.start(task)
@@ -352,7 +383,7 @@ class GosiConstantsPage(QWidget):
         else:
             self._set_state(FILLED)
 
-    def _set_state(self, state: str) -> None:
+    def _set_state(self, state: str, reason: str="") -> None:
         self._state = state
         busy = (state == BUSY)
 
@@ -371,7 +402,7 @@ class GosiConstantsPage(QWidget):
         elif state == READY:
             self._hint.setText("결제단가표를 생성했습니다. 다음 화면에서 확인할 수 있습니다.")
         else:
-            self._hint.setText(f"결제단가표 생성 실패: {reason}\n값을 확인한 뒤 다시 시도해 주세요.")
+            self._hint.setText(f"결제단가표 생성 실패: {reason} / 값을 확인한 뒤 다시 시도해 주세요.")
 
         set_state(self._hint, "state", state)
         self._hint.setVisible(True)

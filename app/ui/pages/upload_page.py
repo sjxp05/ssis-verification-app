@@ -4,7 +4,7 @@
 # 추출이 성공하면 바로 다음 단계로 넘어간다. (다음 화면 시작할 때 여기서 읽어온 값이 필요하기 때문)
 
 from __future__ import annotations
-
+import os
 from collections.abc import Callable
 
 from PyQt6.QtCore import QObject, QRunnable, Qt, QThreadPool, pyqtSignal
@@ -69,11 +69,7 @@ class _ExtractTask(QRunnable):
 
     def run(self) -> None:
         try:
-            if self._flow_key == "unit_price":
-                values = self._extractor.extract_jogyeon_values(self._files["sheet"])
-            else:
-                # 임시로 메인에서 Mock data 읽어오는 함수 사용
-                values = extract_values(self._files)
+            values = self._extractor.extract_jogyeon_values(self._files["sheet"])
         except Exception as error:
             self.signals.failed.emit(
                 self._generation, str(error) or type(error).__name__
@@ -189,6 +185,18 @@ class UploadPage(QWidget):
             )
             self._cards[slot.key] = card
             self._cards_layout.addWidget(card)
+
+            # TODO 부분 구현
+            if slot.key == "unit_price_table" or getattr(slot, "remember_last", False):
+                cached_path = recent_files.get_recent_path("unit_price_table")
+                
+                if cached_path and os.path.exists(str(cached_path)):
+                    # 1. 파일이 있으면 UploadCard에 경로를 밀어 넣어 채워진 상태로 만들기.
+                    if hasattr(card, "set_path"):
+                        card.set_path(str(cached_path))
+                    
+                    # 2. 사용자가 임의로 다른 파일을 업로드하지 못하게 잠그기.
+                    card.set_locked(True)
         self._set_state(WAITING)
 
     def values(self) -> ConstantValues | None:
