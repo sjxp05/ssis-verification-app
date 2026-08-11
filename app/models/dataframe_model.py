@@ -134,6 +134,13 @@ class DataFrameModel(QAbstractTableModel):
             )
             return int(flag | Qt.AlignmentFlag.AlignVCenter)
 
+        if role==Qt.ItemDataRole.EditRole:
+            if value is None or (isinstance(value,float) and pd.insa(value)):
+                return ""
+            if isinstance(value,float) and value.is_integer():
+                return str(int(value))
+            return str(value)
+
         # if role == Qt.ItemDataRole.ForegroundRole and column in self._accent:
         #     return QColor(theme.ACCENT)
 
@@ -163,6 +170,8 @@ class DataFrameModel(QAbstractTableModel):
         column = str(self._df.columns[index.column()])
         current = self._df.iat[index.row(), index.column()]
         text = str(value).strip()
+        if not text:
+            return False
         if isinstance(current, (int, float)) and not isinstance(current, bool):
             try:
                 value = int(float(text.replace(",", ""))) if text else 0
