@@ -176,6 +176,9 @@ class GosiConstantsPage(QWidget):
             self._fill_all()
             self._refresh_state()
 
+    def set_unit_price_path(self, path: str) -> None:
+        self._unit_price_path = path
+        
     def set_sheet_path(self, path:str) -> None:
         self._sheet_path = path
 
@@ -338,6 +341,7 @@ class GosiConstantsPage(QWidget):
             self._next.repaint()
             self.tablesReady.emit(self._tables)
 
+    # 테이블 작성을 위해 슬롯에 있는 파일 읽어오기
     def _start_table_write(self, service_prices: dict) -> None:
         if self._table_writer is None:
             self._tables = {}
@@ -345,20 +349,18 @@ class GosiConstantsPage(QWidget):
             return
         self._set_state(BUSY)
         self._generation += 1
-        # 메뉴 1에서 캐싱된 단가표가 있으면 가져오기
-        basic_path = recent_files.get_recent_path("unit_price_table")
-
-        if not basic_path or not os.path.exists(str(basic_path)):
-            # basic_path = getattr(self, "_sheet_path", None)
-            self._set_state(FAILED, "기본급여 단가표를 찾을 수 없습니다. 메뉴 1을 먼저 실행하세요.")
+        
+        if not getattr(self, "_unit_price_path", None) or not os.path.exists(self._unit_price_path):
+            self._set_state(FAILED, "기본급여 단가표 파일이 없습니다.\n업로드 화면에서 파일을 올렸는지 확인해 주세요.")
             return
 
         basic_df = None
         try:
-            basic_df = pd.read_excel(basic_path)
+            basic_df = pd.read_excel(self._unit_price_path)
         except Exception as e:
             self._set_state(FAILED, f"기본급여 단가표 읽기 실패: {e}")
             return
+        
         task = _TableWriteTask(self._table_writer, service_prices, basic_df, self._generation)
         task.signals.finished.connect(self._on_table_complete)
         task.signals.failed.connect(self._on_table_failed)

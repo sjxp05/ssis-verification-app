@@ -14,7 +14,7 @@ from services.jogyeon_value_extractor import ValueExtractor
 from models.dto import ConstantValues, UploadedFile
 from models.flows import FlowSpec, UNIT_PRICE
 from services import recent_files
-from ui.components.button import PrimaryButton
+from ui.components.button import PrimaryButton, GhostButton
 from ui.components.scroll_page import centered_scroll_page
 from utils.qss import set_state
 from ui.widgets.upload_card import UploadCard
@@ -116,6 +116,11 @@ class UploadPage(QWidget):
         self._subtitle.setObjectName("PageSubtitle")
         self._subtitle.setWordWrap(True)
 
+        # 메뉴 1 데이터 불러오기 버튼 추가
+        self._load_cache_btn = GhostButton("📂 이전 작업 불러오기 (메뉴 1)")
+        self._load_cache_btn.clicked.connect(self._load_cached_files)
+        self._load_cache_btn.setVisible(False)  # 숨겨두기
+
         self._cards_holder = QWidget()
         self._cards_layout = QVBoxLayout(self._cards_holder)
         self._cards_layout.setContentsMargins(0, 0, 0, 0)
@@ -135,6 +140,7 @@ class UploadPage(QWidget):
         column.addSpacing(6)
         column.addWidget(self._cards_holder)
         column.addSpacing(6)
+        column.addWidget(self._load_cache_btn) # 타이틀 아래에 캐시 로드 버튼 추가
         column.addWidget(self._next)
         column.addWidget(self._hint)
         column.addStretch(1)
@@ -178,6 +184,7 @@ class UploadPage(QWidget):
         # 주의: 이 루프 중간에 자동 채움이 fileSelected -> _on_file_selected 를 곧바로 태우면
         # 아직 안 만들어진 카드까지 "다 찼다"고 오판할 수 있음
         # 카드를 전부 만든 다음 한 번에 자동 채움을 돌리는 편이 안전하다.
+        has_cache = False
         for slot in self._flow.uploads:
             card = UploadCard(slot.title, slot.description, slot.extensions, slot.icon)
             card.fileSelected.connect(
@@ -185,19 +192,12 @@ class UploadPage(QWidget):
             )
             self._cards[slot.key] = card
             self._cards_layout.addWidget(card)
-
-            # TODO 부분 구현
-            if slot.key == "unit_price_table" or getattr(slot, "remember_last", False):
-                cached_path = recent_files.get_recent_path(slot.key)
-                
-                if cached_path and os.path.exists(str(cached_path)):
-                    # 1. 파일이 있으면 UploadCard에 경로를 밀어 넣어 채워진 상태로 만들기.
-                    if hasattr(card, "set_path"):
-                        card.set_path(str(cached_path))
-                    
-                    # 2. 사용자가 임의로 다른 파일을 업로드하지 못하게 잠그기.
-                    card.set_locked(True)
-        self._set_state(WAITING)
+            
+            if recent_files.get_recent_path(slot.key):
+                has_cache = True
+            show_btn = has_cache and (self._flow.key == "notice_verify")
+            self._load_cache_btn.setVisible(show_btn)
+            self._set_state(WAITING)
 
     def values(self) -> ConstantValues | None:
         return self._values
@@ -267,6 +267,19 @@ class UploadPage(QWidget):
         elif self._state == READY and self._values is not None:
             self.valuesReady.emit(self._values)
 
+    def _load_cached_files(self) -> None:
+        import os
+        from services import recent_files
+
+        for key, card in self._cards.items():
+            cached_path = recent_files.get_recent_path(key)
+            if cached_path and os.path.exists(str(cached_path)):
+                if hasattr(card, "set_path"):
+                    card.set_path(str(cached_path))
+                card.set_locked(True)  # 재업 못하게 막기
+                
+        # 다 불러왔으면 버튼 숨기기
+        self._load_cache_btn.setVisible(False)
     # --- 내부 -------------------------------------------------------------
     def _set_state(self, state: str, reason: str = "") -> None:
         self._state = state

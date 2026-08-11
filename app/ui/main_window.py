@@ -262,6 +262,7 @@ class MainWindow(QMainWindow):
             reference_dict = {}
             raw_data = values if isinstance(values, list) else [values]
 
+            # 데이터 평평하게 펴기
             for tab in raw_data:
                 for key, val in tab.items():
                     if isinstance(val, dict):
@@ -270,14 +271,16 @@ class MainWindow(QMainWindow):
                     else:
                         reference_dict[key] = val
             self.notice_page.set_reference(reference_dict)
-    
-            # if hasattr(values, "to_dict"):
-            #     self.notice_page.set_reference(values.to_dict())
-            # else:
-            #     self.notice_page.set_reference(values)
+
+            # 슬롯 파일 받아오기
             upload_files = self.upload_page._files()
             gosi_file = upload_files.get("guide")
             sheet_file = upload_files.get("sheet")
+            table_file = upload_files.get("unit_price_table")
+            
+            if table_file and hasattr(table_file, "path"):
+                self.notice_page.set_unit_price_path(table_file.path)
+
             if sheet_file and hasattr(sheet_file, "path"):
                 self.notice_page.set_sheet_path(sheet_file.path)
 
