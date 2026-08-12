@@ -32,6 +32,7 @@ from .contracts.schemas import (
 )
 from .ingest import loader, segmenter
 from .matching import constraints, rule_parser
+from .matching.dense import DenseEncoder
 from .matching.hybrid import HybridConfig, HybridMatcher
 from .matching.normalizer import find_normalization_collisions, normalize
 from .validation import value_checks
@@ -72,11 +73,17 @@ def match_workbooks(
     base_labels = {s: _collect_labels(base_regions.get(s, [])) for s in baseline.sheets}
     target_labels = {s: _collect_labels(target_regions.get(s, [])) for s in target.sheets}
     matchers: dict[str, HybridMatcher | None] = {}
+    # 시트마다 새 인코더(=새 ONNX 세션)를 만들지 않도록 워크북 전체가 하나를 공유한다.
+    # 규칙 판정으로 다 끝나면 이 인코더도 결국 로드되지 않는다(지연 로딩).
+    encoder = DenseEncoder()
 
     for sheet in baseline.sheets:
         if sheet not in target.sheets:
             continue
-        matcher = HybridMatcher(list(target_labels[sheet]), config) if target_labels[sheet] else None
+        matcher = (
+            HybridMatcher(list(target_labels[sheet]), config, encoder=encoder)
+            if target_labels[sheet] else None
+        )
         matchers[sheet] = matcher
         report.items += _match_sheet(
             sheet, base_labels[sheet], target_labels[sheet], matcher, report

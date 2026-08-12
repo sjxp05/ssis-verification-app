@@ -57,7 +57,8 @@ def load(path: str | Path, required_sheets: tuple[str, ...] = ()) -> Workbook:
 
     workbook = Workbook(path=path)
     for sheet_name, frame in raw.items():
-        workbook.sheets[sheet_name] = _sanitize(frame, sheet_name, workbook.audit)
+        trimmed = _trim_to_used_range(frame)
+        workbook.sheets[sheet_name] = _sanitize(trimmed, sheet_name, workbook.audit)
 
     missing = [s for s in required_sheets if s not in workbook.sheets]
     if missing:
@@ -68,15 +69,38 @@ def load(path: str | Path, required_sheets: tuple[str, ...] = ()) -> Workbook:
     return workbook
 
 
+# openpyxl이 보고하는 시트 크기에는 값 없이 서식만 남은 행/열까지 포함될 수
+# 있다. 실제 값이 있는 마지막 행/열까지만 남기고 뒤쪽 빈 영역은 잘라낸다.
+def _trim_to_used_range(frame: pd.DataFrame) -> pd.DataFrame:
+    if frame.empty:
+        return frame
+    has_value = frame.notna()
+    rows_with_data = has_value.any(axis=1)
+    cols_with_data = has_value.any(axis=0)
+    if not rows_with_data.any() or not cols_with_data.any():
+        return frame.iloc[0:0, 0:0]
+    last_row = rows_with_data[rows_with_data].index[-1]
+    last_col = cols_with_data[cols_with_data].index[-1]
+    return frame.loc[: last_row, : last_col]
+
+
+# 셀 단위 파이썬 루프 대신 문자열 컬럼 단위로 정제한다. object dtype이 아닌
+# 컬럼(순수 숫자 컬럼 등)은 애초에 문자열 셀을 담을 수 없으므로 건너뛴다.
 def _sanitize(frame: pd.DataFrame, sheet: str, audit: list[SanitizedCell]) -> pd.DataFrame:
     cleaned = frame.copy()
-    for row in range(frame.shape[0]):
-        for col in range(frame.shape[1]):
-            value = frame.iat[row, col]
-            if not isinstance(value, str):
-                continue
-            fixed = sanitize(value)
-            if fixed != value:
-                audit.append(SanitizedCell(sheet, row, col, value, fixed))
-                cleaned.iat[row, col] = fixed
+    for col in cleaned.columns:
+        series = cleaned[col]
+        if series.dtype != object:
+            continue
+        is_str = series.map(type) == str
+        if not is_str.any():
+            continue
+        original = series[is_str]
+        fixed = original.map(sanitize)
+        changed = fixed != original
+        if not changed.any():
+            continue
+        for row in changed[changed].index:
+            audit.append(SanitizedCell(sheet, int(row), int(col), original[row], fixed[row]))
+        cleaned.loc[is_str, col] = fixed
     return cleaned

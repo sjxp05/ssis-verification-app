@@ -92,7 +92,7 @@ class UploadPage(QWidget):
     def __init__(
         self,
         extractor: ValueExtractor | None = None,
-        label_reviewer: Callable[[UploadedFile], bool] | None = None,
+        label_reviewer: Callable[[UploadedFile, Callable[[bool], None]], None] | None = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -280,21 +280,31 @@ class UploadPage(QWidget):
         if self._state in (FILLED, FAILED):
             # '확인' 버튼: 파일이 다 준비됐거나 추출이 실패해 재시도하는 경우
             files = self._files()
-            if not self._review_labels(files):
-                return  # 검토를 취소하면 값을 읽지 않는다
-            self._start_extract(files)
+            # 대조가 백그라운드에서 도는 동안에도 카드를 잠가 둔다
+            self._set_state(BUSY)
+            self._review_labels(files, lambda ok: self._after_review(ok, files))
         elif self._state == READY and self._values is not None:
             self.valuesReady.emit(self._values)
 
-    def _review_labels(self, files: dict[str, UploadedFile]) -> bool:
+    def _after_review(self, ok: bool, files: dict[str, UploadedFile]) -> None:
+        if not ok:
+            self._refresh_files_state()  # 검토를 취소하면 값을 읽지 않고 원래 상태로 되돌린다
+            return
+        self._start_extract(files)
+
+    def _review_labels(
+        self, files: dict[str, UploadedFile], on_done: Callable[[bool], None]
+    ) -> None:
         # 서식이 바뀌었는데 그대로 값을 읽으면 조용히 틀린 값이 나온다.
         # 추출 전에 작년 조견표와 라벨을 대조해 사람이 확인하게 한다.
         sheet = files.get("sheet")
         if self._label_reviewer is None or sheet is None:
-            return True
+            on_done(True)
+            return
         if self._flow is None or self._flow.key != UNIT_PRICE.key:
-            return True
-        return self._label_reviewer(sheet)
+            on_done(True)
+            return
+        self._label_reviewer(sheet, on_done)
     
     def _load_cached_files(self) -> None:
         loaded = False

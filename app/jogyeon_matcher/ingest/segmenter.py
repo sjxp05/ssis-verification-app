@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+import numpy as np
 import pandas as pd
 
 from ..contracts.schemas import CellLocation, StructuralAlert
@@ -111,29 +112,31 @@ def _empty(value) -> bool:
     return pd.isna(value) or (isinstance(value, str) and not value.strip())
 
 
+# 시트 전체의 빈 셀 여부를 한 번에 계산한 bool 행렬. frame.iat 를 셀마다 부르는
+# 대신 컬럼 단위 pandas 벡터 연산으로 만든다. 숫자 등 비문자 값은 문자열로
+# 바뀌어도 빈 문자열이 될 수 없으므로 안전하다.
+def _empty_mask(frame: pd.DataFrame) -> np.ndarray:
+    if frame.empty:
+        return np.zeros(frame.shape, dtype=bool)
+    na = frame.isna().to_numpy()
+    blank = frame.astype(str).apply(lambda c: c.str.strip().eq("")).to_numpy()
+    return na | blank
+
+
 # 빈 행·열로 갈라지는 덩어리를 표로 본다. 서식(테두리·병합)에 기대면 서식이
 # 조금만 바뀌어도 탐지가 무너지므로, 가장 견고한 신호인 빈 줄을 쓴다.
 def find_tables(sheet: str, frame: pd.DataFrame) -> list[TableRegion]:
     regions: list[TableRegion] = []
-    row_empty = [
-        all(_empty(frame.iat[r, c]) for c in range(frame.shape[1]))
-        for r in range(frame.shape[0])
-    ]
-    for row0, row1 in _blocks(row_empty):
-        col_empty = [
-            all(_empty(frame.iat[r, c]) for r in range(row0, row1 + 1))
-            for c in range(frame.shape[1])
-        ]
-        for col0, col1 in _blocks(col_empty):
-            box = _trim(frame, row0, col0, row1, col1)
+    mask = _empty_mask(frame)
+    row_empty = mask.all(axis=1)
+    for row0, row1 in _blocks(row_empty.tolist()):
+        col_empty = mask[row0 : row1 + 1].all(axis=0)
+        for col0, col1 in _blocks(col_empty.tolist()):
+            box = _trim(mask, row0, col0, row1, col1)
             if box is None:
                 continue
             r0, c0, r1, c1 = box
-            filled = sum(
-                not _empty(frame.iat[r, c])
-                for r in range(r0, r1 + 1)
-                for c in range(c0, c1 + 1)
-            )
+            filled = int((~mask[r0 : r1 + 1, c0 : c1 + 1]).sum())
             if filled >= MIN_CELLS:
                 regions.append(TableRegion(sheet, r0, c0, r1, c1, frame))
 
@@ -158,14 +161,15 @@ def _blocks(is_empty: list[bool]) -> list[tuple[int, int]]:
 
 # 실제 값이 있는 최소 사각형으로 줄인다. 행을 먼저 나누고 열을 나누므로,
 # 나란히 붙은 표에서 한쪽이 짧으면 빈 영역까지 끌어안는다.
-def _trim(frame, row0, col0, row1, col1):
-    rows = [r for r in range(row0, row1 + 1)
-            if any(not _empty(frame.iat[r, c]) for c in range(col0, col1 + 1))]
-    cols = [c for c in range(col0, col1 + 1)
-            if any(not _empty(frame.iat[r, c]) for r in range(row0, row1 + 1))]
-    if not rows or not cols:
+def _trim(mask: np.ndarray, row0, col0, row1, col1):
+    sub = mask[row0 : row1 + 1, col0 : col1 + 1]
+    row_has_data = ~sub.all(axis=1)
+    col_has_data = ~sub.all(axis=0)
+    if not row_has_data.any() or not col_has_data.any():
         return None
-    return rows[0], cols[0], rows[-1], cols[-1]
+    rows = row0 + np.where(row_has_data)[0]
+    cols = col0 + np.where(col_has_data)[0]
+    return int(rows[0]), int(cols[0]), int(rows[-1]), int(cols[-1])
 
 
 def fingerprint(region: TableRegion) -> Fingerprint:
