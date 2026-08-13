@@ -640,6 +640,9 @@ class TableWriter:
                 prefix, suffix = key.split(".")
 
                 if prefix == "활동보조":
+                    if suffix != "일반":
+                        continue
+
                     formatted_prices.setdefault(
                         prefix,
                         {
@@ -650,13 +653,17 @@ class TableWriter:
                             for time in TIME_DIVISIONS[prefix]
                         },
                     )
+
                     for time in TIME_DIVISIONS[prefix]:
                         for service_kind in SERVICE_KINDS[prefix]:
                             price = value
                             if time == 30:
                                 price = self._rounddown((price * 0.5), -1)
                             formatted_prices[prefix][time][service_kind].update(
-                                {"day": price} if suffix == "일반" else {"night": price}
+                                {
+                                    "day": price,
+                                    "night": self._rounddown(price * 1.5, -1),
+                                }
                             )
 
                 elif prefix == "방문간호":
