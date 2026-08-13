@@ -141,16 +141,16 @@ class _PreviewPair(QWidget):
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 4, 0, 0)
         layout.setSpacing(12)
-        self.left = SheetPreview("작년 조견표")
-        self.right = SheetPreview("올해 조견표")
+        self.left = SheetPreview("대조 파일")
+        self.right = SheetPreview("현재 파일")
         layout.addWidget(self.left, 1)
         layout.addWidget(self.right, 1)
 
     def show_baseline(self, location: CellLocation | None) -> None:
-        _render(self.left, self._baseline, location, "작년")
+        _render(self.left, self._baseline, location, "대조")
 
     def show_target(self, location: CellLocation | None) -> None:
-        _render(self.right, self._target, location, "올해")
+        _render(self.right, self._target, location, "현재")
 
 
 def _render(view: SheetPreview, source: SheetSource, location, side: str) -> None:
@@ -168,11 +168,19 @@ def _render(view: SheetPreview, source: SheetSource, location, side: str) -> Non
 
 # 문구가 바뀐 항목 하나. top-3 중에서 고르거나 직접 적는다.
 class _ChangedCard(Card):
-    def __init__(self, item: MatchItem, baseline: SheetSource, target: SheetSource,
-                 parent: QWidget | None = None, title: str = ""):
+    def __init__(
+        self,
+        item: MatchItem,
+        baseline: SheetSource,
+        target: SheetSource,
+        parent: QWidget | None = None,
+        title: str = "",
+    ):
         location = item.input_label.location
-        where = f"작년 {location.sheet} {location.a1}" if location else ""
-        super().__init__(title or f"작년 문구  {item.input_label.raw}", where, parent)
+        where = f"대조 파일 {location.sheet} {location.a1}" if location else ""
+        super().__init__(
+            title or f"대조 파일 문구  {item.input_label.raw}", where, parent
+        )
         self.item = item
         self.body_layout.setSpacing(10)
 
@@ -181,9 +189,9 @@ class _ChangedCard(Card):
             self.add_widget(_banner("  ·  ".join(FLAG_TEXT[f] for f in flags), "warn"))
 
         message = (
-            "올해 파일에서 이 문구에 해당하는 것을 골라 주세요."
+            "현재 파일에서 이 문구에 해당하는 것을 골라 주세요."
             if item.candidates
-            else "올해 파일에서 비슷한 문구를 찾지 못했습니다."
+            else "현재 파일에서 비슷한 문구를 찾지 못했습니다."
         )
         self.add_widget(_banner(message, "info"))
 
@@ -226,7 +234,7 @@ class _ChangedCard(Card):
 
         detail = f"유사도 {candidate.final:.2f}"
         if candidate.base_location:
-            detail += f"   올해 {candidate.base_location.sheet} {candidate.base_location.a1}"
+            detail += f"   현재 파일 {candidate.base_location.sheet} {candidate.base_location.a1}"
         flags = [FLAG_TEXT[f] for f in candidate.flags if f in FLAG_TEXT]
         if flags:
             detail += "   ⚠ " + ", ".join(flags)
@@ -249,7 +257,7 @@ class _ChangedCard(Card):
 
         self.manual_edit = QLineEdit()
         self.manual_edit.setObjectName("FieldInput")
-        self.manual_edit.setPlaceholderText("올해 조견표에 적힌 문구를 그대로")
+        self.manual_edit.setPlaceholderText("현재 파일에 적힌 문구를 그대로")
         # textEdited 는 붙여넣기를 놓친다. 내용이 들어오면 무조건 직접 입력으로 돌려야
         # 담당자가 적은 값이 버려지지 않는다.
         self.manual_edit.textChanged.connect(
@@ -282,17 +290,25 @@ class _ChangedCard(Card):
 
 # 못 읽는 값 하나. 이걸 확정해야 단가표를 만들 수 있다.
 class _MissingCard(_ChangedCard):
-    def __init__(self, missing: MissingValue, baseline: SheetSource,
-                 target: SheetSource, parent: QWidget | None = None):
+    def __init__(
+        self,
+        missing: MissingValue,
+        baseline: SheetSource,
+        target: SheetSource,
+        parent: QWidget | None = None,
+    ):
         item = MatchItem(
             item_id=f"missing-{missing.sheet}-{missing.label}",
-            input_label=LabelRef(missing.label, missing.label, missing.baseline_location),
+            input_label=LabelRef(
+                missing.label, missing.label, missing.baseline_location
+            ),
             status=Status.UNMATCHED,
             match_path=MatchPath.HYBRID,
             candidates=missing.candidates,
         )
-        super().__init__(item, baseline, target, parent,
-                         title=f"필요한 값  {missing.label}")
+        super().__init__(
+            item, baseline, target, parent, title=f"필요한 값  {missing.label}"
+        )
 
 
 # 올해 새로 생긴 문구 하나. 적지 않으면 아무 일도 일어나지 않는다.
@@ -326,12 +342,14 @@ class _NewLabelCard(QWidget):
 
         self.edit = QLineEdit()
         self.edit.setObjectName("FieldInput")
-        self.edit.setPlaceholderText("필요하면 대응하는 작년 문구를 적어 주세요")
+        self.edit.setPlaceholderText(
+            "필요하면 대조 파일에서 대응하는 문구를 적어 주세요"
+        )
         self.edit.setMaximumWidth(320)
         head_layout.addWidget(self.edit)
         layout.addWidget(head)
 
-        self._preview = SheetPreview("올해 조견표")
+        self._preview = SheetPreview("현재 파일")
         self._preview.setVisible(False)
         layout.addWidget(self._preview)
 
@@ -341,7 +359,7 @@ class _NewLabelCard(QWidget):
         self._preview.setVisible(opened)
         if opened and not self._loaded:
             self._loaded = True
-            _render(self._preview, self._target, self.item.input_label.location, "올해")
+            _render(self._preview, self._target, self.item.input_label.location, "현재")
 
     def decision(self, run_id: str) -> Decision | None:
         text = self.edit.text().strip()
@@ -404,8 +422,8 @@ class ReviewDialog(QDialog):
 
         summary = self.report.summary
         subtitle = WrapLabel(
-            f"작년  {self.report.baseline_file}\n"
-            f"올해  {self.report.target_file}\n"
+            f"현재 파일  {self.report.baseline_file}\n"
+            f"대조 파일  {self.report.target_file}\n"
             f"문구 {summary.total_labels}개 중 {summary.auto_passed}개는 그대로였습니다."
         )
         subtitle.setObjectName("PageSubtitle")
@@ -416,27 +434,33 @@ class ReviewDialog(QDialog):
 
         # 1. 확정하지 않으면 단가표를 못 만드는 것 — 유일하게 붙잡는 구간
         if missing:
-            column.addWidget(_banner(
-                f"{' · '.join(blocked)}를 만들 수 없습니다. "
-                f"아래 {len(missing)}개 값을 올해 조견표의 어느 문구로 읽을지 정해 주세요.",
-                "danger",
-            ))
+            column.addWidget(
+                _banner(
+                    f"{' · '.join(blocked)}를 만들 수 없습니다. "
+                    f"아래 {len(missing)}개 값을 현재 파일의 어느 문구로 읽을지 정해 주세요.",
+                    "danger",
+                )
+            )
             column.addWidget(_section_title(f"확정이 필요한 값  {len(missing)}건"))
             for value in missing:
-                column.addWidget(_banner(
-                    f"[{value.sheet}] '{value.label}' — {value.reason}\n"
-                    f"이 문구로 «{value.produces}» 을(를) 읽습니다.",
-                    "warn",
-                ))
+                column.addWidget(
+                    _banner(
+                        f"[{value.sheet}] '{value.label}' — {value.reason}\n"
+                        f"이 문구로 «{value.produces}» 을(를) 읽습니다.",
+                        "warn",
+                    )
+                )
                 card = _MissingCard(value, self._baseline, self._target)
                 self._cards.append(card)
                 column.addWidget(card)
         else:
-            column.addWidget(_banner(
-                "기본급여·추가급여 단가표를 만들 수 있습니다. "
-                "아래는 참고 사항이니 넘기셔도 됩니다.",
-                "info",
-            ))
+            column.addWidget(
+                _banner(
+                    "기본급여·추가급여 단가표를 만들 수 있습니다. "
+                    "아래는 참고 사항이니 넘기셔도 됩니다.",
+                    "info",
+                )
+            )
 
         # 2~4. 넘겨도 되는 것들은 전부 접어 둔다
         if changed:
@@ -452,8 +476,8 @@ class ReviewDialog(QDialog):
 
         if new_labels:
             section = _Collapsible(
-                f"참고 · 올해 새로 생긴 문구  {len(new_labels)}건",
-                "작년에 없던 문구입니다. 문구를 누르면 조견표에서 어디인지 볼 수 있습니다.",
+                f"참고 · 현재 파일에 새로 생긴 문구  {len(new_labels)}건",
+                "대조 파일에 없던 문구입니다. 문구를 누르면 조견표에서 어디인지 볼 수 있습니다.",
             )
             self._new_cards = [_NewLabelCard(item, self._target) for item in new_labels]
             for card in self._new_cards:
