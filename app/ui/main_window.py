@@ -253,6 +253,8 @@ class MainWindow(QMainWindow):
         page = self._constants_page()
         flat_values = page.return_values() if hasattr(page, "return_values") else page.values()
         self.table_viewer_page.set_values(flat_values)
+        basic_ref = getattr(page, "_basic_df", None)
+        self.table_viewer_page.set_reference_table(basic_ref)
         for index in range(self._table_count):
             if index not in tables:
                 self.table_viewer_page.set_table(self._flow.key, index, pd.DataFrame())

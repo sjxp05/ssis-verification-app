@@ -568,6 +568,7 @@ QPushButton#RowButton:hover {
 }
 QPushButton#RowButton:pressed {
     color: ${NAVY};
+}
 
 /* 고시 원문 뷰어 */
 QTextBrowser#NoticeDocument {

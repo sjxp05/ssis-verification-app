@@ -34,7 +34,7 @@ P_GOV = "정부지원금액"
 P_COPAY = "본인부담금액"
 P_GOV_RATE = "정부지원금율"
 P_COPAY_RATE = "본인부담금율"
-P_SERVICE = "서비스종류명"   
+P_SERVICE = "서비스종유명"  
 P_TIME = "서비스시간명"
 
 # 추가급여 등급명
@@ -153,6 +153,7 @@ class TableValidator:
         df: pd.DataFrame,
         values: dict | None,
         prev_df: pd.DataFrame | None = None,
+        basic_df: pd.DataFrame | None = None,
     ) -> ValidationReport:
         if df is None or df.empty:
             report=ValidationReport()
@@ -171,7 +172,7 @@ class TableValidator:
             else:#추가급여단가표
                 report = self._validate_add(df, v)
         else:#notice_verify로 결제단가표
-            report = self._validate_payment(df)
+            report = self._validate_payment(df, basic_df)
 
         #작년
         if prev_df is not None:
@@ -440,13 +441,25 @@ class TableValidator:
         return report
 
     # 결제단가표
-    def _validate_payment(self, df: pd.DataFrame) -> ValidationReport:
+    # 결제단가표
+    # basic_df(기본급여 단가표)가 있으면 단계식으로 대조한다:
+    # basic_df 가 없으면 다섯 값(지원량,금액,율)의 상호 연관으로 범인을 특정한다.
+    def _validate_payment(self, df: pd.DataFrame, basic_df: pd.DataFrame | None = None) -> ValidationReport:
         report = ValidationReport()
         needed = {P_SUPPORT, P_GOV, P_COPAY}
         if not needed.issubset(set(map(str, df.columns))):
             report.notice = "결제단가표 검증은 준비 중입니다. (지원량/정부지원금액/본인부담금액 컬럼이 생기면 자동으로 검증합니다)"
             return report
- 
+
+        # 기본급여 표에서 등급구분 -> (지원량, 정부지원금, 본인부담금) 기준표
+        grade_ref: dict[str, tuple[int, int, int]] = {}
+        if basic_df is not None and {C_CODE, C_SUPPORT, C_GOV, C_COPAY}.issubset(set(map(str, basic_df.columns))):
+            for _, b in basic_df.iterrows():
+                code = str(b.get(C_CODE, "") or "").strip()
+                s, g, c = _num(b.get(C_SUPPORT)), _num(b.get(C_GOV)), _num(b.get(C_COPAY))
+                if code and None not in (s, g, c):
+                    grade_ref[code] = (s, g, c)
+
         has_rates = {P_GOV_RATE, P_COPAY_RATE}.issubset(set(map(str, df.columns)))
         for i in range(len(df.index)):
             row = df.iloc[i]
@@ -455,57 +468,78 @@ class TableValidator:
             copay = _num(row.get(P_COPAY))
             if None in (support, gov, copay):
                 continue
-            
-            #1) 정부지원금+본인부담금액=지원량
-            if gov + copay != support:
-                report.add(CellIssue(
-                    i, P_SUPPORT, "지원량 ≠ 정부지원금액 + 본인부담금액",
-                    expected=support, actual=gov + copay,
-                    fixes=(f"{P_GOV} {_fmt(gov)} → {_fmt(support - copay)}",
-                           f"{P_COPAY} {_fmt(copay)} → {_fmt(support - gov)}",
-                           f"{P_SUPPORT} {_fmt(support)} → {_fmt(gov + copay)}"),
-                ))
 
-            #2) 정부지원금율 본인부담금 확률
+            gov_rate = copay_rate = None
             if has_rates:
-                gov_rate = row.get(P_GOV_RATE)
-                copay_rate = row.get(P_COPAY_RATE)
-                gov_rate = float(gov_rate) if _num(gov_rate) is not None or isinstance(gov_rate, float) else None
-                copay_rate = float(copay_rate) if _num(copay_rate) is not None or isinstance(copay_rate, float) else None
+                try:
+                    gov_rate = float(row.get(P_GOV_RATE))
+                except (TypeError, ValueError):
+                    gov_rate = None
+                try:
+                    copay_rate = float(row.get(P_COPAY_RATE))
+                except (TypeError, ValueError):
+                    copay_rate = None
 
-                #2-1) 정부지원금율+본인부담금율=1
-                if gov_rate is not None and copay_rate is not None \
-                        and abs(gov_rate + copay_rate - 1) > 1e-6:
+            code = str(row.get(C_CODE, "") or "").strip()
+            ref = grade_ref.get(code)
+
+            if ref is not None:
+                # 기본급여 표 기준 대조
+                ref_s, ref_g, ref_c = ref
+
+                # 1) 지원량부터 — 틀리면 나머지 대조는 기준이 없으므로 중단
+                if support != ref_s:
                     report.add(CellIssue(
-                        i, P_COPAY_RATE, "정부지원금율 + 본인부담금율 ≠ 1",
-                        expected=1, actual=round(gov_rate + copay_rate, 10),
-                        fixes=(f"{P_COPAY_RATE} {copay_rate} → {1 - gov_rate}",),
+                        i, P_SUPPORT, f"지원량이 기본급여 단가표({code})와 다름",
+                        expected=ref_s, actual=support,
+                        fixes=(f"{P_SUPPORT} {_fmt(support)} → {_fmt(ref_s)}",),
+                        extra="결제단가의 지원량은 같은 등급구분의 기본급여 지원량과 같아야 합니다.\n"
+                              "지원량을 먼저 바로잡은 뒤 재검증하면 금액·율도 검사됩니다.",
                     ))
+                else:
+                    # 2) 지원량이 맞음 -> 정부지원금액·본인부담금액 대조
+                    if gov != ref_g:
+                        report.add(CellIssue(
+                            i, P_GOV, f"정부지원금액이 기본급여 단가표({code})와 다름",
+                            expected=ref_g, actual=gov,
+                            fixes=(f"{P_GOV} {_fmt(gov)} → {_fmt(ref_g)}",),
+                        ))
+                    if copay != ref_c:
+                        report.add(CellIssue(
+                            i, P_COPAY, f"본인부담금액이 기본급여 단가표({code})와 다름",
+                            expected=ref_c, actual=copay,
+                            fixes=(f"{P_COPAY} {_fmt(copay)} → {_fmt(ref_c)}",),
+                        ))
+                    # 3) 퍼센트(율) — 기본급여 금액으로 계산한 값과 대조
+                    if has_rates:
+                        for col, rate, expected_rate in (
+                            (P_GOV_RATE, gov_rate, round(ref_g / ref_s, 10)),
+                            (P_COPAY_RATE, copay_rate, round(ref_c / ref_s, 10)),
+                        ):
+                            if rate is not None and abs(rate - expected_rate) > 1e-9:
+                                report.add(CellIssue(
+                                    i, col, f"{col}이 기본급여 기준 계산값과 다름",
+                                    expected=expected_rate, actual=rate,
+                                    fixes=(f"{col} {rate} → {expected_rate}",),
+                                    extra=f"{col} = 기본급여 금액 ÷ 지원량 ({code} 기준)",
+                                ))
+            else:
+                #기준표 없음(폴백): 금액·율 상호 연관으로 범인 특정
+                self._check_payment_consistency(report, i, support, gov, copay, gov_rate, copay_rate)
 
-                #2-2) 본인부담금율=본인부담금액/지원량
-                if support and copay_rate is not None \
-                        and abs(copay / support - copay_rate) > 1e-6:
-                    report.add(CellIssue(
-                        i, P_COPAY_RATE, "본인부담금율 컬럼이 본인부담금액/지원량 과 다름",
-                        expected=round(copay / support, 10), actual=copay_rate,
-                        fixes=(f"{P_COPAY_RATE} {copay_rate} → {round(copay / support, 10)}",),
-                    ))
+            #공통코드
+            #부담률 지표 별도로 함수를 생성을 통해 만들어야할듯/ 지워도될거같기도
+            # if has_rates and support and copay_rate is not None:
+            #     report.metrics[i] = f"부담률: 파일 {copay_rate * 100:g}% · 실제 {copay / support * 100:.2f}%"
 
-                #2-3) 부담률
-                if copay_rate is not None and support:
-                    actual_pct = copay / support * 100
-                    report.metrics[i] = (
-                        f"부담률: 파일 {copay_rate * 100:g}% · 실제 {actual_pct:.2f}%"
-                        f" · 차이 {actual_pct - copay_rate * 100:+.2f}%"
-                    )
-            #3) 100원 단위 절사
+            #100원 단위 절사
             if copay and copay != floor_100(copay):
                 report.add(CellIssue(
                     i, P_COPAY, "본인부담금액이 100원 단위가 아님",
                     expected=floor_100(copay), actual=copay,
                     fixes=(f"{P_COPAY} {_fmt(copay)} → {_fmt(floor_100(copay))}",),
                 ))
- 
+
         # (등급구분 x 서비스종류 x 서비스시간) 중복
         if {C_CODE, P_SERVICE, P_TIME}.issubset(set(map(str, df.columns))):
             seen: dict[tuple, int] = {}
@@ -521,7 +555,109 @@ class TableValidator:
                     seen[key] = i
         return report
 
-    #공용 검사---------------------------------------
+    # 결제단가 폴백 검사: 금액·율 다섯 값의 상호 연관으로 추측
+    # 관계식 1. 정부지원금액+본인부담금액=지원량 2. 정부지원금율=정부지원금액/지원량 3. 본인부담금율=본인부담금액/지원량  (4. 율 합=1 은 ①②③이 맞으면 자동 성립)
+    @staticmethod
+    def _check_payment_consistency(report, i, support, gov, copay, gov_rate, copay_rate):
+        TOL = 1e-6
+        if not support:
+            return
+        sum_ok = (gov + copay == support)
+        gr_ok = None if gov_rate is None else abs(gov_rate - gov / support) <= TOL
+        cr_ok = None if copay_rate is None else abs(copay_rate - copay / support) <= TOL
+
+        exp_gr = round(gov / support, 10)
+        exp_cr = round(copay / support, 10)
+
+        # 율이 없으면(컬럼 결측·숫자 아님) 합계만 검사
+        if gr_ok is None or cr_ok is None:
+            if not sum_ok:
+                report.add(CellIssue(
+                    i, P_SUPPORT, "지원량 ≠ 정부지원금액 + 본인부담금액",
+                    expected=support, actual=gov + copay,
+                    fixes=(f"{P_GOV} {_fmt(gov)} → {_fmt(support - copay)}",
+                           f"{P_COPAY} {_fmt(copay)} → {_fmt(support - gov)}",
+                           f"{P_SUPPORT} {_fmt(support)} → {_fmt(gov + copay)}"),
+                ))
+            return
+
+        if sum_ok and gr_ok and cr_ok:
+            return  # 전부 일관
+
+        #금액이 맞고 율이 틀린경우
+        if sum_ok and gr_ok and not cr_ok:
+            report.add(CellIssue(
+                i, P_COPAY_RATE, "본인부담금율이 틀림 (금액·정부지원금율은 서로 일치)",
+                expected=exp_cr, actual=copay_rate,
+                fixes=(f"{P_COPAY_RATE} {copay_rate} → {exp_cr}",),
+                extra=f"본인부담금율 = 본인부담금액 ÷ 지원량 = 1 − 정부지원금율 = {exp_cr}",
+            ))
+            return
+        if sum_ok and cr_ok and not gr_ok:
+            report.add(CellIssue(
+                i, P_GOV_RATE, "정부지원금율이 틀림 (금액·본인부담금율은 서로 일치)",
+                expected=exp_gr, actual=gov_rate,
+                fixes=(f"{P_GOV_RATE} {gov_rate} → {exp_gr}",),
+                extra=f"정부지원금율 = 정부지원금액 ÷ 지원량 = 1 − 본인부담금율 = {exp_gr}",
+            ))
+            return
+        if sum_ok:  # 두 율이 모두 어긋남 -> 각각 금액 기준으로 지목
+            report.add(CellIssue(
+                i, P_GOV_RATE, "정부지원금율이 금액과 다름",
+                expected=exp_gr, actual=gov_rate,
+                fixes=(f"{P_GOV_RATE} {gov_rate} → {exp_gr}",),
+            ))
+            report.add(CellIssue(
+                i, P_COPAY_RATE, "본인부담금율이 금액과 다름",
+                expected=exp_cr, actual=copay_rate,
+                fixes=(f"{P_COPAY_RATE} {copay_rate} → {exp_cr}",),
+            ))
+            return
+
+        if gr_ok and abs(copay_rate - (support - gov) / support) <= TOL:
+            report.add(CellIssue(
+                i, P_COPAY, "본인부담금액이 틀림 (지원량·정부지원금액·율과 대조)",
+                expected=support - gov, actual=copay,
+                fixes=(f"{P_COPAY} {_fmt(copay)} → {_fmt(support - gov)}",),
+                extra="본인부담금액 = 지원량 − 정부지원금액 (본인부담금율과도 일치)",
+            ))
+            return
+        if cr_ok and abs(gov_rate - (support - copay) / support) <= TOL:
+            report.add(CellIssue(
+                i, P_GOV, "정부지원금액이 틀림 (지원량·본인부담금액·율과 대조)",
+                expected=support - copay, actual=gov,
+                fixes=(f"{P_GOV} {_fmt(gov)} → {_fmt(support - copay)}",),
+                extra="정부지원금액 = 지원량 − 본인부담금액 (정부지원금율과도 일치)",
+            ))
+            return
+        alt = gov + copay
+        if alt and abs(gov_rate - gov / alt) <= TOL and abs(copay_rate - copay / alt) <= TOL:
+            report.add(CellIssue(
+                i, P_SUPPORT, "지원량이 틀림 (금액 합·두 율과 대조)",
+                expected=alt, actual=support,
+                fixes=(f"{P_SUPPORT} {_fmt(support)} → {_fmt(alt)}",),
+                extra="두 율이 (정부지원금액+본인부담금액) 기준과 일치하므로 지원량이 잘못된 값입니다.",
+            ))
+            return
+
+        #모든 내역이 틀린 경우
+        report.add(CellIssue(
+            i, P_SUPPORT, "지원량 ≠ 정부지원금액 + 본인부담금액",
+            expected=support, actual=gov + copay,
+            fixes=(f"{P_GOV} {_fmt(gov)} → {_fmt(support - copay)}",
+                   f"{P_COPAY} {_fmt(copay)} → {_fmt(support - gov)}",
+                   f"{P_SUPPORT} {_fmt(support)} → {_fmt(gov + copay)}"),
+            extra="여러 값이 함께 어긋나 자동 판정이 어렵습니다. 아래 율 오류와 함께 확인해 주세요.",
+        ))
+        if not gr_ok:
+            report.add(CellIssue(i, P_GOV_RATE, "정부지원금율이 금액과 다름",
+                                 expected=exp_gr, actual=gov_rate,
+                                 fixes=(f"{P_GOV_RATE} {gov_rate} → {exp_gr}",)))
+        if not cr_ok:
+            report.add(CellIssue(i, P_COPAY_RATE, "본인부담금율이 금액과 다름",
+                                 expected=exp_cr, actual=copay_rate,
+                                 fixes=(f"{P_COPAY_RATE} {copay_rate} → {exp_cr}",)))
+
     @staticmethod
     def _check_sum(report, i, support, gov, copay,
                 support_ok=None, copay_ok=None):
@@ -652,8 +788,8 @@ class TableValidator:
             f"본인부담률이 조견표와 다름 (조견표 {stated:g}% · 실제 {actual:.2f}%)"
         )
 
+    # 부담률
     def _rate_metric_text(self, parsed: ParsedRow, support, copay, rate, cap) -> str:
-        # 부담률
         lines = [f"{parsed.base}({parsed.letter}형)"
                  + ("" if parsed.variant == "기본형" else " · 주간확장")]
         if parsed.letter == "가":

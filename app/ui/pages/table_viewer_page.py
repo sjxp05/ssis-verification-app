@@ -81,7 +81,8 @@ class TableViewerPage(QWidget):
         self._loaded_names: dict[int, str] = {}  # 탭별 '단가표 불러오기' 파일명
         self._prev_names: dict[int, str] = {}  # 탭별 작년 표 파일명 (버튼 표시용)
         self._loaded_names: dict[int, str] = {}  # 탭별 '단가표 불러오기' 파일명
-        self._original_tables: dict[int, tuple] = {}  # 불러오기 전 원래 표 (취소 시 복원용
+        self._original_tables: dict[int, tuple] = {}  # 불러오기 전 원래 표 (취소 시 복원용)
+        self._basic_reference: pd.DataFrame | None = None  # 결제단가 검증 기준(기본급여 표)
         self._tabs = SegmentedTabBar([tab["label"] for tab in TABS[flow]], flow=flow)
         self._tabs.currentChanged.connect(self._on_tab_changed)
 
@@ -184,6 +185,10 @@ class TableViewerPage(QWidget):
         # 검증 기준이 되는 서비스 추출값. set_table 보다 먼저(또는 함께) 넣는다.
         self._values = values
 
+    def set_reference_table(self, df: pd.DataFrame | None) -> None:
+        # 결제단가 검증 기준이 되는 기본급여 단가표
+        self._basic_reference = df
+
     def set_table(
         self,
         flow: str,
@@ -258,6 +263,7 @@ class TableViewerPage(QWidget):
             df,
             self._values,
             prev_df=self._prev_tables.get(tab_index),
+            basic_df=self._basic_reference,
         )
         self._reports[tab_index] = report
 

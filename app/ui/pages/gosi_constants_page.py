@@ -505,7 +505,7 @@ class GosiConstantsPage(QWidget):
             self._set_state(READY)
             return
         
-        # 파일 확인을 먼저 끝낸 뒤에 BUSY 로 들어간다.
+        # 파일 확인을 먼저 끝낸 뒤에 BUSY 로
         if not self._unit_price_path or not os.path.exists(self._unit_price_path):
             self._set_state(FAILED, "기본급여 단가표 파일을 찾지 못했습니다.\n"
                                     "업로드 화면에서 파일을 올렸는지 확인해 주세요.")
@@ -519,6 +519,7 @@ class GosiConstantsPage(QWidget):
         self._set_state(BUSY)
         self._generation += 1
 
+        self._basic_df = basic_df
         task = _TableWriteTask(self._table_writer, service_prices, basic_df, self._generation)
         task.signals.finished.connect(self._on_table_complete)
         task.signals.failed.connect(self._on_table_failed)
