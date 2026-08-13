@@ -36,6 +36,19 @@ def column_name(index: int) -> str:
     return name
 
 
+def render(view: SheetPreview, source: SheetSource, location, side: str) -> None:
+    if location is None:
+        view.set_title(f"{side} 조견표")
+        view.show_message("보여줄 위치가 없습니다")
+        return
+    view.set_title(f"{side} 조견표   {location.sheet} {location.a1}")
+    frame = source.sheet(location.sheet)
+    if frame is None:
+        view.show_message("시트를 읽지 못했습니다")
+        return
+    view.show_cell(frame, location.row, location.column)
+
+
 class SheetPreview(QWidget):
     def __init__(self, title: str, parent: QWidget | None = None):
         super().__init__(parent)
@@ -101,7 +114,9 @@ class SheetPreview(QWidget):
 
         target = self._table.item(rows.index(row), columns.index(column))
         if target is not None:
-            self._table.scrollToItem(target, QAbstractItemView.ScrollHint.PositionAtCenter)
+            self._table.scrollToItem(
+                target, QAbstractItemView.ScrollHint.PositionAtCenter
+            )
 
 
 def _window(center: int, size: int) -> list[int]:
@@ -140,7 +155,10 @@ class SheetSource:
                 # 값이 있는 마지막 행까지만 읽는다 (탐지 실패 시 전체 읽기).
                 cap = xlsx_scan.true_row_counts(self.path).get(name)
                 self._cache[name] = pd.read_excel(
-                    self.path, sheet_name=name, engine="openpyxl", header=None,
+                    self.path,
+                    sheet_name=name,
+                    engine="openpyxl",
+                    header=None,
                     **({"nrows": cap} if cap else {}),
                 )
             except Exception:
