@@ -26,7 +26,6 @@ from ui.components.button import GhostButton, PrimaryButton
 from ui.components.scroll_page import centered_scroll_page
 from ui.dialogs.review_style import STYLESHEET
 
-from ui.widgets.sheet_preview import SheetSource
 from ui.widgets.review.shared import *
 from ui.widgets.review.collapsible import Collapsible
 from ui.widgets.review.review_cards import ChangedCard, MissingCard

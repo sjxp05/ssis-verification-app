@@ -19,9 +19,8 @@ from jogyeon_matcher.contracts.schemas import (
     Status,
 )
 from ui.components.card import Card
-from ui.widgets.sheet_preview import SheetPreview, SheetSource, render
 
-from ui.widgets.review.shared import banner
+from ui.widgets.review.shared import SheetPreview, SheetSource, banner, render
 
 FLAG_TEXT = {
     "LOW_MARGIN": "1·2순위 점수가 비슷함",

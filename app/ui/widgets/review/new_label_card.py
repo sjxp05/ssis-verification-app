@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
 )
 
 from jogyeon_matcher.contracts.schemas import Decision, MatchItem
-from ui.widgets.sheet_preview import SheetPreview, SheetSource, render
+from ui.widgets.review.shared import SheetPreview, SheetSource, render
 
 
 class NewLabelCard(QWidget):
