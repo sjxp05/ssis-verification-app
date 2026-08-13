@@ -61,6 +61,19 @@ class _MatchTask(QRunnable):
             self.signals.finished.emit(self._generation, report)
 
 
+class _QuestionBox(QMessageBox):
+    def __init__(self, parent, title, question, select_btn_text, skip_btn_text):
+        super().__init__(parent)
+        self.setIcon(QMessageBox.Icon.Question)
+        self.setWindowTitle(title)
+        self.setText(question)
+        self.select_btn = self.addButton(
+            select_btn_text, QMessageBox.ButtonRole.YesRole
+        )
+        self.addButton(skip_btn_text, QMessageBox.ButtonRole.NoRole)
+        self.setDefaultButton(self.select_btn)
+
+
 class LabelReviewFlow:
     def __init__(self, parent: QWidget | None = None):
         self._parent = parent
@@ -82,7 +95,9 @@ class LabelReviewFlow:
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         task = _MatchTask(baseline, target_path, generation)
         task.signals.finished.connect(
-            lambda gen, report: self._on_matched(gen, baseline, target_path, report, on_done)
+            lambda gen, report: self._on_matched(
+                gen, baseline, target_path, report, on_done
+            )
         )
         task.signals.failed.connect(
             lambda gen, message: self._on_match_failed(gen, message, on_done)
@@ -101,7 +116,11 @@ class LabelReviewFlow:
             return  # 검토 도중 다른 파일로 바뀐 경우: 낡은 결과이므로 무시
         QApplication.restoreOverrideCursor()
 
-        if not report.review_items and not report.structural_alerts and not report.value_anomalies:
+        if (
+            not report.review_items
+            and not report.structural_alerts
+            and not report.value_anomalies
+        ):
             self._remember(target_path)
             QMessageBox.information(
                 self._parent,
@@ -144,21 +163,19 @@ class LabelReviewFlow:
             )
         else:
             question = (
-                "작년 조견표와 대조하면 문구가 바뀐 항목을 미리 확인할 수 있습니다.\n"
-                "작년 파일을 선택하시겠습니까?"
+                "이전 년도 조견표와 대조하면 문구가 바뀐 항목을 미리 확인할 수 있습니다.\n"
+                "대조할 파일을 선택하시겠습니까?"
             )
 
-        answer = QMessageBox.question(
-            self._parent,
-            "작년 조견표 대조",
-            question,
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        box = _QuestionBox(
+            self._parent, "조견표 문구 대조", question, "파일 선택", "건너뛰기"
         )
-        if answer != QMessageBox.StandardButton.Yes:
+        box.exec()
+        if box.clickedButton() != box.select_btn:
             return None
 
         path, _ = QFileDialog.getOpenFileName(
-            self._parent, "작년 조견표 선택", "", "Excel 파일 (*.xlsx)"
+            self._parent, "대조할 조견표 선택", "", "Excel 파일 (*.xlsx)"
         )
         return Path(path) if path else None
 
@@ -167,10 +184,12 @@ class LabelReviewFlow:
         recent_files.set_recent_path(BASELINE_KEY, path)
 
     def _ask_continue_after_failure(self, message: str) -> bool:
-        answer = QMessageBox.warning(
-            self._parent,
-            "라벨 대조 실패",
-            f"작년 조견표와 대조하지 못했습니다.\n{message}\n\n대조 없이 값을 읽을까요?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+        question = (
+            f"조견표 대조에 실패했습니다.\n{message}\n\n대조할 파일을 다시 선택할까요?"
         )
-        return answer == QMessageBox.StandardButton.Yes
+
+        box = _QuestionBox(
+            self._parent, "문구 대조 실패", question, "파일 다시 선택", "건너뛰기"
+        )
+        box.exec()
+        return box.clickedButton() == box.select_btn

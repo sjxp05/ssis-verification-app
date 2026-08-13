@@ -71,18 +71,18 @@ class ReviewDialog(QDialog):
 
         blocked = self.report.blocked_tables
         title = WrapLabel(
-            "단가표를 만들려면 아래 값을 먼저 확정해 주세요"
+            "단가표를 만들려면 아래 값을 먼저 확정해 주세요."
             if blocked
-            else "단가표를 만드는 데 필요한 값은 모두 확인됐습니다"
+            else "단가표를 만드는 데 필요한 값을 모두 확인했습니다."
         )
         title.setObjectName("PageTitle")
         column.addWidget(title)
 
         summary = self.report.summary
         subtitle = WrapLabel(
-            f"현재 파일  {self.report.baseline_file}\n"
-            f"대조 파일  {self.report.target_file}\n"
-            f"문구 {summary.total_labels}개 중 {summary.auto_passed}개는 그대로였습니다."
+            f"현재 파일  {self.report.target_file}\n"
+            f"대조 파일  {self.report.baseline_file}\n"
+            f"문구 {summary.total_labels}개 중 {summary.auto_passed}개는 변하지 않았습니다."
         )
         subtitle.setObjectName("PageSubtitle")
         column.addWidget(subtitle)
@@ -115,7 +115,7 @@ class ReviewDialog(QDialog):
             column.addWidget(
                 banner(
                     "기본급여·추가급여 단가표를 만들 수 있습니다. "
-                    "아래는 참고 사항이니 넘기셔도 됩니다.",
+                    "아래는 참고 사항이므로 확인하지 않아도 됩니다.",
                     "info",
                 )
             )
@@ -124,7 +124,7 @@ class ReviewDialog(QDialog):
         if changed:
             section = Collapsible(
                 f"참고 · 문구가 바뀐 항목  {len(changed)}건",
-                "단가표 값을 읽는 데는 쓰이지 않는 문구입니다. 확인하지 않아도 됩니다.",
+                "단가표 값을 읽는 데 사용되지 않는 문구이므로 확인하지 않아도 됩니다.",
             )
             for item in changed:
                 card = ChangedCard(item, self._baseline, self._target)
@@ -146,7 +146,7 @@ class ReviewDialog(QDialog):
         if others or anomalies:
             section = Collapsible(
                 f"참고 · 표 구조·값 변화  {len(others) + len(anomalies)}건",
-                "값을 읽는 위치가 달라졌을 수 있으니, 다음 화면에서 값이 맞는지 확인해 주세요.",
+                "값을 읽는 위치가 달라졌을 수 있으므로 다음 화면에서 값이 맞는지 확인해 주세요.",
             )
             for anomaly in anomalies:
                 section.add(banner(f"[{anomaly.sheet}] {anomaly.detail}", "warn"))
