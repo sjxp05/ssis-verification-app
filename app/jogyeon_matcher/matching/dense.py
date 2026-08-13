@@ -47,8 +47,10 @@ class DenseEncoder:
         self._tokenizer.enable_padding()
 
         options = ort.SessionOptions()
-        # 담당자 PC 사양을 낙관하지 않는다. 연 1회 150라벨이면 1스레드로 충분하다.
-        options.intra_op_num_threads = 1
+        # 0 = 코어 수에 맞춰 자동. 실측(2026-08, 4코어)에서 라벨 140개 배치 인코딩이
+        # 1스레드 0.75s → auto 0.39s 로 절반이다. 저사양 PC에서는 auto가 곧
+        # 낮은 코어 수라 과도한 스레드가 생기지 않는다.
+        options.intra_op_num_threads = 0
         self._session = ort.InferenceSession(
             str(self._dir / "model_int8.onnx"), options,
             providers=["CPUExecutionProvider"],

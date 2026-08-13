@@ -45,6 +45,14 @@ class HybridMatcher:
         self._bm25 = BM25(self.labels)
         self._encoder = encoder or DenseEncoder()
         self._label_vectors: np.ndarray | None = None
+        self._query_vectors: dict[str, np.ndarray] = {}
+
+    # 하이브리드로 떨어질 쿼리들을 모아 한 번의 배치로 인코딩해 둔다.
+    # 쿼리마다 단건 인코딩을 반복하면 ONNX 호출 오버헤드가 쿼리 수만큼 쌓인다.
+    def precompute_queries(self, queries: list[str]) -> None:
+        fresh = [q for q in dict.fromkeys(queries) if q not in self._query_vectors]
+        if fresh:
+            self._query_vectors.update(zip(fresh, self._encoder.encode(fresh)))
 
     def score_components(self, query: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
         # (최종, BM25, 임베딩). 분해가 필요하면 이 함수를 한 번만 부르고 셋을
@@ -60,7 +68,11 @@ class HybridMatcher:
     def _dense_scores(self, query: str) -> np.ndarray:
         if self._label_vectors is None:
             self._label_vectors = self._encoder.encode(self.labels)
+        vector = self._query_vectors.get(query)
+        if vector is None:
+            vector = self._encoder.encode([query])[0]
+            self._query_vectors[query] = vector
         # 두 벡터 모두 L2 정규화되어 있으므로 내적이 곧 코사인
-        cosine = self._encoder.encode([query])[0] @ self._label_vectors.T
+        cosine = vector @ self._label_vectors.T
         floor = self.config.cosine_floor
         return np.clip((cosine - floor) / (1.0 - floor), 0.0, 1.0)

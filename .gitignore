@@ -14,3 +14,6 @@ CLAUDE.md
 _experiments/
 
 .recent_paths_cache.json
+
+# 성능 벤치마크 산출물 (tools/benchmark_perf.py)
+tools/.bench/

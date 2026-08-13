@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pandas as pd
 
+from . import xlsx_scan
 from ..matching.normalizer import sanitize
 
 
@@ -51,7 +52,18 @@ def load(path: str | Path, required_sheets: tuple[str, ...] = ()) -> Workbook:
         raise IngestError(f"파일이 없습니다: {path}")
 
     try:
-        raw = pd.read_excel(path, sheet_name=None, engine="openpyxl", header=None)
+        # 값이 있는 마지막 행을 미리 알아내 nrows 로 읽기를 끊는다. 서식만 남은
+        # 행이 시트 끝까지 부풀어 있는 파일(실측 시트당 ~10초)을 방어한다.
+        # 탐지에 실패한 시트는 nrows 없이 기존대로 전체를 읽는다.
+        caps = xlsx_scan.true_row_counts(path)
+        raw = {}
+        with pd.ExcelFile(path, engine="openpyxl") as book:
+            for sheet_name in book.sheet_names:
+                cap = caps.get(sheet_name)
+                raw[sheet_name] = book.parse(
+                    sheet_name, header=None,
+                    **({"nrows": cap} if cap else {}),
+                )
     except Exception as error:
         raise IngestError(f"엑셀을 읽지 못했습니다: {error}") from None
 
