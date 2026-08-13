@@ -37,6 +37,7 @@ P_GOV_RATE = "정부지원금율"
 P_COPAY_RATE = "본인부담금율"
 P_SERVICE = "서비스종유명"  
 P_TIME = "서비스시간명"
+P_CODE="등급구분"
 
 # 추가급여 등급명
 _ADD_BASE_TO_KEY = {info[1]: key for key, info in ADD_CODE_INFO.items()}
@@ -177,7 +178,10 @@ class TableValidator:
 
         #작년
         if prev_df is not None:
-            self._append_growth_metrics(report, df, prev_df)
+            if(flow=="unit_price"):
+                self._append_growth_metrics(report, df, prev_df)
+            else:
+                self._append_growth_metrics_pay(report,df,prev_df)
         return report
 
 
@@ -442,9 +446,7 @@ class TableValidator:
         return report
 
     # 결제단가표
-    # 결제단가표
-    # basic_df(기본급여 단가표)가 있으면 단계식으로 대조한다:
-    # basic_df 가 없으면 다섯 값(지원량,금액,율)의 상호 연관으로 범인을 특정한다.
+    # 기본급여 단가표와 대조한다 없을 경우 지원량, 금액과 율 상호 연관으로 특정
     def _validate_payment(self, df: pd.DataFrame, basic_df: pd.DataFrame | None = None) -> ValidationReport:
         report = ValidationReport()
         needed = {P_SUPPORT, P_GOV, P_COPAY}
@@ -452,7 +454,7 @@ class TableValidator:
             report.notice = "결제단가표 검증은 준비 중입니다. (지원량/정부지원금액/본인부담금액 컬럼이 생기면 자동으로 검증합니다)"
             return report
 
-        # 기본급여 표에서 등급구분 -> (지원량, 정부지원금, 본인부담금) 기준표
+        # 기본급여 표에서 등급구분 (지원량, 정부지원금, 본인부담금) 기준표
         grade_ref: dict[str, tuple[int, int, int]] = {}
         if basic_df is not None and {C_CODE, C_SUPPORT, C_GOV, C_COPAY}.issubset(set(map(str, basic_df.columns))):
             for _, b in basic_df.iterrows():
@@ -488,7 +490,7 @@ class TableValidator:
                 # 기본급여 표 기준 대조
                 ref_s, ref_g, ref_c = ref
 
-                # 1) 지원량부터 — 틀리면 나머지 대조는 기준이 없으므로 중단
+                # 1) 지원량부터 틀리면 나머지 대조는 기준이 없으므로 중단
                 if support != ref_s:
                     report.add(CellIssue(
                         i, P_SUPPORT, f"지원량이 기본급여 단가표({code})와 다름",
@@ -511,7 +513,7 @@ class TableValidator:
                             expected=ref_c, actual=copay,
                             fixes=(f"{P_COPAY} {_fmt(copay)} → {_fmt(ref_c)}",),
                         ))
-                    # 3) 퍼센트(율) — 기본급여 금액으로 계산한 값과 대조
+                    # 3) 퍼센트(율) 기본급여 금액으로 계산한 값과 대조
                     if has_rates:
                         for col, rate, expected_rate in (
                             (P_GOV_RATE, gov_rate, round(ref_g / ref_s, 10)),
@@ -527,11 +529,6 @@ class TableValidator:
             else:
                 #기준표 없음(폴백): 금액·율 상호 연관으로 범인 특정
                 self._check_payment_consistency(report, i, support, gov, copay, gov_rate, copay_rate)
-
-            #공통코드
-            #부담률 지표 별도로 함수를 생성을 통해 만들어야할듯/ 지워도될거같기도
-            # if has_rates and support and copay_rate is not None:
-            #     report.metrics[i] = f"부담률: 파일 {copay_rate * 100:g}% · 실제 {copay / support * 100:.2f}%"
 
             #100원 단위 절사
             if copay and copay != floor_100(copay):
@@ -570,8 +567,8 @@ class TableValidator:
         exp_gr = round(gov / support, 10)
         exp_cr = round(copay / support, 10)
 
-        # 율이 없으면(컬럼 결측·숫자 아님) 합계만 검사
         if gr_ok is None or cr_ok is None:
+            # 율이 없으면 합계만 검사
             if not sum_ok:
                 report.add(CellIssue(
                     i, P_SUPPORT, "지원량 ≠ 정부지원금액 + 본인부담금액",
@@ -579,6 +576,19 @@ class TableValidator:
                     fixes=(f"{P_GOV} {_fmt(gov)} → {_fmt(support - copay)}",
                            f"{P_COPAY} {_fmt(copay)} → {_fmt(support - gov)}",
                            f"{P_SUPPORT} {_fmt(support)} → {_fmt(gov + copay)}"),
+                ))
+            #율이 1개만 없으면 율 있는 쪽 검사
+            if gr_ok is False:
+                report.add(CellIssue(
+                    i, P_GOV_RATE, "정부지원금율이 금액과 다름",
+                    expected=exp_gr, actual=gov_rate,
+                    fixes=(f"{P_GOV_RATE} {gov_rate} → {exp_gr}",),
+                ))
+            if cr_ok is False:
+                report.add(CellIssue(
+                    i, P_COPAY_RATE, "본인부담금율이 금액과 다름",
+                    expected=exp_cr, actual=copay_rate,
+                    fixes=(f"{P_COPAY_RATE} {copay_rate} → {exp_cr}",),
                 ))
             return
 
@@ -602,7 +612,7 @@ class TableValidator:
                 extra=f"정부지원금율 = 정부지원금액 ÷ 지원량 = 1 − 본인부담금율 = {exp_gr}",
             ))
             return
-        if sum_ok:  # 두 율이 모두 어긋남 -> 각각 금액 기준으로 지목
+        if sum_ok:  # 두 율이 모두 어긋남 각각 금액 기준으로 지목
             report.add(CellIssue(
                 i, P_GOV_RATE, "정부지원금율이 금액과 다름",
                 expected=exp_gr, actual=gov_rate,
@@ -871,6 +881,29 @@ class TableValidator:
                     parts.append(f"{col} {'-' if g is None else f'{g:+.2f}%'}")
                 extra = "증가율(작년比): " + " · ".join(parts)
             report.metrics[i] = (report.metrics.get(i, "") + "\n" + extra).strip()
+
+    def _append_growth_metrics_pay(
+            self, report: ValidationReport, df: pd.DataFrame, prev_df: pd.DataFrame
+        ) -> None:
+            #과거 결제 단가표와 비교해 증가율
+            if P_CODE not in df.columns or P_CODE not in prev_df.columns:
+                return
+            prev_by_code = {
+                str(row.get(P_CODE, "") or "").strip(): row
+                for _, row in prev_df.iterrows()
+            }
+            for i in range(len(df.index)):
+                row = df.iloc[i]
+                old = prev_by_code.get(str(row.get(P_CODE, "") or "").strip())
+                if old is None:
+                    extra = "증가율: 작년 단가표에 없던 항목"
+                else:
+                    parts = []
+                    for col in (P_SUPPORT, P_GOV, P_COPAY):
+                        g = growth_rate(_num(old.get(col)), _num(row.get(col)))
+                        parts.append(f"{col} {'-' if g is None else f'{g:+.2f}%'}")
+                    extra = "증가율(작년比): " + " · ".join(parts)
+                report.metrics[i] = (report.metrics.get(i, "") + "\n" + extra).strip()
  
  
 def read_prev_table(path: str) -> pd.DataFrame:
