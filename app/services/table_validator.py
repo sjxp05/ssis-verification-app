@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 import re
 from dataclasses import dataclass, field
 
@@ -738,4 +739,55 @@ class TableValidator:
  
 def read_prev_table(path: str) -> pd.DataFrame:
     # '작년 단가표 불러오기' 버튼용 — 등급구분/지원량/정부지원금/본인부담금만 있으면 된다.
-    return pd.read_excel(path, engine="openpyxl")
+    #
+    # 실측: 실제 결제단가표는 2만 행이 넘어 openpyxl 파싱에 10초 이상 걸린다.
+    # 파일 내용이 같으면(경로+수정시각+크기) 이전에 읽은 결과를 그대로 쓴다.
+    cached = _read_table_cache(path)
+    if cached is not None:
+        return cached
+    df = pd.read_excel(path, engine="openpyxl")
+    _write_table_cache(path, df)
+    return df
+
+
+# --- 단가표 로딩 캐시 -------------------------------------------------------
+# 캐시는 순수한 가속 장치다: 어떤 실패든 조용히 무시하고 원래 경로로 읽는다.
+
+_CACHE_KEEP = 8  # 이 개수를 넘으면 오래된 캐시부터 지운다
+
+
+def _table_cache_file(path: str) -> "Path":
+    import hashlib
+    from pathlib import Path
+
+    from utils.appdata import user_data_dir
+
+    stat = os.stat(path)
+    key = f"{Path(path).resolve()}|{stat.st_mtime_ns}|{stat.st_size}"
+    digest = hashlib.sha1(key.encode("utf-8")).hexdigest()[:16]
+    folder = user_data_dir() / "table_cache"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder / f"{digest}.pkl"
+
+
+def _read_table_cache(path: str) -> pd.DataFrame | None:
+    try:
+        file = _table_cache_file(path)
+        if file.exists():
+            return pd.read_pickle(file)
+    except Exception:
+        pass
+    return None
+
+
+def _write_table_cache(path: str, df: pd.DataFrame) -> None:
+    try:
+        file = _table_cache_file(path)
+        df.to_pickle(file)
+        stale = sorted(
+            file.parent.glob("*.pkl"), key=lambda p: p.stat().st_mtime, reverse=True
+        )[_CACHE_KEEP:]
+        for old in stale:
+            old.unlink(missing_ok=True)
+    except Exception:
+        pass

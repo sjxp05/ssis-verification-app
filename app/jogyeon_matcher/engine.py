@@ -196,10 +196,20 @@ def _match_sheet(
     items: list[MatchItem] = []
     claimed: set[str] = set()
     reviewed: list[tuple[MatchItem, np.ndarray]] = []
+    det = _DeterministicIndex(target_labels)
+
+    # 결정론 경로에서 못 걸릴 라벨을 미리 골라 쿼리를 한 번의 배치로 인코딩한다.
+    # 라벨마다 단건 인코딩하면 ONNX 호출 오버헤드가 라벨 수만큼 쌓인다.
+    if matcher is not None:
+        pending = [
+            ref.normalized for ref in base_labels.values()
+            if _match_deterministic(ref, target_labels, det) is None
+        ]
+        matcher.precompute_queries(pending)
 
     for index, ref in enumerate(base_labels.values()):
         item, matched, scores = _match_one(
-            f"{sheet}-{index:03d}", ref, target_labels, matcher
+            f"{sheet}-{index:03d}", ref, target_labels, matcher, det
         )
         if matched:
             claimed.add(matched)
@@ -226,8 +236,9 @@ def _match_one(
     ref: LabelRef,
     target_labels: dict[str, LabelRef],
     matcher: HybridMatcher | None,
+    det: _DeterministicIndex,
 ) -> tuple[MatchItem, str | None, np.ndarray | None]:
-    matched = _match_deterministic(ref, target_labels)
+    matched = _match_deterministic(ref, target_labels, det)
     if matched:
         path, key = matched
         found = target_labels[key]
@@ -251,17 +262,33 @@ def _match_one(
     return item, normalize(candidates[0].base_label) if passes else None, scores
 
 
+# 결정론 판정용 색인. 라벨마다 대상 전체를 다시 훑으면 O(라벨²)이 되어 큰
+# 조견표에서 수 초씩 걸리므로 시트당 한 번만 만든다. '먼저 나온 라벨 우선'
+# 규칙은 setdefault 로 그대로 보존된다.
+class _DeterministicIndex:
+    def __init__(self, target_labels: dict[str, LabelRef]):
+        self.raw: dict[str, str] = {}
+        self.parsed: dict[object, str] = {}
+        for key, found in target_labels.items():
+            self.raw.setdefault(found.raw, key)
+            token = rule_parser.parse(key)
+            if token is not None:
+                self.parsed.setdefault(token, key)
+
+
 # 유사도가 아니라 동등성으로 판정되는 경로. 여기서 걸리면 auto_pass 다.
 def _match_deterministic(
-    ref: LabelRef, target_labels: dict[str, LabelRef]
+    ref: LabelRef, target_labels: dict[str, LabelRef], det: _DeterministicIndex
 ) -> tuple[MatchPath, str] | None:
-    for key, found in target_labels.items():
-        if found.raw == ref.raw:
-            return MatchPath.EXACT, key
+    key = det.raw.get(ref.raw)
+    if key is not None:
+        return MatchPath.EXACT, key
     if ref.normalized in target_labels:
         return MatchPath.NORMALIZED, ref.normalized
-    for key in target_labels:
-        if rule_parser.equals(ref.normalized, key) is True:
+    token = rule_parser.parse(ref.normalized)
+    if token is not None:
+        key = det.parsed.get(token)
+        if key is not None:
             return MatchPath.RULE_PARSER, key
     return None
 

@@ -35,8 +35,12 @@ class GosiDocumentViewer(QTextBrowser):
         self._blocks = []
         self._chapters = []  # 현재 화면에 보여줄 장(章)
 
-    def set_blocks(self, blocks: list[dict]):
+    def set_blocks(self, blocks: list[dict], chapters: tuple[str, ...] | None = None):
+        # 블록과 장 필터를 함께 바꿀 때는 한 번만 렌더하도록 chapters 를 같이 받는다.
+        # set_blocks 후 set_visible_chapters 를 잇달아 부르면 큰 문서를 두 번 렌더한다.
         self._blocks = blocks
+        if chapters is not None:
+            self._chapters = chapters
         self.render_document()
 
     def set_visible_chapters(self, chapters: tuple[str, ...]):

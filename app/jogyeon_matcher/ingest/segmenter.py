@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 import pandas as pd
@@ -29,6 +29,15 @@ class TableRegion:
     col1: int
     frame: pd.DataFrame
     index: int = 0
+    # 캐시 — frame.iat 는 셀당 파이썬 오버헤드가 커서 큰 표의 전 셀 순회가 수 초씩
+    # 걸린다. 열 단위 numpy 배열로 한 번만 꺼내 둔다. dtype 을 유지해 iat 와 같은
+    # 스칼라 타입이 나오게 한다. frame 은 적재 후 불변이므로 캐시가 낡을 일이 없다.
+    _columns: list[np.ndarray] | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
+    _text_cells: list | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
 
     @property
     def table_id(self) -> str:
@@ -38,20 +47,39 @@ class TableRegion:
     def shape(self) -> tuple[int, int]:
         return (self.row1 - self.row0 + 1, self.col1 - self.col0 + 1)
 
-    def cell(self, row: int, col: int):
-        return self.frame.iat[self.row0 + row, self.col0 + col]
+    def _column_arrays(self) -> list[np.ndarray]:
+        if self._columns is None:
+            self._columns = [
+                self.frame.iloc[self.row0 : self.row1 + 1, c].to_numpy()
+                for c in range(self.col0, self.col1 + 1)
+            ]
+        return self._columns
 
-    # 숫자만 든 셀은 라벨이 아니므로 제외한다
+    def cell(self, row: int, col: int):
+        return self._column_arrays()[col][row]
+
+    # 숫자만 든 셀은 라벨이 아니므로 제외한다.
+    # '먼저 나온 셀이 대표' 규칙이 있으므로 순회는 원래대로 행 우선을 유지한다.
     def text_cells(self) -> list[tuple[str, CellLocation]]:
+        if self._text_cells is not None:
+            return self._text_cells
+        text_columns = [
+            (self.col0 + offset, column)
+            for offset, column in enumerate(self._column_arrays())
+            if column.dtype == object  # 순수 숫자 열에는 문자열 셀이 없다
+        ]
         found = []
-        for r in range(self.row0, self.row1 + 1):
-            for c in range(self.col0, self.col1 + 1):
-                value = self.frame.iat[r, c]
+        for i in range(self.shape[0]):
+            for c, column in text_columns:
+                value = column[i]
                 if not isinstance(value, str):
                     continue
                 text = value.strip()
                 if text and not _is_number(text):
-                    found.append((text, CellLocation(self.sheet, r, c, self.table_id)))
+                    found.append(
+                        (text, CellLocation(self.sheet, self.row0 + i, c, self.table_id))
+                    )
+        self._text_cells = found
         return found
 
 

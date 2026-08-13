@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
+from jogyeon_matcher.ingest import xlsx_scan
 from resources.styles import theme
 
 RADIUS = 3
@@ -135,8 +136,12 @@ class SheetSource:
             return None
         if name not in self._cache:
             try:
+                # 서식만 남은 빈 행이 시트 끝까지 부풀어 있는 파일 방어 —
+                # 값이 있는 마지막 행까지만 읽는다 (탐지 실패 시 전체 읽기).
+                cap = xlsx_scan.true_row_counts(self.path).get(name)
                 self._cache[name] = pd.read_excel(
-                    self.path, sheet_name=name, engine="openpyxl", header=None
+                    self.path, sheet_name=name, engine="openpyxl", header=None,
+                    **({"nrows": cap} if cap else {}),
                 )
             except Exception:
                 self._cache[name] = None

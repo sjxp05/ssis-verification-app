@@ -351,8 +351,10 @@ class GosiConstantsPage(QWidget):
         self._price_table.blockSignals(False)
 
 
-        self._doc.set_blocks((self._result or {}).get("블록", []))
-        self._doc.set_visible_chapters(TAB_CHAPTERS.get(self._tab_index, ()))
+        self._doc.set_blocks(
+            (self._result or {}).get("블록", []),
+            chapters=TAB_CHAPTERS.get(self._tab_index, ()),
+        )
 
         self._update_summary_labels(compare_data)
 

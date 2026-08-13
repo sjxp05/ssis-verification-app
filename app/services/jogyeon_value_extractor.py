@@ -25,6 +25,7 @@ from jogyeon_matcher.config.anchors import (  # noqa: F401  (외부에서 이 �
     JOGYEON_SHEET_NAMES,
     RATE_GRADES,
 )
+from jogyeon_matcher.ingest import xlsx_scan
 from jogyeon_matcher.matching.normalizer import sanitize
 
 # 공백류. 비가시 문자(ZWSP·BOM 등)는 문자로 열거하지 않고 sanitize 가 유니코드
@@ -43,7 +44,13 @@ class ValueExtractor:
 
     # 파일 읽고 원본(df)과 공백 제거한 검색용 사본(norm)을 함께 반환
     def _load(self, file_path, sheet_name):
-        df = pd.read_excel(file_path, sheet_name, engine="openpyxl", header=None)
+        # 서식만 남은 빈 행이 시트 끝까지 부풀어 있는 파일 방어 — 값이 있는
+        # 마지막 행까지만 읽는다. 탐지 실패 시 기존대로 전체를 읽는다.
+        cap = xlsx_scan.true_row_counts(file_path).get(sheet_name)
+        df = pd.read_excel(
+            file_path, sheet_name, engine="openpyxl", header=None,
+            **({"nrows": cap} if cap else {}),
+        )
         norm = df.astype(str).map(self._squeeze)
         return df, norm
 

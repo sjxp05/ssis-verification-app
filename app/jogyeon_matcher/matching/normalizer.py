@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from functools import lru_cache
 
 # 단위 주석으로 보고 통째로 지울 괄호.
 # (가형)·(나형)처럼 판별 내용을 담은 괄호는 지우면 안 되므로 화이트리스트로 둔다.
@@ -29,6 +30,19 @@ def sanitize(text) -> str:
 
 
 def normalize(text) -> str:
+    # 같은 라벨이 수집·대조·앵커 검사에서 반복 정규화되므로 문자열 입력은 캐싱한다.
+    # 순수 함수라 결과는 동일하고, 항목 수는 파일의 고유 라벨 수로 유한하다.
+    if isinstance(text, str):
+        return _normalize_cached(text)
+    return _normalize_impl(text)
+
+
+@lru_cache(maxsize=None)
+def _normalize_cached(text: str) -> str:
+    return _normalize_impl(text)
+
+
+def _normalize_impl(text) -> str:
     s = sanitize(text)
     s = _UNIT_PAREN.sub("", s)
     s = s.translate(_DECORATIVE)
