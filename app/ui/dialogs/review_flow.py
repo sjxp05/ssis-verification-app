@@ -62,9 +62,17 @@ class _MatchTask(QRunnable):
 
 
 class _QuestionBox(QMessageBox):
-    def __init__(self, parent, title, question, select_btn_text, skip_btn_text):
+    def __init__(
+        self,
+        parent: QWidget,
+        title: str,
+        question: str,
+        warning: bool = False,
+        select_btn_text: str = "파일 선택",
+        skip_btn_text: str = "건너뛰기",
+    ):
         super().__init__(parent)
-        self.setIcon(QMessageBox.Icon.Question)
+        self.setIcon(QMessageBox.Icon.Warning if warning else QMessageBox.Icon.Question)
         self.setWindowTitle(title)
         self.setText(question)
         self.select_btn = self.addButton(
@@ -82,25 +90,56 @@ class LabelReviewFlow:
 
     # on_done(True): 값을 읽어도 된다 / on_done(False): 담당자가 중단을 택했다
     def run(self, sheet: UploadedFile, on_done: Callable[[bool], None]) -> None:
-        baseline = self._baseline_path(sheet.path)
+        # 기존에 사용한 대조 파일이 있는지 확인
+        baseline = recent_files.get_recent_path(BASELINE_KEY)
+
         if baseline is None:
+            # 대조할 파일이 없는 경우: 현재 파일을 다음 년도 대조 기준 파일로 저장 (recent_files 구현필요)
             self._remember(sheet.path)
+            question = (
+                "이전 년도 조견표와 대조하면 문구가 바뀐 항목을 미리 확인할 수 있습니다.\n"
+                "대조할 파일을 선택하시겠습니까?"
+            )
+        elif baseline == Path(sheet.path).resolve():
+            # 이 파일을 기준으로 다른 파일을 대조한 기록이 있는 경우
+            question = (
+                f"올리신 파일을 대조 기준으로 사용한 기록이 있어 건너뛸 수 있습니다.\n({baseline.name})\n\n"
+                "다른 파일을 기준으로 대조하시겠습니까?"
+            )
+        else:
+            # 다른 파일과 대조한 기록이 있는 경우
+            question = (
+                f"이전 년도 조견표와 대조한 기록이 있어 건너뛸 수 있습니다.\n({baseline.name})\n\n"
+                "다른 파일을 기준으로 대조하시겠습니까?"
+            )
+
+        selected_path = self._select_baseline_file("조견표 문구 대조", question)
+        if selected_path is None:
+            # 건너뛰기를 선택하면 대조 없이 값을 바로 읽도록 신호 보내기
             on_done(True)
             return
 
+        self._start_matching(selected_path, sheet.path, on_done)
+
+    def _start_matching(
+        self, baseline_path: Path, target_path: Path, on_done: Callable[[bool], None]
+    ) -> None:
         self._generation += 1
         generation = self._generation
-        target_path = sheet.path
 
+        # 커서 모양을 원형 대기 커서로 바꾸기
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
-        task = _MatchTask(baseline, target_path, generation)
+
+        task = _MatchTask(baseline_path, target_path, generation)
         task.signals.finished.connect(
             lambda gen, report: self._on_matched(
-                gen, baseline, target_path, report, on_done
+                gen, baseline_path, target_path, report, on_done
             )
         )
         task.signals.failed.connect(
-            lambda gen, message: self._on_match_failed(gen, message, on_done)
+            lambda gen, message: self._on_match_failed(
+                gen, message, target_path, on_done
+            )
         )
         self._pool.start(task)
 
@@ -112,9 +151,12 @@ class LabelReviewFlow:
         report: MatchReport,
         on_done: Callable[[bool], None],
     ) -> None:
-        if generation != self._generation:
-            return  # 검토 도중 다른 파일로 바뀐 경우: 낡은 결과이므로 무시
+        # 커서 복원
         QApplication.restoreOverrideCursor()
+
+        # 검토 도중 다른 파일로 바뀐 경우 무효 처리
+        if generation != self._generation:
+            return
 
         if (
             not report.review_items
@@ -142,34 +184,40 @@ class LabelReviewFlow:
         on_done(True)
 
     def _on_match_failed(
-        self, generation: int, message: str, on_done: Callable[[bool], None]
+        self,
+        generation: int,
+        message: str,
+        target_path: Path,
+        on_done: Callable[[bool], None],
     ) -> None:
+        # 커서 복원
+        QApplication.restoreOverrideCursor()
+
+        # 검토 도중 다른 파일로 바뀐 경우 무효 처리
         if generation != self._generation:
             return
-        QApplication.restoreOverrideCursor()
-        on_done(self._ask_continue_after_failure(message))
 
-    # --- 기준 파일 ---------------------------------------------------------
-    def _baseline_path(self, target: Path) -> Path | None:
-        stored = recent_files.get_recent_path(BASELINE_KEY)
-        if stored is not None and stored != Path(target).resolve():
-            return stored
+        question = f"조견표 대조에 실패했습니다.\n{message}\n\n대조할 파일을 다시 선택하시겠습니까?"
 
-        if stored is not None:
-            # 기억된 파일과 같은 파일을 올린 경우. 대조 상대가 자기 자신이라 의미가 없다.
-            question = (
-                f"올리신 파일이 작년 조견표로 기억된 파일과 같습니다.\n({stored.name})\n\n"
-                "대조할 것이 없어 건너뜁니다.\n다른 파일을 기준으로 대조하시겠습니까?"
-            )
-        else:
-            question = (
-                "이전 년도 조견표와 대조하면 문구가 바뀐 항목을 미리 확인할 수 있습니다.\n"
-                "대조할 파일을 선택하시겠습니까?"
-            )
-
-        box = _QuestionBox(
-            self._parent, "조견표 문구 대조", question, "파일 선택", "건너뛰기"
+        selected_path = self._select_baseline_file(
+            "문구 대조 실패", question, warning=True, select_btn_text="파일 다시 선택"
         )
+        if selected_path is None:
+            on_done(True)
+            return
+
+        self._start_matching(selected_path, target_path, on_done)
+
+    # --- 대조 파일 선택하기 ---------------------------------------------------------
+    # 선택한 파일의 Path / 파일을 선택하지 않으면 None 반환
+    def _select_baseline_file(
+        self,
+        title: str,
+        question: str,
+        warning: bool = False,
+        select_btn_text: str = "파일 선택",
+    ):
+        box = _QuestionBox(self._parent, title, question, warning, select_btn_text)
         box.exec()
         if box.clickedButton() != box.select_btn:
             return None
@@ -182,14 +230,3 @@ class LabelReviewFlow:
     def _remember(self, path: Path) -> None:
         # 올해 파일이 내년의 기준이 된다.
         recent_files.set_recent_path(BASELINE_KEY, path)
-
-    def _ask_continue_after_failure(self, message: str) -> bool:
-        question = (
-            f"조견표 대조에 실패했습니다.\n{message}\n\n대조할 파일을 다시 선택할까요?"
-        )
-
-        box = _QuestionBox(
-            self._parent, "문구 대조 실패", question, "파일 다시 선택", "건너뛰기"
-        )
-        box.exec()
-        return box.clickedButton() == box.select_btn
