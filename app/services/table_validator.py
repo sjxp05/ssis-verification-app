@@ -38,6 +38,8 @@ P_COPAY_RATE = "본인부담금율"
 P_SERVICE = "서비스종유명"  
 P_TIME = "서비스시간명"
 P_CODE="등급구분"
+P_UNIT = "단위기준단가"
+P_UNIT_NIGHT = "단위기준심야단가"
 
 # 추가급여 등급명
 _ADD_BASE_TO_KEY = {info[1]: key for key, info in ADD_CODE_INFO.items()}
@@ -174,7 +176,7 @@ class TableValidator:
             else:#추가급여단가표
                 report = self._validate_add(df, v)
         else:#notice_verify로 결제단가표
-            report = self._validate_payment(df, basic_df)
+            report = self._validate_payment(df, basic_df,service_prices=values)
 
         #작년
         if prev_df is not None:
@@ -447,7 +449,7 @@ class TableValidator:
 
     # 결제단가표
     # 기본급여 단가표와 대조한다 없을 경우 지원량, 금액과 율 상호 연관으로 특정
-    def _validate_payment(self, df: pd.DataFrame, basic_df: pd.DataFrame | None = None) -> ValidationReport:
+    def _validate_payment(self, df: pd.DataFrame, basic_df: pd.DataFrame | None = None, service_prices:dict |None=None,) -> ValidationReport:
         report = ValidationReport()
         needed = {P_SUPPORT, P_GOV, P_COPAY}
         if not needed.issubset(set(map(str, df.columns))):
@@ -462,6 +464,18 @@ class TableValidator:
                 s, g, c = _num(b.get(C_SUPPORT)), _num(b.get(C_GOV)), _num(b.get(C_COPAY))
                 if code and None not in (s, g, c):
                     grade_ref[code] = (s, g, c)
+
+        #서비스종류명, 서비스 시간명 별 기대 단가
+        svc_ref:dict[tuple[str,str],tuple[int,int]]={}
+        if service_prices:
+            try:
+                for svc in self._writer._build_service_rows(service_prices):
+                    svc_ref[(svc[P_SERVICE],svc[P_TIME])]=(
+                        svc[P_UNIT],svc[P_UNIT_NIGHT]
+                    )
+            except(ValueError,KeyError):
+                pass
+        has_units={P_UNIT,P_UNIT_NIGHT}.issubset(set(map(str,df.columns)))
 
         has_rates = {P_GOV_RATE, P_COPAY_RATE}.issubset(set(map(str, df.columns)))
         for i in range(len(df.index)):
@@ -539,18 +553,41 @@ class TableValidator:
                 ))
 
         # (등급구분 x 서비스종류 x 서비스시간) 중복
-        if {C_CODE, P_SERVICE, P_TIME}.issubset(set(map(str, df.columns))):
+        if {P_CODE, P_SERVICE, P_TIME}.issubset(set(map(str, df.columns))):
             seen: dict[tuple, int] = {}
             for i in range(len(df.index)):
                 row = df.iloc[i]
-                key = (row.get(C_CODE), row.get(P_SERVICE), row.get(P_TIME))
+                key = (row.get(P_CODE), row.get(P_SERVICE), row.get(P_TIME))
                 if key in seen:
                     report.add(CellIssue(
-                        i, C_CODE, f"중복 행: {seen[key] + 1}행과 키가 같음",
+                        i, P_CODE, f"중복 행: {seen[key] + 1}행과 키가 같음",
                         fixes=(f"{i + 1}행 또는 {seen[key] + 1}행 중 하나 삭제",),
                     ))
                 else:
                     seen[key] = i
+
+                #고시 단가 대조 확인
+                if svc_ref and has_units:
+                    service=str(row.get(P_SERVICE,"")or "").strip()
+                    time_name=str(row.get(P_TIME,"")or "").strip()
+                    ref=svc_ref.get((service,time_name))
+                    if ref is not None:
+                        exp_day,exp_night=ref
+                        day=_num(row.get(P_UNIT))
+                        night=_num(row.get(P_UNIT_NIGHT))
+                        if day is not None and day!=exp_day:
+                            report.add(CellIssue(
+                                i,P_UNIT,"단위기준단가가 고시 기준 계산값과 다름",
+                                expected=exp_day,actual=day,
+                                fixes=(f"{P_UNIT} {_fmt(day)} -> {_fmt(exp_day)}",),
+                                extra=f"기준: 고시단가 X 시간 변환 규칙 ({service}/{time_name})",
+                            ))
+                        if night is not None and night!=exp_night:
+                            report.add(CellIssue(
+                                i,P_UNIT_NIGHT,"단위기준심야단가가 고시 기준 계산값과 다름",
+                                expected=exp_night,actual=night,
+                                fixes=(f"{P_UNIT_NIGHT} {_fmt(night)} -> {_fmt(exp_night)}",),
+                            ))
         return report
 
     # 결제단가 폴백 검사: 금액·율 다섯 값의 상호 연관으로 추측
@@ -879,7 +916,7 @@ class TableValidator:
                 for col in (C_SUPPORT, C_GOV, C_COPAY):
                     g = growth_rate(_num(old.get(col)), _num(row.get(col)))
                     parts.append(f"{col} {'-' if g is None else f'{g:+.2f}%'}")
-                extra = "증가율(작년比): " + " · ".join(parts)
+                extra = "증가율(비교단가): " + " · ".join(parts)
             report.metrics[i] = (report.metrics.get(i, "") + "\n" + extra).strip()
 
     def _append_growth_metrics_pay(
@@ -902,7 +939,7 @@ class TableValidator:
                     for col in (P_SUPPORT, P_GOV, P_COPAY):
                         g = growth_rate(_num(old.get(col)), _num(row.get(col)))
                         parts.append(f"{col} {'-' if g is None else f'{g:+.2f}%'}")
-                    extra = "증가율(작년比): " + " · ".join(parts)
+                    extra = "증가율(비교단가): " + " · ".join(parts)
                 report.metrics[i] = (report.metrics.get(i, "") + "\n" + extra).strip()
  
  
