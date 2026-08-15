@@ -10,6 +10,8 @@ from PyQt6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
 
 from models.flows import FLOWS, FlowSpec
 from ui.components.scroll_page import centered_scroll_page
+from ui.widgets.value_field import ValueField
+from utils.date import yearConfig
 
 
 class FlowButton(QFrame):
@@ -74,6 +76,19 @@ class MainPage(QWidget):
             button = FlowButton(spec)
             button.clicked.connect(self.flowRequested.emit)
             column.addWidget(button)
+
+        column.addSpacing(10)
+        year_field = ValueField(
+            key="system_year",
+            label="사업년도",
+            value=yearConfig.SYSTEM_YEAR,
+            kind="year",
+        )
+        year_field.valueChanged.connect(
+            lambda _key, value: yearConfig.set_system_year(value)
+        )
+        column.addWidget(year_field, 0, Qt.AlignmentFlag.AlignHCenter)
+
         column.addStretch(2)
 
         outer = QVBoxLayout(self)
