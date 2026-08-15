@@ -19,6 +19,8 @@ from ui.components.scroll_page import centered_scroll_page
 from utils.qss import set_state
 from ui.widgets.upload_card import UploadCard
 
+from utils.date import yearConfig
+
 # 파일 묶음을 받아 상수를 돌려준다. 예외를 던지면 화면에 사유가 뜬다.
 # ValueExtractor = Callable[[dict[str, UploadedFile]], ConstantValues]
 
@@ -69,11 +71,11 @@ class _ExtractTask(QRunnable):
 
     def run(self) -> None:
         try:
-            # self._files["sheet"] -> 슬롯이 없으면 KeyError 대신 읽을 수 있는 메시지 표시
-            sheet = self._files.get("sheet")
-            if sheet is None:
-                raise ValueError("조견표(sheet) 파일이 없습니다.")
-            values = self._extractor.extract_jogyeon_values(sheet)
+            # self._files["jogyeon"] -> 슬롯이 없으면 KeyError 대신 읽을 수 있는 메시지 표시
+            jogyeon = self._files.get("jogyeon")
+            if jogyeon is None:
+                raise ValueError("조견표 파일이 없습니다.")
+            values = self._extractor.extract_jogyeon_values(jogyeon)
         except Exception as error:
             self.signals.failed.emit(
                 self._generation, str(error) or type(error).__name__
@@ -92,7 +94,9 @@ class UploadPage(QWidget):
     def __init__(
         self,
         extractor: ValueExtractor | None = None,
-        label_reviewer: Callable[[UploadedFile, Callable[[bool], None]], None] | None = None,
+        label_reviewer: (
+            Callable[[UploadedFile, Callable[[bool], None]], None] | None
+        ) = None,
         parent: QWidget | None = None,
     ) -> None:
         super().__init__(parent)
@@ -148,7 +152,7 @@ class UploadPage(QWidget):
         column.addSpacing(6)
         column.addWidget(self._cards_holder)
         column.addSpacing(6)
-        column.addWidget(self._load_cache_btn) # 타이틀 아래에 캐시 로드 버튼 추가
+        column.addWidget(self._load_cache_btn)  # 타이틀 아래에 캐시 로드 버튼 추가
         column.addWidget(self._next)
         column.addWidget(self._hint)
         column.addStretch(1)
@@ -177,7 +181,7 @@ class UploadPage(QWidget):
         self._confirmed_files = {}
         self._confirmed_values = None
         self._cards.clear()
-        self._pinned.clear() 
+        self._pinned.clear()
         while self._cards_layout.count():
             item = self._cards_layout.takeAt(0)
             if item.widget() is not None:
@@ -202,7 +206,7 @@ class UploadPage(QWidget):
             self._cards[slot.key] = card
             self._cards_layout.addWidget(card)
 
-            if recent_files.get_recent_path(slot.key):
+            if recent_files.get_recent_path(yearConfig.SYSTEM_YEAR, slot.key):
                 has_cache = True
         show_btn = has_cache and (self._flow.key == "notice_verify")
         self._load_cache_btn.setVisible(show_btn)
@@ -225,18 +229,20 @@ class UploadPage(QWidget):
         if (
             self._flow is not None
             and self._flow.key == UNIT_PRICE.key
-            and key == "sheet"
+            and key == "jogyeon"
         ):
             # flow 1(조견표 -> 단가표 생성)에서 조견표를 올리면
             # flow 2가 나중에 자동으로 불러올 수 있도록 경로 저장
-            recent_files.set_recent_path(key, _file.path)
+            recent_files.set_recent_path(yearConfig.SYSTEM_YEAR, key, _file.path)
         self._refresh_files_state()
 
     # _on_file_selected 안에 있던 상태 재계산을 꺼내서 재사용 가능하게 분리
     def _refresh_files_state(self) -> None:
         files = self._files()
         # 추출에 성공한 적이 없으면(_confirmed_files 비어있음) 아직 비교할 대상 자체가 없다.
-        matches_confirmed = bool(self._confirmed_files) and files == self._confirmed_files
+        matches_confirmed = (
+            bool(self._confirmed_files) and files == self._confirmed_files
+        )
         if matches_confirmed:
             # 원래 추출에 썼던 파일 그대로 돌아온 경우: 다시 읽을 필요 없이 그 값을 그대로 쓴다.
             self._values = self._confirmed_values
@@ -297,7 +303,7 @@ class UploadPage(QWidget):
     ) -> None:
         # 서식이 바뀌었는데 그대로 값을 읽으면 조용히 틀린 값이 나온다.
         # 추출 전에 작년 조견표와 라벨을 대조해 사람이 확인하게 한다.
-        sheet = files.get("sheet")
+        sheet = files.get("jogyeon")
         if self._label_reviewer is None or sheet is None:
             on_done(True)
             return
@@ -305,11 +311,11 @@ class UploadPage(QWidget):
             on_done(True)
             return
         self._label_reviewer(sheet, on_done)
-    
+
     def _load_cached_files(self) -> None:
         loaded = False
         for key, card in self._cards.items():
-            cached_path = recent_files.get_recent_path(key)
+            cached_path = recent_files.get_recent_path(yearConfig.SYSTEM_YEAR, key)
             if not cached_path or not os.path.exists(str(cached_path)):
                 continue
             if hasattr(card, "set_path"):

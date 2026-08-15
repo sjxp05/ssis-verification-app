@@ -51,7 +51,7 @@ UNIT_PRICE = FlowSpec(
     upload_description=("조견표를 올리면 단가 계산에 필요한 값을 자동으로 읽어옵니다."),
     uploads=(
         UploadSlot(
-            key="sheet",
+            key="jogyeon",
             title="조견표",
             description="Excel 형식의 조견표 · 등급·구간 정보를 읽습니다",
             extensions=(".xlsx", ".xls"),
@@ -64,7 +64,7 @@ UNIT_PRICE = FlowSpec(
 NOTICE_VERIFY = FlowSpec(
     key="notice_verify",
     menu_title="고시 검증 및 결제단가표 생성",
-    menu_description="고시와 조견표, 단가표를 대조해 고시의 내용이 옳은지 검증합니다.(준비 중)",
+    menu_description="고시와 조견표, 단가표를 대조해 고시의 내용이 옳은지 검증합니다.",
     window_title="고시 검증 및 결제단가표 생성",
     steps=("문서 업로드", "값 확인", "결제단가표 생성 및 저장"),
     upload_title="문서 업로드",
@@ -80,7 +80,7 @@ NOTICE_VERIFY = FlowSpec(
             icon="📄",
         ),
         UploadSlot(
-            key="sheet",
+            key="jogyeon",
             title="조견표",
             description="Excel 형식의 조견표 · 등급·구간 정보를 읽습니다",
             extensions=(".xlsx", ".xls"),
@@ -88,7 +88,7 @@ NOTICE_VERIFY = FlowSpec(
             remember_last=True,
         ),
         UploadSlot(
-            key="unit_price_table",
+            key="basic_unit_price",
             title="기본급여 단가표",
             description="Excel 형식의 기본급여 단가표를 업로드해 주세요.",
             extensions=(".xlsx", ".xls"),

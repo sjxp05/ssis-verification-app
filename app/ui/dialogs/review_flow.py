@@ -31,9 +31,13 @@ from jogyeon_matcher.contracts.schemas import MatchReport
 from models.dto import UploadedFile
 from services import recent_files
 from ui.dialogs.review_dialog import ReviewDialog
+from utils.date import yearConfig
 
-# 대조 기준이 되는 작년 조견표 경로를 기억해 두는 키
+# 대조 기준이 되는 조견표 경로를 기억해 두는 키
 BASELINE_KEY = "jogyeon_baseline"
+
+# 전년도 조견표들을 확인하는 키
+JOGYEON_KEY = "jogyeon"
 
 
 class _MatchSignals(QObject):
@@ -91,11 +95,19 @@ class LabelReviewFlow:
     # on_done(True): 값을 읽어도 된다 / on_done(False): 담당자가 중단을 택했다
     def run(self, sheet: UploadedFile, on_done: Callable[[bool], None]) -> None:
         # 기존에 사용한 대조 파일이 있는지 확인
-        baseline = recent_files.get_recent_path(BASELINE_KEY)
+        baseline = recent_files.get_recent_path(yearConfig.SYSTEM_YEAR, BASELINE_KEY)
+
+        # 현재 파일을 다른 파일과 대조한 기록이 없는 경우
+        if baseline is None:
+            # 현재 파일을 다음 년도 대조 기준 파일로 저장 (recent_files 구현필요)
+            self._remember(sheet.path)
+            # 이전 년도 조견표들을 모두 검색해서 가장 가까운 연도의 것을 찾음
+            baseline = recent_files.search_jogyeon_history(
+                yearConfig.SYSTEM_YEAR, JOGYEON_KEY
+            )
 
         if baseline is None:
-            # 대조할 파일이 없는 경우: 현재 파일을 다음 년도 대조 기준 파일로 저장 (recent_files 구현필요)
-            self._remember(sheet.path)
+            # 대조할 파일을 찾지 못한 경우
             question = (
                 "이전 년도 조견표와 대조하면 문구가 바뀐 항목을 미리 확인할 수 있습니다.\n"
                 "대조할 파일을 선택하시겠습니까?"
@@ -126,6 +138,11 @@ class LabelReviewFlow:
     ) -> None:
         self._generation += 1
         generation = self._generation
+
+        # 대조 파일 경로 저장하기
+        recent_files.set_recent_path(
+            yearConfig.SYSTEM_YEAR, BASELINE_KEY, baseline_path
+        )
 
         # 커서 모양을 원형 대기 커서로 바꾸기
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
@@ -228,5 +245,5 @@ class LabelReviewFlow:
         return Path(path) if path else None
 
     def _remember(self, path: Path) -> None:
-        # 올해 파일이 내년의 기준이 된다.
-        recent_files.set_recent_path(BASELINE_KEY, path)
+        # 다음 연도의 기준 파일로 저장한다.
+        recent_files.set_recent_path(yearConfig.SYSTEM_YEAR + 1, BASELINE_KEY, path)
