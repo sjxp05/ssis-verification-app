@@ -87,6 +87,7 @@ class MainWindow(QMainWindow):
 
         self.main_page = MainPage()
         self.main_page.flowRequested.connect(self.start_flow)
+        self.main_page.yearChanged.connect(self._on_year_changed)
 
         # 값을 읽기 전에 작년 조견표와 문구를 대조시킨다
         self._label_review = LabelReviewFlow(self)
@@ -154,6 +155,10 @@ class MainWindow(QMainWindow):
         if step == Screen.CONSTANTS.step:
             return self._constants_page()
         return self.table_viewer_page
+
+    def _on_year_changed(self) -> None:
+        # 사업년도를 바꾸면 업로드 화면에 남아 있던 파일은 다른 연도 것이므로 새로 고른다.
+        self.upload_page.reset()
 
     def go_home(self) -> None:
         # 메인 화면으로. 진행 중이던 흐름은 그대로 두었다가 다시 들어오면 이어간다.

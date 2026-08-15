@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from services.jogyeon_value_extractor import ValueExtractor
 from models.dto import ConstantValues, UploadedFile
-from models.flows import FlowSpec, UNIT_PRICE
+from models.flows import NOTICE_VERIFY, FlowSpec, UNIT_PRICE
 from services import recent_files
 from ui.components.button import PrimaryButton, GhostButton
 from ui.components.scroll_page import centered_scroll_page
@@ -26,6 +26,7 @@ from utils.date import yearConfig
 
 WAITING, FILLED, BUSY, READY, FAILED = "waiting", "filled", "busy", "ready", "failed"
 
+_LOAD_CACHE_BTN_TEXT = "📂 {system_year}년도 작업 기록 불러오기"
 
 _CONFIRM_TEXT = "문서 읽기 시작"
 _NEXT_TEXT = "다음 단계로  →"
@@ -128,10 +129,11 @@ class UploadPage(QWidget):
         self._subtitle.setObjectName("PageSubtitle")
         self._subtitle.setWordWrap(True)
 
-        # 메뉴 1 데이터 불러오기 버튼 추가
-        self._load_cache_btn = GhostButton("📂 이전 작업 불러오기 (메뉴 1)")
+        # 캐싱된 데이터 불러오기 버튼 추가
+        self._load_cache_btn = GhostButton(
+            _LOAD_CACHE_BTN_TEXT.format(system_year=yearConfig.SYSTEM_YEAR)
+        )
         self._load_cache_btn.clicked.connect(self._load_cached_files)
-        self._load_cache_btn.setVisible(False)  # 숨겨두기
 
         self._cards_holder = QWidget()
         self._cards_layout = QVBoxLayout(self._cards_holder)
@@ -189,9 +191,8 @@ class UploadPage(QWidget):
 
         if self._flow is None:
             return
-        # TODO(remember_last):
-        # slot.remember_last==True 인 슬롯은 카드를 만든 뒤
-        # services.recent_files.get_recent_path(slot.key) 로 저장된 경로가 있는지 확인
+
+        # slot.remember_last==True 인 슬롯은 카드를 만든 뒤 저장된 경로가 있는지 확인
         #   -> 있으면 card.set_path(path) 를 바로 호출해 자동으로 채운다.
         #   -> 없거나 파일이 사라졌을 때만 지금처럼 빈 카드로 두고 직접 업로드를 받는다.
         # 주의: 이 루프 중간에 자동 채움이 fileSelected -> _on_file_selected 를 곧바로 태우면
@@ -208,8 +209,11 @@ class UploadPage(QWidget):
 
             if recent_files.get_recent_path(yearConfig.SYSTEM_YEAR, slot.key):
                 has_cache = True
-        show_btn = has_cache and (self._flow.key == "notice_verify")
-        self._load_cache_btn.setVisible(show_btn)
+        self._load_cache_btn.setText(
+            _LOAD_CACHE_BTN_TEXT.format(system_year=yearConfig.SYSTEM_YEAR)
+        )
+        self._load_cache_btn.setVisible(has_cache)
+
         self._set_state(WAITING)
 
     def values(self) -> ConstantValues | None:
@@ -226,10 +230,9 @@ class UploadPage(QWidget):
 
     def _on_file_selected(self, key: str, _file: UploadedFile) -> None:
         self._generation += 1  # 진행 중이던 추출이 있었다면 무효로 만든다
-        if (
-            self._flow is not None
-            and self._flow.key == UNIT_PRICE.key
-            and key == "jogyeon"
+        if self._flow is not None and (
+            (key == "jogyeon" and self._flow.key == UNIT_PRICE.key)
+            or (key == "guide" and self._flow.key == NOTICE_VERIFY.key)
         ):
             # flow 1(조견표 -> 단가표 생성)에서 조견표를 올리면
             # flow 2가 나중에 자동으로 불러올 수 있도록 경로 저장

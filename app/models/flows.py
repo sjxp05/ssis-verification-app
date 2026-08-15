@@ -56,6 +56,7 @@ UNIT_PRICE = FlowSpec(
             description="Excel 형식의 조견표 · 등급·구간 정보를 읽습니다",
             extensions=(".xlsx", ".xls"),
             icon="▦",
+            remember_last=True,
         ),
     ),
     export_names=("기본급여_단가표.xlsx", "추가급여_단가표.xlsx"),
@@ -78,6 +79,7 @@ NOTICE_VERIFY = FlowSpec(
             description="hwpx 형식의 고시 문서를 업로드해 주세요.",
             extensions=(".hwpx",),
             icon="📄",
+            remember_last=True,
         ),
         UploadSlot(
             key="jogyeon",
