@@ -315,35 +315,115 @@ QLabel#BubbleFoot {
     background: ${BG};
 }
 
-/* --- 메인 화면의 작업 선택 버튼 ------------------------------------ */
-#FlowButton {
-    background: ${SURFACE};
-    border: 1px solid ${BORDER};
-    border-radius: ${RADIUS};
-}
-#FlowButton:hover {
-    border-color: ${NAVY};
-    background: ${BORDER_SOFT};
-}
-#FlowButton:disabled {
-    background: ${BG};
-    border-color: ${BORDER_SOFT};
-}
-#FlowButtonTitle {
-    font-size: 15px;
-    font-weight: 600;
+/*  Main Page */
+
+QLabel#MainTitle {
+    font-size: 24px;
+    font-weight: 700;
     color: ${TEXT};
-    background: transparent;
 }
-#FlowButtonDesc {
-    font-size: 12px;
-    color: ${TEXT_MUTED};
-    background: transparent;
-}
-#FlowButton:disabled #FlowButtonDesc {
-    color: ${TEXT_MUTED};
+QLabel#MainSubtitle {
+    font-size: 14px;
+    color: ${SUB_TEXT};
+    margin-top: 8px;
 }
 
+QFrame#YearSelectorBox {
+    background: ${SURFACE};
+    border-radius: 30px;
+    min-width: 280px;
+}
+
+QFrame#MenuCard {
+    background: ${SURFACE};
+    border-radius: 12px;
+    min-width: 250px;
+    max-width: 270px;
+}
+
+QFrame#CardTopLine {
+    background: ${NAVY};
+    border-radius: 1.5px;
+}
+
+QFrame#MenuCard:hover {
+    border-top: 3px solid ${NAVY};
+    border: 1px solid ${NAVY_LIGHT};
+}
+
+QFrame#MenuCard QLabel#MenuArrow {
+    color: ${TEXT_MUTED};
+    font-size: 15px;
+    font-weight: 400;
+}
+
+/* 아이콘 (연한 파란색 배경) */
+QLabel#MenuIcon {
+    background: ${TEXT_GRAY};
+    font-size: 22px;
+    border-radius: 8px;
+    min-width: 44px;
+    max-width: 44px;
+    min-height: 44px;
+    max-height: 44px;
+}
+
+/* 텍스트 */
+QLabel#MenuTitle {
+    font-size: 18px;
+    font-weight: 700;
+    color: ${TEXT};
+}
+QLabel#MenuDesc {
+    font-size: 13px;
+    color: ${SUB_TEXT};
+    line-height: 1.5;
+}
+
+/* 단계 표시 (1, 2, 3 동그라미) */
+QLabel#StepBadge {
+    background: ${TEXT_GRAY};
+    color: ${NAVY};
+    font-size: 10px;
+    font-weight: 600;
+    border-radius: 7.5px;
+    border: 1px solid ${NAVY};
+    min-width: 15px;
+    max-width: 15px;
+    min-height: 15px;
+    max-height: 15px;
+}
+QLabel#MenuStepText {
+    font-size: 13px;
+    color: ${SUB_TEXT};
+}
+
+/* 시작하기 버튼 */
+QPushButton#MenuStartBtn {
+    background: ${NAVY};
+    color: ${SURFACE};
+    border: none;
+    border-radius: 6px;
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+/* --- 하단 안내문 (Info Banner) --- */
+QFrame#MainInfoBox {
+    background: ${SURFACE};
+    min-width: 830px;
+    max-width: 880px;
+}
+QLabel#InfoIcon {
+    color: ${NAVY};
+    font-size: 16px;
+    font-weight: 700;
+}
+QLabel#InfoText {
+    font-size: 13px;
+    color: ${SUB_TEXT};
+}
 /* --- 업로드 카드 ---------------------------------------------------- */
 #UploadCard {
     background: ${SURFACE};
