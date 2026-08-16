@@ -694,7 +694,7 @@ class TableWriter:
                             {suffix: {"day": price, "night": price}}
                         )
 
-                else:
+                elif prefix == "방문간호지시서":
                     formatted_prices.setdefault(
                         prefix, {time: {} for time in TIME_DIVISIONS[prefix]}
                     )
@@ -703,7 +703,7 @@ class TableWriter:
 
                     for time in TIME_DIVISIONS[prefix]:
                         formatted_prices[prefix][time].update(
-                            {suffix: {"day": price, "night": price}}
+                            {suffix: {"day": value, "night": value}}
                         )
 
         return formatted_prices
