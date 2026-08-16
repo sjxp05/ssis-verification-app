@@ -4,8 +4,15 @@ import copy
 from PyQt6.QtGui import QColor, QBrush
 from PyQt6.QtCore import QObject, QRunnable, QThreadPool, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
-    QHBoxLayout, QLabel, QMessageBox, QScrollArea, QSplitter,
-    QStackedWidget, QVBoxLayout, QWidget, QAbstractItemView
+    QHBoxLayout,
+    QLabel,
+    QMessageBox,
+    QScrollArea,
+    QSplitter,
+    QStackedWidget,
+    QVBoxLayout,
+    QWidget,
+    QAbstractItemView,
 )
 import pandas as pd
 
@@ -16,7 +23,12 @@ from ui.components.button import GhostButton, PrimaryButton
 from ui.components.tab_bar import SegmentedTabBar
 from utils.qss import set_state
 from ui.widgets.gosi_panel import GosiDocumentViewer
-from ui.widgets.gosi_tables import CompareTableWidget, PriceTableWidget, PriceEditDelegate, _to_int
+from ui.widgets.gosi_tables import (
+    CompareTableWidget,
+    PriceTableWidget,
+    PriceEditDelegate,
+    _to_int,
+)
 
 WAITING, FILLED, BUSY, READY, FAILED = "waiting", "filled", "busy", "ready", "failed"
 
@@ -32,31 +44,45 @@ _DOC_SHOW_TEXT = "고시 원문 펼치기"
 
 TABS = {
     "notice_verify": {
-        "label": "조견표 대조", 
-        "title": "고시와 조견표의 값이 맞는지 확인해 주세요.", 
+        "label": "조견표 대조",
+        "title": "고시와 조견표의 값이 맞는지 확인해 주세요.",
         "card_title": "조견표 ↔ 고시 대조",
     },
     "payment_price": {
-        "label": "서비스 단가", 
-        "title": "서비스별 단가가 맞는지 확인해주세요.", 
+        "label": "서비스 단가",
+        "title": "서비스별 단가가 맞는지 확인해주세요.",
         "card_title": "서비스 단가 확인",
-    }
+    },
 }
 
 
 TAB_CHAPTERS = {0: ("제2장", "제3장", "부"), 1: ("제3장", "제4장")}
-COMPARE_COLUMNS = [("항목", False, True), ("조견표", True, False), ("고시", True, False), ("결과", False, False)]
-PRICE_COLUMNS = [("급여", False, False), ("구분", False, True), ("금액", True, False), ("가산수당", True, False)]
+COMPARE_COLUMNS = [
+    ("항목", False, True),
+    ("조견표", True, False),
+    ("고시", True, False),
+    ("결과", False, False),
+]
+PRICE_COLUMNS = [
+    ("급여", False, False),
+    ("구분", False, True),
+    ("금액", True, False),
+    ("가산수당", True, False),
+]
 RESULT_COLORS = {"일치": "#2F855A", "불일치": "#C53030", "조견표에 없음": "#96620F"}
 
 EDITABLE_PRICE_COLS = (2, 3)  # 금액(2열), 가산수당(3열)
+
 
 class _TableWriteSignals(QObject):
     finished = pyqtSignal(int, object)
     failed = pyqtSignal(int, str)
 
+
 class _TableWriteTask(QRunnable):
-    def __init__(self, table_writer: TableWriter, service_prices: dict, basic_df, generation: int) -> None:
+    def __init__(
+        self, table_writer: TableWriter, service_prices: dict, basic_df, generation: int
+    ) -> None:
         super().__init__()
         self.signals = _TableWriteSignals()
         self._table_writer = table_writer
@@ -71,9 +97,12 @@ class _TableWriteTask(QRunnable):
                 basic_df=self._basic_df,
             )
         except Exception as error:
-            self.signals.failed.emit(self._generation, str(error) or type(error).__name__)
+            self.signals.failed.emit(
+                self._generation, str(error) or type(error).__name__
+            )
         else:
             self.signals.finished.emit(self._generation, tables)
+
 
 class GosiConstantsPage(QWidget):
     # 단가표 생성 생략 -> 값 확인이 끝났음을 메인 윈도우에 알림
@@ -81,7 +110,12 @@ class GosiConstantsPage(QWidget):
     valuesChanged = pyqtSignal()
     valuesKept = pyqtSignal()
 
-    def __init__(self, table_writer: TableWriter | None = None, parent: QWidget | None = None, flow: str = "notice_verify"):
+    def __init__(
+        self,
+        table_writer: TableWriter | None = None,
+        parent: QWidget | None = None,
+        flow: str = "notice_verify",
+    ):
         super().__init__(parent)
         self.setObjectName("PageBody")
         self._flow = flow
@@ -125,7 +159,7 @@ class GosiConstantsPage(QWidget):
 
         for b in (self._diff_button, self._doc_button):
             b.setFixedSize(130, 32)
-            
+
         card_head = QHBoxLayout()
         card_head.addWidget(self._card_title)
         card_head.addStretch(1)
@@ -177,11 +211,13 @@ class GosiConstantsPage(QWidget):
         formatted = {}
 
         for service, items in self._prices().items():
-            if not isinstance(items, dict): continue
-            
+            if not isinstance(items, dict):
+                continue
+
             for key, item in items.items():
-                if not isinstance(item, dict): continue
-                
+                if not isinstance(item, dict):
+                    continue
+
                 amount = _to_int(item.get("금액"))
                 if amount is not None:
                     formatted[f"{service}.{key}"] = amount
@@ -192,37 +228,45 @@ class GosiConstantsPage(QWidget):
         raw = (self._result or {}).get("단가") or {}
         if not self._price_overrides:
             return raw
- 
+
         merged = copy.deepcopy(raw)
         for (service, key, col_name), value in self._price_overrides.items():
-            if service not in merged: merged[service] = {}
-            if key not in merged[service]: merged[service][key] = {}
+            if service not in merged:
+                merged[service] = {}
+            if key not in merged[service]:
+                merged[service][key] = {}
             merged[service][key][col_name] = value
         return merged
-    
+
     def set_reference(self, values: dict | None) -> None:
         self._reference = values or {}
         if self._result:
-            self._result["대조"] = gosi_verifier.compare_with_reference(self._result["월한도액"], self._reference)
+            self._result["대조"] = gosi_verifier.compare_with_reference(
+                self._result["월한도액"], self._reference
+            )
             self._fill_all()
             self._refresh_state()
 
     def set_unit_price_path(self, path: str) -> None:
         self._unit_price_path = path
 
-    def set_sheet_path(self, path:str) -> None:
+    def set_sheet_path(self, path: str) -> None:
         self._sheet_path = path
 
     def load_notice(self, path: str) -> None:
         try:
             result = gosi_verifier.read_gosi(path, self._reference, self._flow)
         except Exception as error:
-            QMessageBox.warning(self, "불러오기 실패", f"고시를 읽지 못했습니다:\n{error}")
+            QMessageBox.warning(
+                self, "불러오기 실패", f"고시를 읽지 못했습니다:\n{error}"
+            )
             return
         
         self._result = result
         self._path = path
         self._price_overrides.clear()
+        self._tables = None
+        self._generation += 1
         self._fill_all()
         self._refresh_state()
 
@@ -254,7 +298,6 @@ class GosiConstantsPage(QWidget):
         self._fill_all()
         self._set_state(WAITING)
 
-    
     # --- 내부 빌드 및 채우기 로직 (간소화) --------------------------------------
 
     def _section(self, title: str, widget: QWidget) -> QWidget:
@@ -301,10 +344,14 @@ class GosiConstantsPage(QWidget):
         self._skipped_label.setObjectName("FindingDetail")
         self._skipped_label.setWordWrap(True)
         return self._scroll(
-            [self._compare_summary,
-             self._section("조견표 ↔ 고시", self._compare_table),
-             self._section("고시에 없어 대조하지 않은 조견표 항목", self._skipped_label)
-        ])
+            [
+                self._compare_summary,
+                self._section("조견표 ↔ 고시", self._compare_table),
+                self._section(
+                    "고시에 없어 대조하지 않은 조견표 항목", self._skipped_label
+                ),
+            ]
+        )
 
     def _build_price_panel(self) -> QWidget:
         self._price_table = PriceTableWidget()
@@ -317,29 +364,37 @@ class GosiConstantsPage(QWidget):
         self._price_delegate = PriceEditDelegate(0, 10_000_000, 100, self)
         for col in EDITABLE_PRICE_COLS:
             self._price_table.setItemDelegateForColumn(col, self._price_delegate)
-        
-        self._price_table.itemChanged.connect(self._on_item_changed) 
+
+        self._price_table.itemChanged.connect(self._on_item_changed)
         self._price_table.setToolTip("금액/가산수당 셀을 더블클릭하면 수정 가능합니다.")
 
         self._issue_label = QLabel()
         self._issue_label.setObjectName("FindingDetail")
         self._issue_label.setWordWrap(True)
-        return self._scroll([
-            self._section("고시에서 읽은 단가 (결제단가표로 전달)", self._price_table),
-            self._section("검증", self._issue_label)
-        ])
+        return self._scroll(
+            [
+                self._section(
+                    "고시에서 읽은 단가 (결제단가표로 전달)", self._price_table
+                ),
+                self._section("검증", self._issue_label),
+            ]
+        )
 
     def _fill_all(self) -> None:
         if self._path:
             name = os.path.basename(self._path)
-            self._subtitle.setText(f"{name}  ·  조견표에서 읽은 항목 {len(self._reference)}개")
+            self._subtitle.setText(
+                f"{name}  ·  조견표에서 읽은 항목 {len(self._reference)}개"
+            )
         else:
-            self._subtitle.setText("고시 파일을 불러오면 대조 결과가 여기에 표시됩니다.")
+            self._subtitle.setText(
+                "고시 파일을 불러오면 대조 결과가 여기에 표시됩니다."
+            )
 
         compare_data = (self._result or {}).get("대조") or {}
         self._compare_table.fill_data(compare_data, self._only_diff)
 
-        self._price_table.blockSignals(True) 
+        self._price_table.blockSignals(True)
         self._price_table.fill_data(self._prices())
 
         for row in range(self._price_table.rowCount()):
@@ -348,12 +403,15 @@ class GosiConstantsPage(QWidget):
                 if item:
                     item.setFlags(item.flags() | Qt.ItemFlag.ItemIsEditable)
                     keys = self._row_keys(row)
-                    if keys and (keys[0], keys[1], PRICE_COLUMNS[col][0]) in self._price_overrides:
+                    if (
+                        keys
+                        and (keys[0], keys[1], PRICE_COLUMNS[col][0])
+                        in self._price_overrides
+                    ):
                         item.setBackground(QBrush(QColor("#FFE79D")))
                         item.setToolTip("수정한 값입니다.")
 
         self._price_table.blockSignals(False)
-
 
         self._doc.set_blocks(
             (self._result or {}).get("블록", []),
@@ -373,8 +431,11 @@ class GosiConstantsPage(QWidget):
                 f"전체 {len(rows)}항목  ·  일치 {matched}  ·  "
                 f"불일치 {mismatched}  ·  조견표에 없음 {absent}"
             )
-            set_state(self._compare_summary, "state",
-                      "fail" if (mismatched or absent) else "pass")
+            set_state(
+                self._compare_summary,
+                "state",
+                "fail" if (mismatched or absent) else "pass",
+            )
         else:
             self._compare_summary.setText("대조할 값이 없습니다.")
             set_state(self._compare_summary, "state", "")
@@ -387,8 +448,9 @@ class GosiConstantsPage(QWidget):
         skipped = compare_data.get("대조 안 함") or []
         if not skipped:
             return "없음" if compare_data.get("행") else "—"
-        return (f"{len(skipped)}개 항목은 고시에 대응하는 값이 없어 대조하지 않았습니다.\n\n"
-                + "\n".join(f"·  {key}" for key in skipped))
+        return f"{len(skipped)}개 항목은 고시에 대응하는 값이 없어 대조하지 않았습니다.\n\n" + "\n".join(
+            f"·  {key}" for key in skipped
+        )
 
     def _issue_text(self) -> str:
         issues = self.issues()
@@ -397,17 +459,18 @@ class GosiConstantsPage(QWidget):
         blocks = [f"[{item['항목']}]\n{str(item['메시지']).strip()}" for item in issues]
         return "\n\n".join(blocks) + "\n\n" + gosi_verifier.FIX_GUIDE
 
-
     def _row_keys(self, row: int) -> tuple[str, str] | None:
         key_item = self._price_table.item(row, 1)
-        if not key_item: return None
-        
+        if not key_item:
+            return None
+
         key = key_item.text().strip()
-        if not key: return None
+        if not key:
+            return None
 
         service = ""
         cursor = row
-        while not service and cursor >= 0: 
+        while not service and cursor >= 0:
             svc_item = self._price_table.item(cursor, 0)
             if svc_item:
                 service = svc_item.text().strip()
@@ -416,12 +479,15 @@ class GosiConstantsPage(QWidget):
         return (service, key) if service else None
 
     def _on_item_changed(self, item) -> None:
-        if item is None: return
+        if item is None:
+            return
         row, col = item.row(), item.column()
-        if col not in EDITABLE_PRICE_COLS: return
+        if col not in EDITABLE_PRICE_COLS:
+            return
 
         keys = self._row_keys(row)
-        if keys is None: return
+        if keys is None:
+            return
         service, key = keys
         col_name = PRICE_COLUMNS[col][0]
 
@@ -517,11 +583,14 @@ class GosiConstantsPage(QWidget):
             self._tables = {}
             self._set_state(READY)
             return
-        
+
         # 파일 확인을 먼저 끝낸 뒤에 BUSY 로
         if not self._unit_price_path or not os.path.exists(self._unit_price_path):
-            self._set_state(FAILED, "기본급여 단가표 파일을 찾지 못했습니다.\n"
-                                    "업로드 화면에서 파일을 올렸는지 확인해 주세요.")
+            self._set_state(
+                FAILED,
+                "기본급여 단가표 파일을 찾지 못했습니다.\n"
+                "업로드 화면에서 파일을 올렸는지 확인해 주세요.",
+            )
             return
         try:
             basic_df = pd.read_excel(self._unit_price_path)
@@ -533,23 +602,28 @@ class GosiConstantsPage(QWidget):
         self._generation += 1
 
         self._basic_df = basic_df
-        task = _TableWriteTask(self._table_writer, service_prices, basic_df, self._generation)
+        task = _TableWriteTask(
+            self._table_writer, service_prices, basic_df, self._generation
+        )
         task.signals.finished.connect(self._on_table_complete)
         task.signals.failed.connect(self._on_table_failed)
         self._pool.start(task)
 
     def _on_table_complete(self, generation: int, tables: dict) -> None:
-        if generation != self._generation: return
+        if generation != self._generation:
+            return
         self._tables = tables
         self._set_state(READY)
 
     def _on_table_failed(self, generation: int, reason: str) -> None:
-        if generation != self._generation: return
+        if generation != self._generation:
+            return
         self._tables = None
         self._set_state(FAILED, reason)
 
     def _refresh_state(self) -> None:
-        if self._state == BUSY: return
+        if self._state == BUSY:
+            return
         if not self.values() or self.issues():
             self._set_state(WAITING)
         elif self._tables is not None:
@@ -557,9 +631,9 @@ class GosiConstantsPage(QWidget):
         else:
             self._set_state(FILLED)
 
-    def _set_state(self, state: str, reason: str="") -> None:
+    def _set_state(self, state: str, reason: str = "") -> None:
         self._state = state
-        busy = (state == BUSY)
+        busy = state == BUSY
 
         self._next.setEnabled(state in (FILLED, READY, FAILED))
 
@@ -572,7 +646,7 @@ class GosiConstantsPage(QWidget):
                 self._next.setText(_NEXT_TEXT)
             else:
                 self._next.setText(_GENERATE_TEXT)
-        
+
         compare = (self._result or {}).get("대조") or {}
         wrong = compare.get("불일치", 0) + compare.get("조견표에 없음", 0)
 
@@ -584,14 +658,24 @@ class GosiConstantsPage(QWidget):
                 "아래 '검증' 내용을 확인해 주세요."
             )
         elif state == FILLED:
-            head = "확인이 완료되었다면 '검증 완료'를 눌러주세요" if self._flow == "notice_verify" else "단가를 확인했다면 '결제단가표 생성'을 눌러주세요."
-            self._hint.setText(head + (f"\n조견표와 다른 항목이 {wrong}건 있습니다." if wrong else ""))
+            head = (
+                "확인이 완료되었다면 '검증 완료'를 눌러주세요"
+                if self._flow == "notice_verify"
+                else "단가를 확인했다면 '결제단가표 생성'을 눌러주세요."
+            )
+            self._hint.setText(
+                head + (f"\n조견표와 다른 항목이 {wrong}건 있습니다." if wrong else "")
+            )
         elif state == BUSY:
             self._hint.setText("결제단가표를 생성하고 있습니다. 잠시만 기다려 주세요.")
         elif state == READY:
-            self._hint.setText("결제단가표를 생성했습니다. 다음 화면에서 확인할 수 있습니다.")
+            self._hint.setText(
+                "결제단가표를 생성했습니다. 다음 화면에서 확인할 수 있습니다."
+            )
         else:
-            self._hint.setText(f"결제단가표를 만들지 못했습니다.\n{reason}\n값을 확인한 뒤 다시 시도해 주세요.")
+            self._hint.setText(
+                f"결제단가표를 만들지 못했습니다.\n{reason}\n값을 확인한 뒤 다시 시도해 주세요."
+            )
 
         set_state(self._hint, "state", state)
         self._hint.setVisible(True)

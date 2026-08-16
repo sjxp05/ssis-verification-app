@@ -34,22 +34,6 @@ _NEXT_TEXT = "다음 단계로  →"
 _BUSY_TEXT = "⟳  문서에서 값을 읽는 중..."
 
 
-# 임시 상수 추출 함수: 고시에서 값 추출 구현하기 전 까지 사용
-def extract_values(files: dict[str, UploadedFile]) -> ConstantValues:
-    import time
-
-    time.sleep(0.3)
-    values: ConstantValues = {"copay_cap": 216000, "base_unit_price": 30500}
-    values.update(
-        {
-            f"copay_rate_{c}": r
-            for c, r in (("da", 6), ("ra", 9), ("ma", 12), ("ba", 15))
-        }
-    )
-    values.update({f"monthly_limit_{i}": 100000 * i for i in range(1, 9)})
-    return values
-
-
 class _ExtractSignals(QObject):
     finished = pyqtSignal(int, object)  # generation, ConstantValues
     failed = pyqtSignal(int, str)  # generation, 사유
@@ -135,7 +119,6 @@ class UploadPage(QWidget):
 
         self._flow: FlowSpec | None = None
         self._cards: dict[str, UploadCard] = {}
-        self._pinned: set[str] = set()
         self._values: ConstantValues | None = None
         self._generation = 0
         self._state = WAITING
@@ -209,7 +192,6 @@ class UploadPage(QWidget):
         self._confirmed_files = {}
         self._confirmed_values = None
         self._cards.clear()
-        self._pinned.clear()
         while self._cards_layout.count():
             item = self._cards_layout.takeAt(0)
             if item.widget() is not None:
@@ -227,9 +209,7 @@ class UploadPage(QWidget):
         has_cache = False
         for slot in self._flow.uploads:
             card = UploadCard(slot.title, slot.description, slot.extensions, slot.icon)
-            card.fileSelected.connect(
-                lambda file, key=slot.key: self._on_file_selected(key, file)
-            )
+            card.fileSelected.connect(self._on_file_selected)
             self._cards[slot.key] = card
             self._cards_layout.addWidget(card)
 
@@ -254,15 +234,8 @@ class UploadPage(QWidget):
             key: card.file() for key, card in self._cards.items() if card.file()
         }  # type: ignore[misc]
 
-    def _on_file_selected(self, key: str, _file: UploadedFile) -> None:
+    def _on_file_selected(self) -> None:
         self._generation += 1  # 진행 중이던 추출이 있었다면 무효로 만든다
-        if self._flow is not None and (
-            (key == "jogyeon" and self._flow.key == UNIT_PRICE.key)
-            or (key == "guide" and (self._flow.key == NOTICE_VERIFY.key or self._flow.key == PAYMENT_PRICE.key))
-        ):
-            # flow 1(조견표 -> 단가표 생성)에서 조견표를 올리면
-            # flow 2가 나중에 자동으로 불러올 수 있도록 경로 저장
-            recent_files.set_recent_path(yearConfig.SYSTEM_YEAR, key, _file.path)
         self._refresh_files_state()
 
     # _on_file_selected 안에 있던 상태 재계산을 꺼내서 재사용 가능하게 분리
@@ -300,6 +273,13 @@ class UploadPage(QWidget):
     def _on_extracted(self, generation: int, values: ConstantValues) -> None:
         if generation != self._generation:
             return  # 중간에 파일이 바뀐 경우: 결과가 낡은 값이므로 다시 읽어야 함
+
+        # 추출에 성공한 파일 조합이면 캐시로 저장
+        if self._flow is not None:
+            # 어느 플로우에서든 조견표/고시/단가표를 올리면 다른 플로우도 자동으로 불러올 수 있음
+            for key, file in self._files().items():
+                recent_files.set_recent_path(yearConfig.SYSTEM_YEAR, key, file.path)
+
         self._values = values
         self._confirmed_files = dict(self._files())
         self._confirmed_values = values
@@ -349,7 +329,6 @@ class UploadPage(QWidget):
                 continue
             if hasattr(card, "set_path"):
                 card.set_path(str(cached_path))
-            self._pinned.add(key)
             loaded = True
 
         if not loaded:
@@ -363,8 +342,8 @@ class UploadPage(QWidget):
     def _set_state(self, state: str, reason: str = "") -> None:
         self._state = state
         busy = state == BUSY
-        for key, card in self._cards.items():
-            card.set_locked(busy or key in self._pinned)
+        for card in self._cards.values():
+            card.set_locked(busy)
 
         self._next.setEnabled(state in (FILLED, READY, FAILED))
         self._next.setText(
