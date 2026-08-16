@@ -99,8 +99,6 @@ class LabelReviewFlow:
 
         # 현재 파일을 다른 파일과 대조한 기록이 없는 경우
         if baseline is None:
-            # 현재 파일을 다음 년도 대조 기준 파일로 저장 (recent_files 구현필요)
-            self._remember(sheet.path)
             # 이전 년도 조견표들을 모두 검색해서 가장 가까운 연도의 것을 찾음
             baseline = recent_files.search_jogyeon_history(
                 yearConfig.SYSTEM_YEAR, JOGYEON_KEY
