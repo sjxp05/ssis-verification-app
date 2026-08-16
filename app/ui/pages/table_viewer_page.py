@@ -46,7 +46,7 @@ TABS = {
             "card_title": "추가급여 단가표 미리보기",
         },
     ],
-    "notice_verify": [
+    "payment_price": [
         {
             "label": "결제단가표",
             "title": "결제단가표 생성 및 검증",

@@ -724,20 +724,26 @@ def read_gosi_limits(hwpx_path, tables=None, issues=None):  # [수정 5] 월한�
 
 # 화면이 쓰는 진입점. 단가·월한도액·검증·대조를 한 번에 돌려준다.
 # 표 하나가 실패해도 나머지는 계속 읽고, 실패 사유는 issues 에 남긴다.
-def read_gosi(hwpx_path, reference=None):
+def read_gosi(hwpx_path, reference=None, flow="notice_verify"):
     blocks = parse_document(hwpx_path)
     tables = [b for b in blocks if b["종류"] == "표"]
 
     prices, limits, issues = {}, {}, []
     prices = read_gosi_prices(hwpx_path, tables, issues)
-    limits = read_gosi_limits(hwpx_path, tables, issues)
 
-    issues.extend(validate_prices(prices, limits))
+    if flow == "notice_verify":
+        limits = read_gosi_limits(hwpx_path, tables, issues)
+        issues.extend(validate_prices(prices, limits))
+        compare_result = compare_with_reference(limits, reference, prices)
+    else:
+        issues.extend(validate_prices(prices, None))
+        compare_result = {}
+
     return {
         "파일": hwpx_path,
         "블록": blocks,          # 화면의 고시 원문 패널용
         "단가": prices,          # 결제단가표로 넘길 값
         "월한도액": limits,       # 조견표 대조용 (넘기지 않는다)
         "검증": issues,
-        "대조": compare_with_reference(limits, reference, prices),  # [수정 12] 단가 포함
+        "대조": compare_result
     }

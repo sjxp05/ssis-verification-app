@@ -21,7 +21,7 @@ from services.table_writer import TableWriter
 from services import recent_files
 
 from models.dto import ConstantValues
-from models.flows import FlowSpec, UNIT_PRICE
+from models.flows import FlowSpec, UNIT_PRICE, NOTICE_VERIFY, PAYMENT_PRICE
 
 from ui.components.header import HeaderBar
 from ui.components.step_indicator import StepIndicator
@@ -36,7 +36,7 @@ from utils.appdata import user_data_dir
 from utils.date import yearConfig
 
 STEPS = ["조견표 업로드", "단가 정보 확인", "단가표 생성 및 저장"]
-NOTICE_VERIFY = "notice_verify"
+
 
 
 class Screen(IntEnum):
@@ -101,7 +101,7 @@ class MainWindow(QMainWindow):
         self.constants_page.valuesKept.connect(self._on_values_kept)
 
         self.notice_page = GosiConstantsPage(
-            table_writer=table_writer, flow=NOTICE_VERIFY
+            table_writer=table_writer, flow=NOTICE_VERIFY.key
         )
         self.notice_page.tablesReady.connect(self._on_tables_ready)
         self.notice_page.valuesChanged.connect(self._on_values_changed)
@@ -144,7 +144,7 @@ class MainWindow(QMainWindow):
 
     # 2단계(값 확인)
     def _constants_page(self) -> QWidget:
-        if self._flow is not None and self._flow.key == NOTICE_VERIFY:
+        if self._flow is not None and self._flow.key in (NOTICE_VERIFY.key, PAYMENT_PRICE.key):
             return self.notice_page
         return self.constants_page
 
@@ -200,10 +200,15 @@ class MainWindow(QMainWindow):
         # 다른 작업을 고르면 앞선 작업의 흔적을 지운다.
         self._install_steps(flow)
         self.upload_page.set_flow(flow)
-        self.constants_page.set_flow(flow.key)
-        self.notice_page.set_flow(flow.key)
-        self.table_viewer_page.set_flow(flow.key)
-        self._table_count = 0
+
+        if flow.key in (NOTICE_VERIFY.key, PAYMENT_PRICE.key):
+            self.notice_page.set_flow(flow.key)
+        else:
+            self.constants_page.set_flow(flow.key)
+
+        if flow.key in (UNIT_PRICE.key, PAYMENT_PRICE.key):
+            self.table_viewer_page.set_flow(flow.key)
+            self._table_count = 0
 
     def _install_steps(self, flow: FlowSpec) -> None:
         if self._steps is not None:
@@ -244,7 +249,7 @@ class MainWindow(QMainWindow):
     # --- 동작 -------------------------------------------------------------
     def _on_values_ready(self, values: ConstantValues) -> None:
         # 업로드 화면에서 문서를 다 읽었을 때
-        if self._flow.key == NOTICE_VERIFY:
+        if self._flow.key in (NOTICE_VERIFY.key, PAYMENT_PRICE.key):
             reference_dict = {}
             raw_data = values if isinstance(values, list) else [values]
 
@@ -299,8 +304,11 @@ class MainWindow(QMainWindow):
         if self._steps is not None:
             self._steps.set_max_reached(Screen.TABLES.step)
 
+    # 상수 확인 화면에서 단가표 생성을 마치고 '다음 단계로'를 눌렀을 때
     def _on_tables_ready(self, tables: dict) -> None:
-        # 상수 확인 화면에서 단가표 생성을 마치고 '다음 단계로'를 눌렀을 때
+        if self._flow.key == NOTICE_VERIFY.key:
+            self._on_gosi_prices_confirmed(tables)
+            return
         self.set_tables(tables)
         self.go_to_step(Screen.TABLES.step)
         self._constants_page().reset_next_button()
@@ -308,7 +316,7 @@ class MainWindow(QMainWindow):
     def _on_gosi_prices_confirmed(self, prices: dict) -> None:
         # 고시 검증 2단계에서 '다음 단계로' 버튼을 눌렀을 때 실행됨
         QMessageBox.information(
-            self, "검증 완료", "고시 데이터 검증 및 단가 확인이 완료되었습니다!"
+            self, "검증 완료", "확인이 완료되었습니다. 메인 화면으로 돌아갑니다."
         )
         self.go_home()
 
@@ -367,7 +375,7 @@ class MainWindow(QMainWindow):
                     recent_files.set_recent_path(
                         yearConfig.SYSTEM_YEAR, "add_unit_price", Path(path)
                     )
-            elif self._flow.key == NOTICE_VERIFY:
+            elif self._flow.key == PAYMENT_PRICE.key:
                 if tab_index == 0:
                     # 생성한 결제단가표의 저장 위치 캐싱
                     recent_files.set_recent_path(

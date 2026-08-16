@@ -64,13 +64,13 @@ UNIT_PRICE = FlowSpec(
 
 NOTICE_VERIFY = FlowSpec(
     key="notice_verify",
-    menu_title="고시 검증 및 결제단가표 생성",
-    menu_description="고시와 조견표, 단가표를 대조해 고시의 내용이 옳은지 검증합니다.",
-    window_title="고시 검증 및 결제단가표 생성",
-    steps=("문서 업로드", "값 확인", "결제단가표 생성 및 저장"),
+    menu_title="고시 - 조견표 월한도액 대조",
+    menu_description="고시와 조견표의 월한도액 값을 대조합니다.",
+    window_title="고시 - 조견표 월한도액 대조",
+    steps=("문서 업로드", "값 확인"),
     upload_title="문서 업로드",
     upload_description=(
-        "고시 문서와 조견표, 기본급여 단가표를 올리면 검증에 필요한 값을 자동으로 읽어옵니다."
+        "고시 문서와 조견표를 올리면 검증에 필요한 값을 자동으로 읽어옵니다."
     ),
     uploads=(
         UploadSlot(
@@ -89,6 +89,29 @@ NOTICE_VERIFY = FlowSpec(
             icon="▦",
             remember_last=True,
         ),
+    ),
+    # export_names=("결제단가표.xlsx",),
+)
+
+PAYMENT_PRICE = FlowSpec(
+    key="payment_price",
+    menu_title="결제단가표 생성",
+    menu_description="기본급여 단가표와 고시에서 상수를 읽어 결제 단가표를 만듭니다.",
+    window_title="결제단가표 생성",
+    steps=("문서 업로드", "값 확인", "결제단가표 생성 및 저장"),
+    upload_title="문서 업로드",
+    upload_description=(
+        "고시 문서와 기본급여 단가표를 올리면 단가 계산에 필요한 값을 자동으로 읽어옵니다."
+    ),
+    uploads=(
+        UploadSlot(
+            key="guide",
+            title="고시",
+            description="hwpx 형식의 고시 문서를 업로드해 주세요.",
+            extensions=(".hwpx",),
+            icon="📄",
+            remember_last=True,
+        ),
         UploadSlot(
             key="basic_unit_price",
             title="기본급여 단가표",
@@ -99,8 +122,7 @@ NOTICE_VERIFY = FlowSpec(
         ),
     ),
     export_names=("결제단가표.xlsx",),
-    stub=True,
-    stub_notice="검증 파이프라인은 준비 중입니다. 파일 확인까지만 가능합니다.",
+    stub=False,
 )
 
-FLOWS: tuple[FlowSpec, ...] = (UNIT_PRICE, NOTICE_VERIFY)
+FLOWS: tuple[FlowSpec, ...] = (UNIT_PRICE, NOTICE_VERIFY, PAYMENT_PRICE)
