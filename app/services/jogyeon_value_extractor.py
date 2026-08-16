@@ -1,10 +1,10 @@
 from __future__ import annotations
-from datetime import datetime
 import pandas as pd
 import itertools
 import re
 from pathlib import Path
 from models.dto import UploadedFile
+from utils.date import yearConfig
 
 # 조견표에서 찾는 문구는 라벨 매처와 함께 쓰므로 config/anchors.py 에 모아 두었다.
 from jogyeon_matcher.config.anchors import (  # noqa: F401  (외부에서 이 모듈 경유로 참조)
@@ -62,7 +62,10 @@ class ValueExtractor:
         # 마지막 행까지만 읽는다. 탐지 실패 시 기존대로 전체를 읽는다.
         cap = xlsx_scan.true_row_counts(file_path).get(sheet_name)
         df = pd.read_excel(
-            file_path, sheet_name, engine="openpyxl", header=None,
+            file_path,
+            sheet_name,
+            engine="openpyxl",
+            header=None,
             **({"nrows": cap} if cap else {}),
         )
         norm = df.astype(str).map(self._squeeze)
@@ -313,11 +316,6 @@ class ValueExtractor:
                     "\n조치: 조견표의 구간 배치가 바뀌었는지 확인하세요."
                 )
 
-    # 12월에 다음 연도 단가표를 생성하는 경우에만 연도 + 1
-    def _business_year(self) -> int:
-        today = datetime.today()
-        return today.year + (1 if today.month == 12 else 0)
-
     # 인정조사 탭(1페이지)에 표시할 키
     _TAB1_KEYS = (
         "기본단가",
@@ -350,7 +348,7 @@ class ValueExtractor:
         self._validate(data)
 
         # 화면에 탭(페이지) 2개로 나눠 보여주기 위해 dict 2개짜리 list로 반환
-        tab1 = {"사업년도": self._business_year(), "차수": 1}
+        tab1 = {"사업년도": yearConfig.SYSTEM_YEAR, "차수": 1}
         tab1.update({key: data[key] for key in self._TAB1_KEYS})
         tab2 = {key: data[key] for key in self._TAB2_KEYS}
         return [tab1, tab2]

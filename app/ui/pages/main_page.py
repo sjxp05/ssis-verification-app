@@ -10,6 +10,8 @@ from PyQt6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
 
 from models.flows import FLOWS, FlowSpec
 from ui.components.scroll_page import centered_scroll_page
+from ui.widgets.value_field import ValueField
+from utils.date import yearConfig
 
 
 class FlowButton(QFrame):
@@ -52,8 +54,10 @@ class FlowButton(QFrame):
 
 class MainPage(QWidget):
     # flowRequested(FlowSpec) — 사용자가 작업을 골랐을 때
+    # yearChanged() — 사업년도를 바꿨을 때 (업로드 화면의 파일을 새로 고쳐야 함)
 
     flowRequested = pyqtSignal(object)  # FlowSpec
+    yearChanged = pyqtSignal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -74,8 +78,23 @@ class MainPage(QWidget):
             button = FlowButton(spec)
             button.clicked.connect(self.flowRequested.emit)
             column.addWidget(button)
+
+        column.addSpacing(10)
+        year_field = ValueField(
+            key="system_year",
+            label="사업년도",
+            value=yearConfig.SYSTEM_YEAR,
+            kind="year",
+        )
+        year_field.valueChanged.connect(self._on_year_changed)
+        column.addWidget(year_field, 0, Qt.AlignmentFlag.AlignHCenter)
+
         column.addStretch(2)
 
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addWidget(page)
+
+    def _on_year_changed(self, _key: str, value: object) -> None:
+        yearConfig.set_system_year(value)
+        self.yearChanged.emit()

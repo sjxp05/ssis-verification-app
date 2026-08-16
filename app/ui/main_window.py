@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import date
 from pathlib import Path
 from enum import IntEnum
 
@@ -19,9 +18,11 @@ from PyQt6.QtWidgets import (
 )
 
 from services.table_writer import TableWriter
-from models.dto import ConstantValues
-from models.flows import FlowSpec, UNIT_PRICE
 from services import recent_files
+
+from models.dto import ConstantValues
+from models.flows import FlowSpec, UNIT_PRICE, NOTICE_VERIFY, PAYMENT_PRICE
+
 from ui.components.header import HeaderBar
 from ui.components.step_indicator import StepIndicator
 from ui.dialogs.review_flow import LabelReviewFlow
@@ -31,8 +32,11 @@ from ui.pages.table_viewer_page import TableViewerPage
 from ui.pages.upload_page import UploadPage, ValueExtractor
 from ui.pages.gosi_constants_page import GosiConstantsPage
 
+from utils.appdata import user_data_dir
+from utils.date import yearConfig
+
 STEPS = ["조견표 업로드", "단가 정보 확인", "단가표 생성 및 저장"]
-NOTICE_VERIFY = "notice_verify"
+
 
 
 class Screen(IntEnum):
@@ -68,10 +72,9 @@ class MainWindow(QMainWindow):
         # 업로드 화면에서 파일이 바뀌어 2,3단계를 잠갔을 때, 되돌릴 max_reached 값
         self._locked_max_reached: int | None = None
 
-        today = date.today()
         self._header = HeaderBar(
             "조견표 → 단가표 생성",
-            f"🕐 {today.year}. {today.month}. {today.day}.",
+            yearConfig.get_formatted_date(),
         )
 
         self._header.backRequested.connect(self.go_home)
@@ -84,6 +87,7 @@ class MainWindow(QMainWindow):
 
         self.main_page = MainPage()
         self.main_page.flowRequested.connect(self.start_flow)
+        self.main_page.yearChanged.connect(self._on_year_changed)
 
         # 값을 읽기 전에 작년 조견표와 문구를 대조시킨다
         self._label_review = LabelReviewFlow(self)
@@ -96,7 +100,9 @@ class MainWindow(QMainWindow):
         self.constants_page.valuesChanged.connect(self._on_values_changed)
         self.constants_page.valuesKept.connect(self._on_values_kept)
 
-        self.notice_page = GosiConstantsPage(table_writer=table_writer, flow=NOTICE_VERIFY)
+        self.notice_page = GosiConstantsPage(
+            table_writer=table_writer, flow=NOTICE_VERIFY.key
+        )
         self.notice_page.tablesReady.connect(self._on_tables_ready)
         self.notice_page.valuesChanged.connect(self._on_values_changed)
         self.notice_page.valuesKept.connect(self._on_values_kept)
@@ -110,7 +116,7 @@ class MainWindow(QMainWindow):
             self.upload_page,
             self.constants_page,
             self.table_viewer_page,
-            self.notice_page
+            self.notice_page,
         ):
             self._stack.addWidget(page)
 
@@ -126,35 +132,6 @@ class MainWindow(QMainWindow):
 
         self.go_home()
 
-        # 헤더의 '메인으로'는 단계 이동이 아니라 이 흐름에서 나가는 동작이다.
-        # self._header.backRequested.connect(self.homeRequested.emit)
-
-        # self._steps = StepIndicator(STEPS)
-        # self._steps.stepClicked.connect(self._on_step_clicked)
-
-        # self.constants_page = ConstantsPage()
-        # self.constants_page.generateRequested.connect(self._on_generate)
-        # self.constants_page.valuesChanged.connect(self._on_values_changed)
-
-        # self.table_viewer_page = TableViewerPage()
-        # self.table_viewer_page.exportRequested.connect(self._on_export)
-
-        # self._stack = QStackedWidget()
-        # self._stack.addWidget(self.constants_page)
-        # self._stack.addWidget(self.table_viewer_page)
-
-        # root = QWidget()
-        # root.setObjectName("Root")
-        # layout = QVBoxLayout(root)
-        # layout.setContentsMargins(0, 0, 0, 0)
-        # layout.setSpacing(0)
-        # layout.addWidget(self._header)
-        # layout.addWidget(self._steps)
-        # layout.addWidget(self._stack, 1)
-        # self.setCentralWidget(root)
-
-        # self.go_to_step(1)
-
     def closeEvent(self, event) -> None:  # noqa: N802 (Qt 시그니처)
         # 메인 창을 닫을 때 셀에 표시되는 말풍선을 항상 숨김
         self.table_viewer_page.hide_bubbles()
@@ -165,13 +142,11 @@ class MainWindow(QMainWindow):
         self.table_viewer_page.hide_bubbles()
         super().moveEvent(event)
 
-
     # 2단계(값 확인)
     def _constants_page(self) -> QWidget:
-        if self._flow is not None and self._flow.key == NOTICE_VERIFY:
+        if self._flow is not None and self._flow.key in (NOTICE_VERIFY.key, PAYMENT_PRICE.key):
             return self.notice_page
         return self.constants_page
-
 
     def _page_for_step(self, step: int) -> QWidget:
         # 스택에 넣은 순서가 아니라 단계로 화면 선택
@@ -180,6 +155,10 @@ class MainWindow(QMainWindow):
         if step == Screen.CONSTANTS.step:
             return self._constants_page()
         return self.table_viewer_page
+
+    def _on_year_changed(self) -> None:
+        # 사업년도를 바꾸면 업로드 화면에 남아 있던 파일은 다른 연도 것이므로 새로 고른다.
+        self.upload_page.reset()
 
     def go_home(self) -> None:
         # 메인 화면으로. 진행 중이던 흐름은 그대로 두었다가 다시 들어오면 이어간다.
@@ -221,10 +200,15 @@ class MainWindow(QMainWindow):
         # 다른 작업을 고르면 앞선 작업의 흔적을 지운다.
         self._install_steps(flow)
         self.upload_page.set_flow(flow)
-        self.constants_page.set_flow(flow.key)
-        self.notice_page.set_flow(flow.key)
-        self.table_viewer_page.set_flow(flow.key)
-        self._table_count = 0
+
+        if flow.key in (NOTICE_VERIFY.key, PAYMENT_PRICE.key):
+            self.notice_page.set_flow(flow.key)
+        else:
+            self.constants_page.set_flow(flow.key)
+
+        if flow.key in (UNIT_PRICE.key, PAYMENT_PRICE.key):
+            self.table_viewer_page.set_flow(flow.key)
+            self._table_count = 0
 
     def _install_steps(self, flow: FlowSpec) -> None:
         if self._steps is not None:
@@ -234,7 +218,6 @@ class MainWindow(QMainWindow):
         self._steps.stepClicked.connect(self.go_to_step)
         self._step_layout.addWidget(self._steps)
         self._locked_max_reached = None
-
 
     def mousePressEvent(self, event):
         focused = QApplication.focusWidget()
@@ -246,12 +229,13 @@ class MainWindow(QMainWindow):
     def set_extracted_values(self, values: dict) -> None:
         self.constants_page.set_values(values)
 
-
     def set_tables(self, tables: dict[int, tuple[pd.DataFrame, object]]) -> None:
         # 검증 기준값: 사용자가 확인·수정을 마친 최종 상수 (단가표 생성에 쓴 값과 동일)
-        # 고시 검증 화면의 values() 는 출처까지 담은 중첩 dict 라, 평평한 return_values() 사용
+        # 고시 검증 화면의 values() 는 출처까지 담은 중첩 dict이므로 return_values()로 평탄화한 dict 반환
         page = self._constants_page()
-        flat_values = page.return_values() if hasattr(page, "return_values") else page.values()
+        flat_values = (
+            page.return_values() if hasattr(page, "return_values") else page.values()
+        )
         self.table_viewer_page.set_values(flat_values)
         basic_ref = getattr(page, "_basic_df", None)
         self.table_viewer_page.set_reference_table(basic_ref)
@@ -264,8 +248,11 @@ class MainWindow(QMainWindow):
 
     # --- 동작 -------------------------------------------------------------
     def _on_values_ready(self, values: ConstantValues) -> None:
+        upload_files = self.upload_page.files()
         # 업로드 화면에서 문서를 다 읽었을 때
-        if self._flow.key == NOTICE_VERIFY:
+        if self._flow.key in (NOTICE_VERIFY.key, PAYMENT_PRICE.key):
+            self.notice_page.clear()
+
             reference_dict = {}
             raw_data = values if isinstance(values, list) else [values]
 
@@ -282,14 +269,14 @@ class MainWindow(QMainWindow):
             # 슬롯 파일 받아오기
             upload_files = self.upload_page.files()
             gosi_file = upload_files.get("guide")
-            sheet_file = upload_files.get("sheet")
-            table_file = upload_files.get("unit_price_table")
+            jogyeon_file = upload_files.get("jogyeon")
+            table_file = upload_files.get("basic_unit_price")
 
             if table_file and hasattr(table_file, "path"):
                 self.notice_page.set_unit_price_path(table_file.path)
 
-            if sheet_file and hasattr(sheet_file, "path"):
-                self.notice_page.set_sheet_path(sheet_file.path)
+            if jogyeon_file and hasattr(jogyeon_file, "path"):
+                self.notice_page.set_sheet_path(jogyeon_file.path)
 
             if gosi_file and hasattr(gosi_file, "path"):
                 self.notice_page.load_notice(gosi_file.path)
@@ -297,8 +284,10 @@ class MainWindow(QMainWindow):
         else:
             self.constants_page.set_values(values)
             #조견표 수정본 저장에 쓸 원본경로, 셀 좌표 넘김
-            src,cells=self.upload_page.export_info()
-            self.constants_page.set_export_source(src,cells)
+            src, cells = self.upload_page.export_info()
+            self.constants_page.set_export_source(src, cells)
+            
+        self._on_upload_files_diverged(False)
         self.go_to_step(Screen.CONSTANTS.step)
 
     def _on_upload_files_diverged(self, diverged: bool) -> None:
@@ -323,8 +312,11 @@ class MainWindow(QMainWindow):
         if self._steps is not None:
             self._steps.set_max_reached(Screen.TABLES.step)
 
+    # 상수 확인 화면에서 단가표 생성을 마치고 '다음 단계로'를 눌렀을 때
     def _on_tables_ready(self, tables: dict) -> None:
-        # 상수 확인 화면에서 단가표 생성을 마치고 '다음 단계로'를 눌렀을 때
+        if self._flow.key == NOTICE_VERIFY.key:
+            self._on_gosi_prices_confirmed(tables)
+            return
         self.set_tables(tables)
         self.go_to_step(Screen.TABLES.step)
         self._constants_page().reset_next_button()
@@ -332,9 +324,7 @@ class MainWindow(QMainWindow):
     def _on_gosi_prices_confirmed(self, prices: dict) -> None:
         # 고시 검증 2단계에서 '다음 단계로' 버튼을 눌렀을 때 실행됨
         QMessageBox.information(
-            self,
-            "검증 완료",
-            "고시 데이터 검증 및 단가 확인이 완료되었습니다!\n(결제단가표 생성 로직은 추후 연결됩니다.)"
+            self, "검증 완료", "확인이 완료되었습니다. 메인 화면으로 돌아갑니다."
         )
         self.go_home()
 
@@ -348,7 +338,15 @@ class MainWindow(QMainWindow):
         path, _ = QFileDialog.getSaveFileName(
             self,
             "표 저장",
-            self._flow.export_name(tab_index),
+            str(
+                user_data_dir()
+                / str(yearConfig.SYSTEM_YEAR)
+                / (
+                    str(yearConfig.SYSTEM_YEAR)
+                    + "_"
+                    + self._flow.export_name(tab_index)
+                )
+            ),
             "Excel 파일 (*.xlsx)",
         )
         if not path:
@@ -374,7 +372,20 @@ class MainWindow(QMainWindow):
             )
         else:
             QMessageBox.information(self, "저장 완료", f"{path} 에 저장했습니다.")
-            if self._flow.key == UNIT_PRICE.key and tab_index == 0:
-                # flow 1에서 생성한 기본급여 단가표를 저장하면, flow 2가 나중에
-                # 자동으로 불러올 수 있도록 경로를 남겨 둔다.
-                recent_files.set_recent_path("unit_price_table", Path(path))
+            if self._flow.key == UNIT_PRICE.key:
+                if tab_index == 0:
+                    # flow 1에서 생성한 기본급여 단가표를 저장하면 flow 2가 나중에 자동으로 불러올 수 있도록 캐시에 경로 기록
+                    recent_files.set_recent_path(
+                        yearConfig.SYSTEM_YEAR, "basic_unit_price", Path(path)
+                    )
+                elif tab_index == 1:
+                    # 생성한 추가급여 단가표의 저장 위치 캐싱
+                    recent_files.set_recent_path(
+                        yearConfig.SYSTEM_YEAR, "add_unit_price", Path(path)
+                    )
+            elif self._flow.key == PAYMENT_PRICE.key:
+                if tab_index == 0:
+                    # 생성한 결제단가표의 저장 위치 캐싱
+                    recent_files.set_recent_path(
+                        yearConfig.SYSTEM_YEAR, "payment_unit_price", Path(path)
+                    )
