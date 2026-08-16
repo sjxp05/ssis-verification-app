@@ -12,7 +12,7 @@ from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from services.jogyeon_value_extractor import ValueExtractor
 from models.dto import ConstantValues, UploadedFile
-from models.flows import NOTICE_VERIFY, FlowSpec, UNIT_PRICE
+from models.flows import NOTICE_VERIFY, FlowSpec, UNIT_PRICE, PAYMENT_PRICE
 from services import recent_files
 from ui.components.button import PrimaryButton, GhostButton
 from ui.components.scroll_page import centered_scroll_page
@@ -73,10 +73,13 @@ class _ExtractTask(QRunnable):
     def run(self) -> None:
         try:
             # self._files["jogyeon"] -> 슬롯이 없으면 KeyError 대신 읽을 수 있는 메시지 표시
-            jogyeon = self._files.get("jogyeon")
-            if jogyeon is None:
-                raise ValueError("조견표 파일이 없습니다.")
-            values = self._extractor.extract_jogyeon_values(jogyeon)
+            if self._flow_key == "payment_price":
+                values = {}
+            else:
+                jogyeon = self._files.get("jogyeon")
+                if jogyeon is None:
+                    raise ValueError("조견표 파일이 없습니다.")
+                values = self._extractor.extract_jogyeon_values(jogyeon)
         except Exception as error:
             self.signals.failed.emit(
                 self._generation, str(error) or type(error).__name__
@@ -232,7 +235,7 @@ class UploadPage(QWidget):
         self._generation += 1  # 진행 중이던 추출이 있었다면 무효로 만든다
         if self._flow is not None and (
             (key == "jogyeon" and self._flow.key == UNIT_PRICE.key)
-            or (key == "guide" and self._flow.key == NOTICE_VERIFY.key)
+            or (key == "guide" and (self._flow.key == NOTICE_VERIFY.key or self._flow.key == PAYMENT_PRICE.key))
         ):
             # flow 1(조견표 -> 단가표 생성)에서 조견표를 올리면
             # flow 2가 나중에 자동으로 불러올 수 있도록 경로 저장

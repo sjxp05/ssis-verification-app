@@ -31,10 +31,16 @@ _DOC_HIDE_TEXT = "고시 원문 접기"
 _DOC_SHOW_TEXT = "고시 원문 펼치기"
 
 TABS = {
-    "notice_verify": [
-        {"label": "조견표 대조", "title": "고시와 조견표의 값이 맞는지 확인해 주세요.", "card_title": "조견표 ↔ 고시 대조"},
-        {"label": "서비스 단가", "title": "서비스별 단가가 맞는지 확인해주세요.", "card_title": "서비스 단가 확인"},
-    ],
+    "notice_verify": {
+        "label": "조견표 대조", 
+        "title": "고시와 조견표의 값이 맞는지 확인해 주세요.", 
+        "card_title": "조견표 ↔ 고시 대조",
+    },
+    "payment_price": {
+        "label": "서비스 단가", 
+        "title": "서비스별 단가가 맞는지 확인해주세요.", 
+        "card_title": "서비스 단가 확인",
+    }
 }
 
 
@@ -96,7 +102,7 @@ class GosiConstantsPage(QWidget):
         self._price_overrides: dict[tuple[str, str, str], int] = {}
 
         self._build_ui()
-        self._on_tab_changed(flow, 0)
+        self._on_tab_changed()
         self._set_state(WAITING)
 
     def _build_ui(self):
@@ -105,9 +111,6 @@ class GosiConstantsPage(QWidget):
         self._subtitle = QLabel()
         self._subtitle.setObjectName("PageSubtitle")
         self._subtitle.setWordWrap(True)
-
-        self._tabs = SegmentedTabBar([tab["label"] for tab in TABS[self._flow]], flow=self._flow)
-        self._tabs.currentChanged.connect(self._on_tab_changed)
 
         self._card = Card()
         self._card_title = QLabel()
@@ -166,7 +169,6 @@ class GosiConstantsPage(QWidget):
         self._outer.setContentsMargins(28, 18, 28, 24)
         self._outer.setSpacing(18)
         self._outer.addLayout(header)
-        self._outer.addWidget(self._tabs)
         self._outer.addLayout(content, 1)
 
     # --- API --------------------------------------------------------------
@@ -213,7 +215,7 @@ class GosiConstantsPage(QWidget):
 
     def load_notice(self, path: str) -> None:
         try:
-            result = gosi_verifier.read_gosi(path, self._reference)
+            result = gosi_verifier.read_gosi(path, self._reference, self._flow)
         except Exception as error:
             QMessageBox.warning(self, "불러오기 실패", f"고시를 읽지 못했습니다:\n{error}")
             return
@@ -233,6 +235,7 @@ class GosiConstantsPage(QWidget):
         if flow != self._flow:
             self._flow = flow
             self.clear()
+            self._on_tab_changed()
 
     def clear(self) -> None:
         self._result = None
@@ -456,18 +459,22 @@ class GosiConstantsPage(QWidget):
         self.valuesChanged.emit()
 
     # --- 동작 및 상태 제어 --------------------------------------------------
-    def _on_tab_changed(self, flow: str, index: int) -> None:
+    def _on_tab_changed(self) -> None:
         # notice_verify 전용 - 다른 흐름 키가 들어와도 첫 탭으로 설정
-        tabs = TABS.get(flow) or TABS["notice_verify"]
-        spec = tabs[index] if 0 <= index < len(tabs) else tabs[0]
-        self._tab_index = index if 0 <= index < len(tabs) else 0
+        spec = TABS.get(self._flow, TABS["notice_verify"])
 
         self._title.setText(spec["title"])
         self._card_title.setText(spec["card_title"])
         self._card_hint.setText(spec.get("card_hint", ""))
-        self._stack.setCurrentIndex(self._tab_index)
-        self._diff_button.setVisible(self._tab_index == 0)
-        self._doc.set_visible_chapters(TAB_CHAPTERS.get(self._tab_index, ()))
+
+        if self._flow == "payment_price":
+            self._stack.setCurrentIndex(1)
+            self._diff_button.setVisible(False)
+            self._doc.set_visible_chapters(("제3장", "제4장"))
+        else:
+            self._stack.setCurrentIndex(0)
+            self._diff_button.setVisible(True)
+            self._doc.set_visible_chapters(("제2장", "제3장", "부"))
 
     def _toggle_only_diff(self) -> None:
         self._only_diff = not self._only_diff
@@ -492,6 +499,9 @@ class GosiConstantsPage(QWidget):
             self._next.setText(_NEXT_TEXT)
 
     def _on_next(self) -> None:
+        if self._flow == "notice_verify":
+            self.tablesReady.emit({})
+            return
         if self._state in (FILLED, FAILED):
             self._start_table_write(self.return_values())
         elif self._state == READY and self._tables is not None:
@@ -551,13 +561,17 @@ class GosiConstantsPage(QWidget):
         busy = (state == BUSY)
 
         self._next.setEnabled(state in (FILLED, READY, FAILED))
-        if busy:
-            self._next.setText(_BUSY_TEXT)
-        elif state == READY:
-            self._next.setText(_NEXT_TEXT)
-        else:
-            self._next.setText(_GENERATE_TEXT)
 
+        if self._flow == "notice_verify":
+            self._next.setText("검증 완료")
+        else:
+            if busy:
+                self._next.setText(_BUSY_TEXT)
+            elif state == READY:
+                self._next.setText(_NEXT_TEXT)
+            else:
+                self._next.setText(_GENERATE_TEXT)
+        
         compare = (self._result or {}).get("대조") or {}
         wrong = compare.get("불일치", 0) + compare.get("조견표에 없음", 0)
 
@@ -569,7 +583,7 @@ class GosiConstantsPage(QWidget):
                 "아래 '검증' 내용을 확인해 주세요."
             )
         elif state == FILLED:
-            head = "단가를 확인했다면 '결제단가표 생성'을 눌러 주세요."
+            head = "확인이 완료되었다면 '검증 완료'를 눌러주세요" if self._flow == "notice_verify" else "단가를 확인했다면 '결제단가표 생성'을 눌러주세요."
             self._hint.setText(head + (f"\n조견표와 다른 항목이 {wrong}건 있습니다." if wrong else ""))
         elif state == BUSY:
             self._hint.setText("결제단가표를 생성하고 있습니다. 잠시만 기다려 주세요.")
