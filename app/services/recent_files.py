@@ -67,6 +67,7 @@ def set_recent_path(year: str, key: str, path: Path) -> None:
 
 
 # 전년도 조견표 경로가 캐시에 있는지 찾아서 가장 최근 것을 반환
+# TODO: 기존 Path 하나 -> 있는 파일들 모두 dict로 반환하기
 def search_jogyeon_history(year: int, key: str = "jogyeon") -> Path | None:
     # 기록이 없거나 파일이 더 이상 존재하지 않으면 None
     if not CACHE_FILE.exists():

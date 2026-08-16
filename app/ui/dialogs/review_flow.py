@@ -106,6 +106,11 @@ class LabelReviewFlow:
                 yearConfig.SYSTEM_YEAR, JOGYEON_KEY
             )
 
+            # TODO: 이전 년도 조견표가 있는 경우 (대조한 기록은 없음) 선택할 수 있게 하기
+            #   - search_jogyeon_history()에서 {year: Path} 형태로 반환하도록 바꾸기
+            #   - 받은 dict 중 선택하거나, 다른 파일 선택 옵션 열어두기
+            #   - 다른 파일 선택을 누른 경우 파일 선택기 열어주기
+
         if baseline is None:
             # 대조할 파일을 찾지 못한 경우
             question = (
