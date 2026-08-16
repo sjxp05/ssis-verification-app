@@ -283,6 +283,7 @@ class MainWindow(QMainWindow):
 
         else:
             self.constants_page.set_values(values)
+        self._on_upload_files_diverged(False)
         self.go_to_step(Screen.CONSTANTS.step)
 
     def _on_upload_files_diverged(self, diverged: bool) -> None:
