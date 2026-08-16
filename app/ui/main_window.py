@@ -296,6 +296,9 @@ class MainWindow(QMainWindow):
 
         else:
             self.constants_page.set_values(values)
+            #조견표 수정본 저장에 쓸 원본경로, 셀 좌표 넘김
+            src,cells=self.upload_page.export_info()
+            self.constants_page.set_export_source(src,cells)
         self.go_to_step(Screen.CONSTANTS.step)
 
     def _on_upload_files_diverged(self, diverged: bool) -> None:

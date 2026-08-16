@@ -21,13 +21,15 @@ from PyQt6.QtWidgets import (
     QStackedWidget,
     QVBoxLayout,
     QWidget,
+    QFileDialog,
+    QMessageBox
 )
 
 import pandas as pd
-
+from pathlib import Path
 from services.table_writer import TableWriter
 from ui.components.card import Card
-from ui.components.button import PrimaryButton
+from ui.components.button import PrimaryButton, GhostButton 
 from ui.components.tab_bar import SegmentedTabBar
 from ui.widgets.value_field import ValueField
 from utils.qss import set_state
@@ -162,6 +164,25 @@ class ConstantsPage(QWidget):
         self._hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._hint.setWordWrap(True)
 
+        self._export_button=GhostButton("수정된 조견표 저장")
+        self._export_button.clicked.connect(self._on_export_jogyeon)
+        self._export_button.setVisible(self._flow == "unit_price")
+        self._export_src: Path |None=None
+        self._export_cells: dict[str,tuple[str,int,int]]={}
+
+        content = QVBoxLayout()
+        content.setSpacing(16)
+        content.addWidget(self._card, 1)
+        content.addWidget(self._next)
+        content.addWidget(self._hint)
+
+        #수정된 조견표 저장버튼
+        # 탭 + 조견표 저장 버튼을 한 줄에 (탭 왼쪽, 버튼 오른쪽)
+        self._tabs_row = QHBoxLayout()
+        self._tabs_row.addWidget(self._tabs)
+        self._tabs_row.addStretch(1)
+        self._tabs_row.addWidget(self._export_button)
+
         content = QVBoxLayout()
         content.setSpacing(16)
         content.addWidget(self._card, 1)
@@ -172,7 +193,7 @@ class ConstantsPage(QWidget):
         self._outer.setContentsMargins(28, 18, 28, 24)
         self._outer.setSpacing(18)
         self._outer.addWidget(self._title)
-        self._outer.addWidget(self._tabs)
+        self._outer.addLayout(self._tabs_row)
         self._outer.addLayout(content, 1)
 
         self._on_tab_changed(flow, 0)
@@ -345,6 +366,50 @@ class ConstantsPage(QWidget):
             self.valuesChanged.emit()
         self._refresh_state()
 
+    # --- 조견표 수정한 것 저장 -----------------------------------------------
+    def set_export_source(self,src_path,cell_map)->None:
+        self._export_src=src_path
+        self._export_cells=cell_map or {}
+
+    def _collect_changed(self) -> dict[str, object]:
+        return {
+            key: field.value()
+            for key, field in self._fields.items()
+            if field.is_modified() and field.is_valid()
+        }
+
+    def _on_export_jogyeon(self)->None:
+        changed=self._collect_changed()
+        if not changed:
+            QMessageBox.information(self,"안내","수정된 값이 없습니다.")
+            return
+        if self._export_src is None:
+            QMessageBox.warning(self,"안내","원본 조견표 정보를 찾을 수 없습니다.\n조견표를 다시 업로드해 주세요.")
+            return
+        path,_=QFileDialog.getSaveFileName(
+            self,"수정된 조견표 저장",
+            str(Path(self._export_src).with_stem(Path(self._export_src).stem+"_수정본")),
+            "Excel (*.xlsx)")
+
+        if not path:
+            return
+        from services.jogyeon_exporter import export_modified_jogyeon
+        try:
+            skipped=export_modified_jogyeon(
+                self._export_src,path,self._export_cells,changed
+            )
+        except Exception as error:
+            QMessageBox.critical(self,"저장 실패",str(error))
+            return
+
+        if skipped:
+            detail = "\n".join(f"· {k}\n   {reason}" for k, reason in skipped)
+            QMessageBox.warning(
+                self, "일부 값 미반영",
+                f"조견표를 저장했지만 다음 값은 반영되지 않았습니다:\n\n{detail}")
+        else:
+            QMessageBox.information(self, "완료", "수정된 조견표를 저장했습니다.")
+
     # --- API --------------------------------------------------------------
     def set_flow(self, flow: str) -> None:
         # flow가 바뀔 때만 탭바를 새로 만들고, 이전 흐름에서 만든 필드를 비운다.
@@ -353,6 +418,7 @@ class ConstantsPage(QWidget):
         self._flow = flow
         self._build_tabs(flow)
         self._rebuild_pages([])
+        self._export_button.setVisible(flow=="unit_price")
 
     def set_values(self, values: dict | list[dict]) -> None:
         # value_extractor는 탭 개수에 맞춰 dict의 list를 돌려준다 —

@@ -18,6 +18,7 @@ from ui.components.button import PrimaryButton, GhostButton
 from ui.components.scroll_page import centered_scroll_page
 from utils.qss import set_state
 from ui.widgets.upload_card import UploadCard
+from pathlib import Path
 
 # 파일 묶음을 받아 상수를 돌려준다. 예외를 던지면 화면에 사유가 뜬다.
 # ValueExtractor = Callable[[dict[str, UploadedFile]], ConstantValues]
@@ -219,6 +220,12 @@ class UploadPage(QWidget):
         return {
             key: card.file() for key, card in self._cards.items() if card.file()
         }  # type: ignore[misc]
+
+    #마지막 추출에 사용한 원본경로와 셀 좌표
+    def export_info(self)->tuple[Path | None, dict]:
+        if self._extractor is None:
+            return None,{}
+        return self._extractor.source_path(),self._extractor.cell_map()
 
     def _on_file_selected(self, key: str, _file: UploadedFile) -> None:
         self._generation += 1  # 진행 중이던 추출이 있었다면 무효로 만든다

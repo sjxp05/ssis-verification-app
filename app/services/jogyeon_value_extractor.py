@@ -3,7 +3,7 @@ from datetime import datetime
 import pandas as pd
 import itertools
 import re
-
+from pathlib import Path
 from models.dto import UploadedFile
 
 # 조견표에서 찾는 문구는 라벨 매처와 함께 쓰므로 config/anchors.py 에 모아 두었다.
@@ -38,6 +38,20 @@ class ExtractError(Exception):
 
 
 class ValueExtractor:
+    def __init__(self):
+        self._cell_map:dict[str,tuple[str,int,int]]={}
+        self._source_path: Path | None=None
+
+    #값을 읽은 셀 좌표 기록함(수정본 저장 시 사용하기 위해 필요함)
+    def _mark(self,key:str,sheet:str,r:int,c:int)->None:
+        self._cell_map[key]=(sheet,r,c)
+
+    def cell_map(self)->dict[str,tuple[str,int,int]]:
+        return dict(self._cell_map)
+
+    def source_path(self)-> Path |None:
+        return self._source_path
+
     # 비교용으로 공백과 비가시 문자를 걷어낸다
     def _squeeze(self, text):
         return _WS.sub("", sanitize(text))
@@ -103,28 +117,39 @@ class ValueExtractor:
         # A값, 본인부담금 상한액
         r, c = self._find_one(norm, A_VALUE)
         a_value = self._num(df.iat[r, c + 1])
+        self._mark("A값",sheet_name,r,c+1)
         copay_cap = self._num(df.iat[r, c + 2])
+        self._mark("인정조사 본인부담금 상한액",sheet_name,r,c+2)
 
         # 기본단가
         r, c = self._find_one(norm, BASE_PRICE)
         base_price = self._num(df.iat[r, c + 1])
+        self._mark("기본단가",sheet_name,r,c+1)
 
         # 본인 부담률 - 가·나는 고정값, 다~바는 조견표에서 읽는다
+        # r, c = self._find_one(norm, BASIC_RATE)
+        # basic_rates = {
+        #     **FIXED_BASIC_RATE
+        #     **{
+        #         g: self._num(df.iat[r, c + i])
+        #         for i, g in enumerate(RATE_GRADES, start=1)
+        #     },
+        # }
+        # add_rates = {
+        #     **FIXED_ADD_RATE,
+        #     **{
+        #         g: self._num(df.iat[r + 1, c + i])
+        #         for i, g in enumerate(RATE_GRADES, start=1)
+        #     },
+        # }
         r, c = self._find_one(norm, BASIC_RATE)
-        basic_rates = {
-            **FIXED_BASIC_RATE,
-            **{
-                g: self._num(df.iat[r, c + i])
-                for i, g in enumerate(RATE_GRADES, start=1)
-            },
-        }
-        add_rates = {
-            **FIXED_ADD_RATE,
-            **{
-                g: self._num(df.iat[r + 1, c + i])
-                for i, g in enumerate(RATE_GRADES, start=1)
-            },
-        }
+        basic_rates = {**FIXED_BASIC_RATE}
+        add_rates = {**FIXED_ADD_RATE}
+        for i, g in enumerate(RATE_GRADES, start=1):
+            basic_rates[g]=self._num(df.iat[r,c+i])
+            self._mark(f"인정조사 본인부담률 (기본급여).{g}",sheet_name,r,c+i)
+            add_rates[g]=self._num(df.iat[r+1,c+i])
+            self._mark(f"인정조사 본인부담률 (추가급여).{g}",sheet_name,r+1,c+i)
 
         # 월 한도액
         r, c = self._find_one(norm, GRADE_HEADER)
@@ -146,7 +171,9 @@ class ValueExtractor:
         for grade in IJ_GRADES:
             i = row_map[grade]
             basic_limits[grade] = self._num(df.iat[base_r + i, base_c + 3])
+            self._mark(f"인정조사 월한도액 (기본형).{grade}",sheet_name,base_r+i,base_c+3)
             extended_limits[grade] = self._num(df.iat[base_r + i, base_c + 4])
+            self._mark(f"인정조사 월한도액 (확장형).{grade}",sheet_name,base_r+i,base_c+4)
 
         return {
             "기본단가": base_price,
@@ -165,13 +192,18 @@ class ValueExtractor:
         # 본인부담금 상한액 - "상한액" 문구 바로 왼쪽 칸에 값이 있다
         r, c = self._find_one(norm, CAP_LABEL)
         copay_cap = self._num(df.iat[r, c - 1])
+        self._mark("종합조사/산정특례 본인부담금 상한액",sheet_name,r,c-1)
 
         # 본인부담률 - 가·나는 고정값, 다~바는 조견표에서 읽는다
         r, c = self._find_one(norm, INCOME_HEADER)
-        rates = {
-            **FIXED_BASIC_RATE,
-            **{g: self._num(df.iat[r + 1, c + i]) for i, g in enumerate(RATE_GRADES)},
-        }
+        # rates = {
+        #     **FIXED_BASIC_RATE,
+        #     **{g: self._num(df.iat[r + 1, c + i]) for i, g in enumerate(RATE_GRADES)},
+        # }
+        rates={**FIXED_BASIC_RATE}
+        for i,g in enumerate(RATE_GRADES):
+            rates[g]=self._num(df.iat[r+1,c+i])
+            self._mark(f"종합조사/산정특례 본인부담률.{g}",sheet_name,r+1,c+i)
 
         # 추가급여 월 한도액
         base_r, base_c = self._find_first(norm, ADD_ITEMS[0])
@@ -185,16 +217,21 @@ class ValueExtractor:
         if missing:
             raise ExtractError(f"추가급여 항목을 찾지 못했습니다: {missing}")
 
-        limits = {
-            k: self._num(df.iat[base_r + 1, base_c + col_map[k]]) for k in ADD_ITEMS
-        }
+        # limits = {
+        #     k: self._num(df.iat[base_r + 1, base_c + col_map[k]]) for k in ADD_ITEMS
+        # }
+        limits={}
+        for k in ADD_ITEMS:
+            limits[k]=self._num(df.iat[base_r+1, base_c + col_map[k]])
+            self._mark(f"추가급여 월한도액.{k}",sheet_name, base_r+1, base_c + col_map[k])
+
         return {
             "종합조사/산정특례 본인부담금 상한액": copay_cap,
             "종합조사/산정특례 본인부담률": rates,
             "추가급여 월한도액": limits,
         }
 
-    def _read_jh_row(self, df, norm, keyword):
+    def _read_jh_row(self, df, norm, keyword,mark_prefix,sheet_name):
         r, _ = self._find_first(norm, keyword)
         base_r = r + 1
 
@@ -211,16 +248,21 @@ class ValueExtractor:
         missing = [z for z in JH_ZONES if z not in col_map]
         if missing:
             raise ExtractError(f"'{keyword}' 표에서 구간을 찾지 못했습니다: {missing}")
-        return {
-            label: self._num(df.iat[base_r, col_map[zone]])
-            for label, zone in zip(JH_LABELS, JH_ZONES, strict=True)
-        }
+        # return {
+        #     label: self._num(df.iat[base_r, col_map[zone]])
+        #     for label, zone in zip(JH_LABELS, JH_ZONES, strict=True)
+        # }
+        result={}
+        for label,zone in zip(JH_LABELS,JH_ZONES,strict=True):
+            result[label]=self._num(df.iat[base_r, col_map[zone]])
+            self._mark(f"{mark_prefix}.{label}",sheet_name,base_r,col_map[zone])
+        return result
 
     def read_jh_value(self, file_path, sheet_name):
         df, norm = self._load(file_path, sheet_name)
         return {
-            "종합조사 월한도액 (기본형)": self._read_jh_row(df, norm, JH_BASIC),
-            "종합조사 월한도액 (확장형)": self._read_jh_row(df, norm, JH_EXTENDED),
+            "종합조사 월한도액 (기본형)": self._read_jh_row(df, norm, JH_BASIC,"종합조사 월한도액 (기본형)",sheet_name),
+            "종합조사 월한도액 (확장형)": self._read_jh_row(df, norm, JH_EXTENDED,"종합조사 월한도액 (확장형)",sheet_name),
         }
 
     _EXPECTED_LEN = {
@@ -296,6 +338,8 @@ class ValueExtractor:
     )
 
     def extract_jogyeon_values(self, file: UploadedFile):
+        self._cell_map.clear()
+        self._source_path=file.path
         readers = (self.read_ij_value, self.read_sj_value, self.read_jh_value)
         data = {}
         for reader, sheet in zip(readers, JOGYEON_SHEET_NAMES, strict=True):
