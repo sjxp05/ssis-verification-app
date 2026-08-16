@@ -219,6 +219,7 @@ class GosiConstantsPage(QWidget):
         except Exception as error:
             QMessageBox.warning(self, "불러오기 실패", f"고시를 읽지 못했습니다:\n{error}")
             return
+        
         self._result = result
         self._path = path
         self._price_overrides.clear()

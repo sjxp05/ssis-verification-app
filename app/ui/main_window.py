@@ -276,7 +276,10 @@ class MainWindow(QMainWindow):
                 self.notice_page.set_sheet_path(jogyeon_file.path)
 
             if gosi_file and hasattr(gosi_file, "path"):
-                self.notice_page.load_notice(gosi_file.path)
+                success, error_msg = self.notice_page.load_notice(gosi_file.path)
+                if not success:
+                    self.upload_page._set_state("failed", f"고시 파싱 실패: {error_msg}")
+                    return
 
         else:
             self.constants_page.set_values(values)

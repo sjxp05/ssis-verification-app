@@ -11,6 +11,7 @@ from PyQt6.QtCore import QObject, QRunnable, Qt, QThreadPool, pyqtSignal
 from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from services.jogyeon_value_extractor import ValueExtractor
+from services.gosi_verifier import read_gosi
 from models.dto import ConstantValues, UploadedFile
 from models.flows import NOTICE_VERIFY, FlowSpec, UNIT_PRICE, PAYMENT_PRICE
 from services import recent_files
@@ -80,6 +81,28 @@ class _ExtractTask(QRunnable):
                 if jogyeon is None:
                     raise ValueError("조견표 파일이 없습니다.")
                 values = self._extractor.extract_jogyeon_values(jogyeon)
+
+            if self._flow_key in ("notice_verify", "payment_price"):
+                guide = self._files.get("guide")
+                if guide is None:
+                    raise ValueError("고시 파일이 없습니다.")
+                reference_dict = {}
+                raw_data = values if isinstance(values, list) else [values]
+                for tab in raw_data:
+                    for k, v in tab.items():
+                        if isinstance(v, dict):
+                            for sk, sv in v.items():
+                                reference_dict[f"{k}.{sk}"] = sv
+                        else:
+                            reference_dict[k] = v
+                result = read_gosi(guide.path, reference_dict, self._flow_key)
+
+                if not result.get("단가"):
+                    issues = result.get("검증") or []
+                    error_texts = [f"· {issue['메시지']}" for issue in issues if '메시지' in issue]
+                    error_msg = "\n".join(error_texts) if error_texts else "고시 파일에서 알맞은 표를 찾을 수 없습니다."
+                    raise ValueError(error_msg)
+                
         except Exception as error:
             self.signals.failed.emit(
                 self._generation, str(error) or type(error).__name__
