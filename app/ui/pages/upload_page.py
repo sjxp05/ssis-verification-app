@@ -289,6 +289,7 @@ class UploadPage(QWidget):
             self._confirmed_files = dict(files)
             self._confirmed_values = self._values
             self._set_state(READY)
+            self.filesDiverged.emit(False) 
             return
 
         self._set_state(BUSY)
@@ -304,6 +305,7 @@ class UploadPage(QWidget):
         self._confirmed_files = dict(self._files())
         self._confirmed_values = values
         self._set_state(READY)
+        self.filesDiverged.emit(False)
 
     def _on_extract_failed(self, generation: int, reason: str) -> None:
         if generation != self._generation:

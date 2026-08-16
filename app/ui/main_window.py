@@ -248,8 +248,11 @@ class MainWindow(QMainWindow):
 
     # --- 동작 -------------------------------------------------------------
     def _on_values_ready(self, values: ConstantValues) -> None:
+        upload_files = self.upload_page.files()
         # 업로드 화면에서 문서를 다 읽었을 때
         if self._flow.key in (NOTICE_VERIFY.key, PAYMENT_PRICE.key):
+            self.notice_page.clear()
+
             reference_dict = {}
             raw_data = values if isinstance(values, list) else [values]
 
@@ -276,10 +279,7 @@ class MainWindow(QMainWindow):
                 self.notice_page.set_sheet_path(jogyeon_file.path)
 
             if gosi_file and hasattr(gosi_file, "path"):
-                success, error_msg = self.notice_page.load_notice(gosi_file.path)
-                if not success:
-                    self.upload_page._set_state("failed", f"고시 파싱 실패: {error_msg}")
-                    return
+                self.notice_page.load_notice(gosi_file.path)
 
         else:
             self.constants_page.set_values(values)
