@@ -177,7 +177,8 @@ class MainPage(QWidget):
         info_icon.setObjectName("InfoIcon")
         
         info_text = QLabel(
-            "세 메뉴는 독립적으로 실행 가능합니다. 각 메뉴에서 업로드한 파일은 저장경로가 년도별로 저장되며, 재업로드시 자동 연동됩니다. 저장경로가 바뀌면 연동되지 않으며, 프로그램에서는 파일을 직접 저장하지 않습니다."
+            "세 메뉴는 독립적으로 실행 가능합니다. 각 메뉴의 파일 업로드 페이지에서 '작업기록 불러오기'를 통해 동일 사업년도의 이전 파일을 자동으로 연동할 수 있습니다."
+            " 단, 저장 경로를 변경할 경우 연동이 지원되지 않으며, 사용자가 업로드한 원본 파일의 내용은 프로그램에 별도로 수집되지 않습니다."
         )
         info_text.setObjectName("InfoText")
         info_text.setWordWrap(True)

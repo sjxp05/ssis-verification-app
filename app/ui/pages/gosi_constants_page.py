@@ -29,7 +29,7 @@ from ui.widgets.gosi_tables import (
     PriceEditDelegate,
     _to_int,
 )
-
+from resources.styles.theme import SUCCESS, WARNING_BG, DANGER
 WAITING, FILLED, BUSY, READY, FAILED = "waiting", "filled", "busy", "ready", "failed"
 
 _GENERATE_TEXT = "결제단가표 생성"
@@ -69,7 +69,7 @@ PRICE_COLUMNS = [
     ("금액", True, False),
     ("가산수당", True, False),
 ]
-RESULT_COLORS = {"일치": "#2F855A", "불일치": "#C53030", "조견표에 없음": "#96620F"}
+RESULT_COLORS = {"일치": SUCCESS, "불일치": DANGER, "조견표에 없음": WARNING_BG}
 
 EDITABLE_PRICE_COLS = (2, 3)  # 금액(2열), 가산수당(3열)
 
@@ -383,9 +383,7 @@ class GosiConstantsPage(QWidget):
     def _fill_all(self) -> None:
         if self._path:
             name = os.path.basename(self._path)
-            self._subtitle.setText(
-                f"{name}  ·  조견표에서 읽은 항목 {len(self._reference)}개"
-            )
+            self._subtitle.setText(f"{name}  ·  조견표에서 읽은 항목 {len(self._reference)}개" if self._flow == "notice_verify" else f"{name}") 
         else:
             self._subtitle.setText(
                 "고시 파일을 불러오면 대조 결과가 여기에 표시됩니다."
