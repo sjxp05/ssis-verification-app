@@ -42,7 +42,7 @@ def get_recent_path(year: int, key: str) -> Path | None:
 
 
 # key: path 를 저장소에 기록 (마지막 값으로 덮어쓰기)
-def set_recent_path(year: str, key: str, path: Path) -> None:
+def set_recent_path(year: int, key: str, path: Path) -> None:
     data = {}
 
     # 기존 데이터가 있으면 먼저 읽어옴
