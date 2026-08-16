@@ -198,10 +198,6 @@ def find_table(tables, service, anchors=None):
         )
         raise ValueError(
             f"'{service}' 표가 {len(hits)}개 발견되었습니다 (1개여야 함).\n"
-            f"이 고시에서 발견된 표 목록:\n{listing}\n"
-            f"조치: 위 목록과 고시 원문을 대조하세요. 명칭이 개정되었다면 "
-            f"ANCHORS['{service}']의 '제목'을 새 명칭으로 바꾸고, 같은 제목 아래 "
-            f"표가 여러 개라면 '표안'에 그 표에만 있는 문구를 추가해 좁히세요."
         )
     return hits[0]
 

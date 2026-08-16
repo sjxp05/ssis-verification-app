@@ -248,8 +248,11 @@ class MainWindow(QMainWindow):
 
     # --- 동작 -------------------------------------------------------------
     def _on_values_ready(self, values: ConstantValues) -> None:
+        upload_files = self.upload_page.files()
         # 업로드 화면에서 문서를 다 읽었을 때
         if self._flow.key in (NOTICE_VERIFY.key, PAYMENT_PRICE.key):
+            self.notice_page.clear()
+
             reference_dict = {}
             raw_data = values if isinstance(values, list) else [values]
 
@@ -280,6 +283,7 @@ class MainWindow(QMainWindow):
 
         else:
             self.constants_page.set_values(values)
+        self._on_upload_files_diverged(False)
         self.go_to_step(Screen.CONSTANTS.step)
 
     def _on_upload_files_diverged(self, diverged: bool) -> None:
