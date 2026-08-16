@@ -1,6 +1,8 @@
 from collections import Counter
 from pandas import DataFrame
 
+from utils.date import yearConfig
+
 # 기본급여 단가표 컬럼명 - 서식 변경시 여기만 변경
 COL_SEQ = "안"
 COL_BUSINESS_TYPE_ID = "사업유형ID"
@@ -877,7 +879,9 @@ class TableWriter:
 
         service_rows = self._build_service_rows(service_prices)
 
-        business_year = service_prices.get(PAYMENT_COL_BUSINESS_YEAR, 2026)
+        business_year = service_prices.get(
+            PAYMENT_COL_BUSINESS_YEAR, yearConfig.SYSTEM_YEAR
+        )
         chasu = service_prices.get(PAYMENT_COL_CHASU, 1)
 
         df = self._build_payment_rows(grades, service_rows, business_year, chasu)
