@@ -60,7 +60,18 @@ class GosiDocumentViewer(QTextBrowser):
             return
 
         target = ((highlight["표번호"], highlight["행"]) if highlight else None)
-        parts = [f"<style>{_DOC_CSS}</style>"]
+        parts = [
+            f"<style>{_DOC_CSS}</style>",
+            """
+            <div style='background-color: #fff8e1; border: 1px solid #ffe082; color: #b08d00; 
+                        padding: 12px; margin-bottom: 20px; border-radius: 6px; font-size: 12px; line-height: 1.5;'>
+                <b>※ 뷰어 이용 안내</b><br>
+                본 화면은 HWPX 원문 데이터를 추출하여 재구성한 <b>참고용 뷰어</b>입니다.<br>
+                변환 방식의 한계로 인해 <b>일부 표의 셀 병합 및 특수문자가 고시 원본과 다르게 보일 수 있습니다.</b><br>
+                정확한 문서 형태 및 레이아웃은 원본 한글 파일을 확인해 주세요.
+            </div>
+            """
+        ]
         
         for block in self._visible_blocks():
             if block["종류"] == "문단":
@@ -71,16 +82,16 @@ class GosiDocumentViewer(QTextBrowser):
             for r, row in enumerate(block.get("격자", [])):
                 hit = (target == (block["표번호"], r))
                 parts.append("<tr>")
-                for c, text in enumerate(row):
-                    if r == 0:
-                        css_class = "head"
-                    elif hit:
-                        css_class = "hit"
-                    else:
-                        css_class = ""
-                        
+                for c, cell_info in enumerate(row):
+                    text = cell_info if isinstance(cell_info, str) else cell_info.get("text", "")
+                    css_class = "head" if r == 0 else ("hit" if hit else "")
+
+                    cell_html = _escape(text)
+                    if "가산수당" in cell_html and not cell_html.startswith("가산수당"):
+                        cell_html = cell_html.replace("가산수당", "<br>가산수당")
+
                     anchor_tag = f"<a name='{_anchor(block['표번호'], r)}'></a>" if hit and c == 0 else ""
-                    parts.append(f"<td class='{css_class}'>{anchor_tag}{_escape(text)}</td>")
+                    parts.append(f"<td class='{css_class}'>{anchor_tag}{cell_html}</td>")
                 parts.append("</tr>")
             parts.append("</table>")
 
