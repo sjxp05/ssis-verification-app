@@ -2,6 +2,7 @@ from collections import Counter
 from pandas import DataFrame
 
 from utils.date import yearConfig
+from utils.rules import ruleConfig
 
 # 기본급여 단가표 컬럼명 - 서식 변경시 여기만 변경
 COL_SEQ = "안"
@@ -162,18 +163,18 @@ JH_INCOME_LABELS = {
 
 # 추가급여 단가표 라벨별 (시작코드번호, 등급명, 추가급여구분 '여부' 표기 여부) 정의
 ADD_CODE_INFO = {
-    "출산": (25, "출산가구", 1),
-    "학교생활": (31, "학교생활", 1),
-    "직장생활": (37, "직장생활", 1),
-    "자립준비": (43, "자립준비", 1),
-    "보호자일시부재": (61, "보호자일시부재", 0),
-    "나머지가구구성원의직장생활등": (67, "가족의직장생활", 0),
-    "최중증1인가구": (73, "최중증1인가구", 1),
-    "1등급1인가구": (79, "1등급1인가구", 0),
-    "2등급이하1인가구": (85, "2등급1인가구", 0),
-    "최중증취약가구": (91, "최중증취약가구", 0),
-    "1등급취약가구": (97, "1등급취약가구", 0),
-    "2등급이하취약가구": (103, "2등급취약가구", 0),
+    "출산": (25, "출산가구", 1, "출산가구"),
+    "학교생활": (31, "학교생활", 1, "학교생활"),
+    "직장생활": (37, "직장생활", 1, "직장생활"),
+    "자립준비": (43, "자립준비", 1, "자립준비"),
+    "보호자일시부재": (61, "보호자일시부재", 0, "보호자일시부재"),
+    "나머지가구구성원의직장생활등": (67, "가족의직장생활", 0, "가족의직장생활"),
+    "최중증1인가구": (73, "최중증1인가구", 1, "최중증1인가구"),
+    "1등급1인가구": (79, "1등급1인가구", 0, "1등급1인가구"),
+    "2등급이하1인가구": (85, "2등급1인가구", 0, "2등급이하1인가구"),
+    "최중증취약가구": (91, "최중증취약가구", 0, "최중증취약가구"),
+    "1등급취약가구": (97, "1등급취약가구", 0, "1등급취약가구"),
+    "2등급이하취약가구": (103, "2등급취약가구", 0, "2등급이하취약가구"),
 }
 
 SJ_ORDER = [
@@ -328,61 +329,6 @@ def validate_basic_df(df: DataFrame) -> None:
 
 
 class TableWriter:
-    # --- 계산 공식 -----------------------------------------------------------------------
-
-    # 절사 (rounddown(절사할 숫자, -자릿수) 엑셀 함수와 유사하게 작동)
-    def _rounddown(self, x: float, digit: int) -> int:
-        scale = 10 ** (-digit)
-        return int(x) // scale * scale
-
-    # ex: 본인부담금 계산 함수
-    def _calculate_copayment(self, monthly_limit: int, copay_rate: float, cap: float):
-        return min(self._rounddown(monthly_limit * copay_rate, -2), cap)
-
-    # 정부지원금 계산 함수
-    def _calculate_gov_support(self, monthly_limit: int, copayment: int):
-        return monthly_limit - copayment
-
-    # 가·나형은 정액(param 값 자체가 부담금), 다~바형은 요율 기반으로 계산
-    def _resolve_copayment(
-        self,
-        letter: str,
-        monthly_limit: int,
-        rate_or_amount: float,
-        cap: float,
-        variant: str,
-    ):
-        if letter == "가":
-            return 0
-        if letter == "나":
-            # 확장형(주간활동 확장형)은 차상위(나)도 본인부담금 면제
-            return min(rate_or_amount, cap) if variant == "기본형" else 0
-        return self._calculate_copayment(monthly_limit, rate_or_amount, cap)
-
-    # 산정 주간확장 차감: 22시간 X 기본단가, 천원 미만 절사 적용
-    def _sj_ext_deduction(self, unit_price: int) -> int:
-        return self._rounddown(SJ_DAYTIME_HOURS * unit_price, -3)
-
-    # 산정 특례 월한도액 계산함
-    def _build_sj_limits(self, base_limits: dict, add_limits: dict) -> dict:
-        limits = {}
-        n = 1
-        for grade, mains in SJ_ORDER:
-            for main in mains:
-                for school, work in SJ_COMBOS:
-                    limit = base_limits[grade]
-                    if main:
-                        limit += add_limits[main]
-                    if school:
-                        limit += add_limits["학교생활"]
-                    if work:
-                        limit += add_limits["직장생활"]
-                    limits[f"특례{n}"] = limit
-                    n += 1
-
-        assert n - 1 == SJ_CASE_CNT
-        return limits
-
     # --- 기본급여/추가급여 단가표 (unit_price flow) -----------------------------------------------
 
     # 필요한 상수값만 선택해 가져오기
@@ -420,6 +366,19 @@ class TableWriter:
 
         return params
 
+    def _resolve_copayment(
+        self,
+        limit: int | float,
+        cap: int | float,
+        letter: str,
+        rate: float,
+        variant: str | None = None,
+    ) -> int:
+        if variant == "확장형":
+            return ruleConfig.calculate_copayment_extended(limit, cap, letter, rate)
+        else:
+            return ruleConfig.calculate_copayment(limit, cap, letter, rate)
+
     def _write_ij_prices(self, values: dict, variant: str) -> list[dict]:
         prefix = "D" if variant == "기본형" else "C"
         suffix = "" if variant == "기본형" else "_주간확장"
@@ -434,8 +393,9 @@ class TableWriter:
             limit = limits[grade]
             for letter in INCOME_LETTERS:
                 copayment = self._resolve_copayment(
-                    letter, limit, rates[letter], cap, variant
+                    limit, cap, letter, rates[letter], variant
                 )
+
                 rows.append(
                     {
                         COL_BUSINESS_TYPE_ID: BUSINESS_ID,
@@ -445,7 +405,9 @@ class TableWriter:
                         COL_GRADE_NAME: f"{grade}({letter}형){suffix}",
                         COL_VOUCHER_TYPE: VOUCHER_TYPE,
                         COL_SUPPORT_AMOUNT: limit,
-                        COL_GOV_SUPPORT: self._calculate_gov_support(limit, copayment),
+                        COL_GOV_SUPPORT: ruleConfig.calculate_government_support(
+                            limit, copayment
+                        ),
                         COL_COPAYMENT: copayment,
                         COL_REJUDGE_YN: REJUDGE_IMPOSSIBLE,
                         COL_INCOME_TYPE: IJ_INCOME_LABELS[letter],
@@ -456,6 +418,27 @@ class TableWriter:
                 sort_num += 1
 
         return rows
+
+    # 산정특례 월한도액 계산하여 특례1~60 값을 dict로 반환
+    def _build_sj_limits(self, basic_limits: dict, add_limits: dict) -> dict:
+        limits = {}
+        n = 1
+        for grade, mains in SJ_ORDER:
+            for main in mains:
+                for school, work in SJ_COMBOS:
+                    limit = ruleConfig.calculate_sj_monthly_limit(
+                        basic_limits[grade],
+                        add_limits[main] if main else 0,
+                        school,
+                        add_limits["학교생활"],
+                        work,
+                        add_limits["직장생활"],
+                    )
+                    limits[f"특례{n}"] = limit
+                    n += 1
+
+        assert n - 1 == SJ_CASE_CNT
+        return limits
 
     def _write_sj_prices(self, values: dict, variant: str) -> list[dict]:
         # 월한도액 계산
@@ -469,18 +452,22 @@ class TableWriter:
         rates = values["종합조사/산정특례 본인부담률"]
         cap = values["종합조사/산정특례 본인부담금 상한액"]
         unit_price = values["기본단가"]
-        deduction = 0 if variant == "기본형" else self._sj_ext_deduction(unit_price)
-
         sort_num = SJ_SORT_NUM_START[variant]
+
         rows = []
         for s in range(SJ_CASE_CNT):
-            limit = sj_limits[f"특례{s+1}"] - deduction
+            limit = sj_limits[f"특례{s+1}"]
+            if variant == "확장형":
+                limit = ruleConfig.calculate_extended_monthly_limit(limit, unit_price)
+
             group_char = "ABCD"[s // SJ_GROUP_SIZE]
+
             for k, letter in enumerate(INCOME_LETTERS):
                 code_num = (s % SJ_GROUP_SIZE) * len(INCOME_LETTERS) + k + 1
                 copayment = self._resolve_copayment(
-                    letter, limit, rates[letter], cap, variant
+                    limit, cap, letter, rates[letter], variant
                 )
+
                 rows.append(
                     {
                         COL_BUSINESS_TYPE_ID: BUSINESS_ID,
@@ -490,7 +477,9 @@ class TableWriter:
                         COL_GRADE_NAME: f"특례{s + 1}({letter}형){suffix}",
                         COL_VOUCHER_TYPE: VOUCHER_TYPE,
                         COL_SUPPORT_AMOUNT: limit,
-                        COL_GOV_SUPPORT: self._calculate_gov_support(limit, copayment),
+                        COL_GOV_SUPPORT: ruleConfig.calculate_government_support(
+                            limit, copayment
+                        ),
                         COL_COPAYMENT: copayment,
                         COL_REJUDGE_YN: REJUDGE_IMPOSSIBLE,
                         COL_INCOME_TYPE: JH_INCOME_LABELS[letter],
@@ -517,8 +506,9 @@ class TableWriter:
             limit = limits[zone]
             for letter in INCOME_LETTERS:
                 copayment = self._resolve_copayment(
-                    letter, limit, rates[letter], cap, variant
+                    limit, cap, letter, rates[letter], variant
                 )
+
                 rows.append(
                     {
                         COL_BUSINESS_TYPE_ID: BUSINESS_ID,
@@ -528,7 +518,9 @@ class TableWriter:
                         COL_GRADE_NAME: f"{zone}({letter}형){suffix}",
                         COL_VOUCHER_TYPE: VOUCHER_TYPE,
                         COL_SUPPORT_AMOUNT: limit,
-                        COL_GOV_SUPPORT: self._calculate_gov_support(limit, copayment),
+                        COL_GOV_SUPPORT: ruleConfig.calculate_government_support(
+                            limit, copayment
+                        ),
                         COL_COPAYMENT: copayment,
                         COL_REJUDGE_YN: REJUDGE_IMPOSSIBLE,
                         COL_INCOME_TYPE: JH_INCOME_LABELS[letter],
@@ -585,20 +577,20 @@ class TableWriter:
 
         rows = []
         seq = 1
-        for key, (base_code, category_name, flag) in ADD_CODE_INFO.items():
+        for key, (base_code, grade_name, flag, category_name) in ADD_CODE_INFO.items():
             limit = limits[key]
             for k, letter in enumerate(INCOME_LETTERS):
                 current_code = base_code + k
-                copayment = self._calculate_copayment(
-                    limit, rates[letter], float("inf")
+                copayment = ruleConfig.calculate_add_copayment(
+                    limit, letter, rates[letter]
                 )
                 rows.append(
                     {
                         ADD_COL_SEQ: seq,
                         ADD_COL_GRADE_CODE: f"{prefix}{current_code:03d}",
-                        ADD_COL_GRADE_NAME: f"{category_name}_{letter}형",
+                        ADD_COL_GRADE_NAME: f"{grade_name}_{letter}형",
                         ADD_COL_SUPPORT_AMOUNT: limit,
-                        ADD_COL_GOV_SUPPORT: self._calculate_gov_support(
+                        ADD_COL_GOV_SUPPORT: ruleConfig.calculate_government_support(
                             limit, copayment
                         ),
                         ADD_COL_COPAYMENT: copayment,
@@ -642,7 +634,7 @@ class TableWriter:
                 prefix, suffix = key.split(".")
 
                 if prefix == "활동보조":
-                    if suffix != "일반":
+                    if suffix not in ["일반", "심야"]:
                         continue
 
                     formatted_prices.setdefault(
@@ -656,16 +648,29 @@ class TableWriter:
                         },
                     )
 
-                    for time in TIME_DIVISIONS[prefix]:
+                    if suffix == "일반":
+                        # 30분 일반/심야단가 미리 계산해 두기
+                        activity_30min_prices = {
+                            "day": ruleConfig.calculate_activity_support_30min(value),
+                            "night": ruleConfig.calculate_activity_support_30min_night(
+                                value
+                            ),
+                        }
+                        for time in TIME_DIVISIONS[prefix]:
+                            for service_kind in SERVICE_KINDS[prefix]:
+                                formatted_prices[prefix][time].setdefault(
+                                    service_kind,
+                                    (
+                                        activity_30min_prices
+                                        if time == 30
+                                        else {"day": value}
+                                    ),
+                                )
+
+                    elif suffix == "심야":
                         for service_kind in SERVICE_KINDS[prefix]:
-                            price = value
-                            if time == 30:
-                                price = self._rounddown((price * 0.5), -1)
-                            formatted_prices[prefix][time][service_kind].update(
-                                {
-                                    "day": price,
-                                    "night": self._rounddown(price * 1.5, -1),
-                                }
+                            formatted_prices[prefix][60][service_kind].update(
+                                {"night": value}
                             )
 
                 elif prefix == "방문간호":
@@ -685,11 +690,13 @@ class TableWriter:
                         prefix, {time: {} for time in TIME_DIVISIONS[prefix]}
                     )
 
-                    for time in TIME_DIVISIONS[prefix]:
-                        price = value
-                        if time == 40:
-                            price = self._rounddown(value * 0.8, -1)
+                    bath_prices = {
+                        40: ruleConfig.calculate_bath_40min(value),
+                        60: value,
+                    }
 
+                    for time in TIME_DIVISIONS[prefix]:
+                        price = bath_prices[time]
                         formatted_prices[prefix][time].update(
                             {suffix: {"day": price, "night": price}}
                         )
