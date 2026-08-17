@@ -540,10 +540,12 @@ class GosiConstantsPage(QWidget):
         self._card_hint.setText(spec.get("card_hint", ""))
 
         if self._flow == "payment_price":
+            self._tab_index = 1
             self._stack.setCurrentIndex(1)
             self._diff_button.setVisible(False)
             self._doc.set_visible_chapters(("제3장", "제4장"))
         else:
+            self._tab_index = 0
             self._stack.setCurrentIndex(0)
             self._diff_button.setVisible(True)
             self._doc.set_visible_chapters(("제2장", "제3장", "부"))
