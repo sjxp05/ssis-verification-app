@@ -362,7 +362,7 @@ class UploadPage(QWidget):
             self._hint.setText("파일을 업로드해야 다음 단계로 갈 수 있습니다.")
         elif state == FILLED:
             self._hint.setText(
-                "파일을 모두 올렸습니다. '확인'을 누르면 값을 읽어옵니다."
+                "파일을 모두 올렸습니다. '문서 읽기 시작'을 누르면 값을 읽어옵니다."
             )
         elif state == BUSY:
             self._hint.setText("문서를 읽고 있습니다. 잠시만 기다려 주세요.")

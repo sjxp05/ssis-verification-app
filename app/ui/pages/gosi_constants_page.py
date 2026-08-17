@@ -238,6 +238,7 @@ class GosiConstantsPage(QWidget):
             merged[service][key][col_name] = value
         return merged
 
+    # 조견표로부터 추출한 데이터를 딕셔너리로 받고, 이후 고시 문서와 값을 비교할 때 사용할 기준 데이터(self._result)로 저장
     def set_reference(self, values: dict | None) -> None:
         self._reference = values or {}
         if self._result:
@@ -247,12 +248,14 @@ class GosiConstantsPage(QWidget):
             self._fill_all()
             self._refresh_state()
 
+    # 업로드된 파일 경로 저장
     def set_unit_price_path(self, path: str) -> None:
         self._unit_price_path = path
 
     def set_sheet_path(self, path: str) -> None:
         self._sheet_path = path
 
+    # 고시 파싱, 파싱시 탐색하는 테이블이 모두 업로드된 hwpx에 있는지 검사.
     def load_notice(self, path: str) -> None:
         try:
             result = gosi_verifier.read_gosi(path, self._reference, self._flow)
@@ -270,6 +273,7 @@ class GosiConstantsPage(QWidget):
         self._fill_all()
         self._refresh_state()
 
+
     def values(self) -> dict:
         return (self._result or {}).get("단가", {})
 
@@ -282,6 +286,7 @@ class GosiConstantsPage(QWidget):
             self.clear()
             self._on_tab_changed()
 
+    # 페이지 리셋 함수(step 1에서 다른 파일을 새로 올리거나 메인화면에서 메뉴 변경시 이전 작업 내용 삭제)
     def clear(self) -> None:
         self._result = None
         self._path = None
@@ -298,7 +303,7 @@ class GosiConstantsPage(QWidget):
         self._fill_all()
         self._set_state(WAITING)
 
-    # --- 내부 빌드 및 채우기 로직 (간소화) --------------------------------------
+    # --- 내부 빌드 및 채우기 --------------------------------------
 
     def _section(self, title: str, widget: QWidget) -> QWidget:
         label = QLabel(title)
@@ -380,6 +385,7 @@ class GosiConstantsPage(QWidget):
             ]
         )
 
+    # load_notice 가 끝난 후 호출, 파서가 추출한 단가 데이터와 검증 결과를 테이블에 채워줌
     def _fill_all(self) -> None:
         if self._path:
             name = os.path.basename(self._path)
@@ -406,7 +412,7 @@ class GosiConstantsPage(QWidget):
                         and (keys[0], keys[1], PRICE_COLUMNS[col][0])
                         in self._price_overrides
                     ):
-                        item.setBackground(QBrush(QColor("#FFE79D")))
+                        item.setBackground(QBrush(QColor(WARNING_BG)))
                         item.setToolTip("수정한 값입니다.")
 
         self._price_table.blockSignals(False)
@@ -476,6 +482,7 @@ class GosiConstantsPage(QWidget):
 
         return (service, key) if service else None
 
+    # 테이블 단가 데이터 수정시 내용 반영
     def _on_item_changed(self, item) -> None:
         if item is None:
             return
@@ -511,8 +518,8 @@ class GosiConstantsPage(QWidget):
         item.setText(f"{new_val:,}")
         item.setData(Qt.ItemDataRole.UserRole, new_val)
         if edited:
-            item.setBackground(QBrush(QColor("#FFE79D")))
-            item.setToolTip("직접 수정한 값입니다.")
+            item.setBackground(QBrush(QColor(WARNING_BG)))
+            item.setToolTip("사용자가 수정한 값입니다.")
         else:
             item.setData(Qt.ItemDataRole.BackgroundRole, None)
             item.setToolTip("")
@@ -541,6 +548,7 @@ class GosiConstantsPage(QWidget):
             self._diff_button.setVisible(True)
             self._doc.set_visible_chapters(("제2장", "제3장", "부"))
 
+    # 불일치만 보기 버튼
     def _toggle_only_diff(self) -> None:
         self._only_diff = not self._only_diff
         self._diff_button.setText(_ONLY_DIFF_OFF if self._only_diff else _ONLY_DIFF_ON)
@@ -548,8 +556,8 @@ class GosiConstantsPage(QWidget):
         compare_data = (self._result or {}).get("대조") or {}
         self._compare_table.fill_data(compare_data, self._only_diff)
 
+    # 접기 전 좌우 비율을 기억해 두었다가 다시 펼칠 때 그대로 되돌리기(편의기능)
     def _toggle_document(self) -> None:
-        # 접기 전 좌우 비율을 기억해 두었다가 다시 펼칠 때 그대로 되돌리기(편의기능)
         shown = self._doc.isVisible()
         if shown:
             self._doc_sizes = self._splitter.sizes()
@@ -619,6 +627,7 @@ class GosiConstantsPage(QWidget):
         self._tables = None
         self._set_state(FAILED, reason)
 
+    # 테이터 렌더링 끝난 후 상태 업데이트
     def _refresh_state(self) -> None:
         if self._state == BUSY:
             return
@@ -629,6 +638,7 @@ class GosiConstantsPage(QWidget):
         else:
             self._set_state(FILLED)
 
+    # 종합 상태 관리 함수
     def _set_state(self, state: str, reason: str = "") -> None:
         self._state = state
         busy = state == BUSY
