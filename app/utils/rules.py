@@ -2,19 +2,20 @@ import inspect
 import json
 import math
 
-RULES_PATH = "rules_2026.json"
+RULES_PATH = "rules_2025.json"
 
 # 가능한 연산 종류
 ADD = "+"
 SUBTRACT = "-"
 MULTIPLY = "*"
+DIVIDE = "/"
 MIN = "MIN"
 MAX = "MAX"
 ROUNDUP = "ROUNDUP"
 ROUNDDOWN = "ROUNDDOWN"
 IF = "IF"
 
-OPS = [ADD, SUBTRACT, MULTIPLY, MIN, MAX, ROUNDUP, ROUNDDOWN, IF]
+OPS = [ADD, SUBTRACT, MULTIPLY, DIVIDE, MIN, MAX, ROUNDUP, ROUNDDOWN, IF]
 
 # 연산자별 피연산자 개수 (IF만 4개, 나머지는 2개)
 OPNDS_LENGTH = {op: (4 if op == IF else 2) for op in OPS}
@@ -77,6 +78,8 @@ class RuleConfig:
             return opnds[0] - opnds[1]
         elif op == MULTIPLY:
             return opnds[0] * opnds[1]
+        elif op == DIVIDE:
+            return opnds[0] / opnds[1]
         elif op == MIN:
             return min(opnds[0], opnds[1])
         elif op == MAX:
