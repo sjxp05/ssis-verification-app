@@ -293,7 +293,7 @@ class GosiConstantsPage(QWidget):
         self._reference = {}
         self._unit_price_path = None
         self._sheet_path = None
-        # 이미 만들어 둔 표와 돌고 있던 생성 작업은 낡은 값이므로 함께 버린다.
+
         self._tables = None
         self._generation += 1
         self._only_diff = False
@@ -389,7 +389,7 @@ class GosiConstantsPage(QWidget):
     def _fill_all(self) -> None:
         if self._path:
             name = os.path.basename(self._path)
-            self._subtitle.setText(f"{name}  ·  조견표에서 읽은 항목 {len(self._reference)}개" if self._flow == "notice_verify" else f"{name}") 
+            self._subtitle.setText(f"{name} · 조견표에서 읽은 항목 {len(self._reference)}개" if self._flow == "notice_verify" else f"{name}") 
         else:
             self._subtitle.setText(
                 "고시 파일을 불러오면 대조 결과가 여기에 표시됩니다."
@@ -432,8 +432,8 @@ class GosiConstantsPage(QWidget):
 
         if rows:
             self._compare_summary.setText(
-                f"전체 {len(rows)}항목  ·  일치 {matched}  ·  "
-                f"불일치 {mismatched}  ·  조견표에 없음 {absent}"
+                f"전체 {len(rows)}항목 · 일치 {matched}  ·  "
+                f"불일치 {mismatched} · 조견표에 없음 {absent}"
             )
             set_state(
                 self._compare_summary,
@@ -452,7 +452,7 @@ class GosiConstantsPage(QWidget):
         skipped = compare_data.get("대조 안 함") or []
         if not skipped:
             return "없음" if compare_data.get("행") else "—"
-        return f"{len(skipped)}개 항목은 고시에 대응하는 값이 없어 대조하지 않았습니다.\n\n" + "\n".join(
+        return f"조견표에서 추출한 단가 데이터 중 {len(skipped)}개 항목은 고시에 대응하는 값이 없습니다.\n\n" + "\n".join(
             f"·  {key}" for key in skipped
         )
 

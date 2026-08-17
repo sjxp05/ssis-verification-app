@@ -1,6 +1,7 @@
 # ui/widgets/gosi_document_viewer.py (새로 생성)
 import re
 from PyQt6.QtWidgets import QTextBrowser
+from PyQt6.QtCore import QTimer
 
 _DOC_CSS = """
     .chapter { font-size: 16px; font-weight: bold; color: #2c3e50; margin-top: 16px; }
@@ -84,6 +85,16 @@ class GosiDocumentViewer(QTextBrowser):
             parts.append("</table>")
 
         self.setHtml("".join(parts))
-        
+
+        # 편의 기능 추가: 앵커태그로 스크롤 이동시 화면 가운데로 정렬
         if target:
             self.scrollToAnchor(_anchor(*target))
+
+            def center_scroll():
+                scroll_bar = self.verticalScrollBar()
+                offset = scroll_bar.pageStep() // 2 
+                
+                new_pos = max(0, scroll_bar.value() - offset)
+                scroll_bar.setValue(new_pos)
+            
+            QTimer.singleShot(0, center_scroll)
