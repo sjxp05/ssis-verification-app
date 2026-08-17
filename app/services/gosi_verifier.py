@@ -8,7 +8,7 @@ HP = "{http://www.hancom.co.kr/hwpml/2011/paragraph}"
 
 # 앵커키워드
 ANCHORS = {
-    # ── 결제단가표로 넘길 값 ──
+    # 결제단가표로 넘길 값
     "활동보조": {"제목": "활동보조", "표안": ["시간당"]},
     "방문목욕": {"제목": "방문목욕", "표안": []},
     "방문간호": {"제목": "방문간호", "표안": []},
@@ -24,7 +24,7 @@ ANCHORS = {
 # 결제단가표로 넘길 서비스 목록
 PRICE_SERVICES = ["활동보조", "방문목욕", "방문간호", "방문간호지시서"]
 
-# 조견표 파서에서 넘어오는 딕셔너리의 키 형식.
+# 조견표 파서에서 넘어오는 딕셔너리 형식
 REF_KEY_FORMATS = {
     "기본형": "종합조사 월한도액 (기본형).{구간}구간",
     "확장형": "종합조사 월한도액 (확장형).{구간}구간",
@@ -39,14 +39,14 @@ PRICE_KEY_ALIASES = {
 
 REF_IGNORE_KEYS = {"사업년도", "차수"}
 
-# 순서 바뀌어도 버티는 것들 ..
+# 탐색 문자열중 순서 바뀌어도 괜찮은 것들
 _ADD_TIERS = (("400점이상", 0), ("380점미만", 2))
 _ADD_BY_HOUSEHOLD = {
     "독거": ("최중증1인가구", "1등급1인가구", "2등급이하1인가구"),
     "가구구성원": ("최중증취약가구", "1등급취약가구", "2등급이하취약가구"),
 }
 
-# 순서 중요(변경 금지!!)
+# 탐색 문자열 중 순서가 중요한 것(변경 금지!!)
 _ADD_BY_PHRASE = (
     ("나머지", "나머지가구구성원의직장생활등"),
     ("일시적으로부재", "보호자일시부재"),
@@ -56,7 +56,7 @@ _ADD_BY_PHRASE = (
     ("출산", "출산"),
 )
 
-# 금액으로 인정할 최소 자릿수. '1회당' 같은 문구를 금액으로 오인하지 않게 한다.
+# 금액으로 인정할 최소 자릿수
 _MONEY = re.compile(r"([\d,]{4,})원")
 _SEGMENT = re.compile(r"(\d+)\s*구간")
 _CHAPTER = re.compile(r"^(제\s*\d+\s*장|부\s*칙)")
@@ -69,7 +69,7 @@ FIX_GUIDE = (
     "고시가 개정되어 표 제목이나 항목명이 바뀌었다면 앵커(ANCHORS)도 함께 손봐야 합니다."
 )
 
-# 셀 안의 모든 텍스트 조각(hp:t)을 이어붙인다
+# 셀 안의 모든 텍스트 조각을 이어붙이는 함수
 def _cell_text(tc):
     lines = []
     for p in tc.iter(f"{HP}p"):
@@ -78,11 +78,10 @@ def _cell_text(tc):
             lines.append(line)
     if lines:
         return "\n".join(lines)
-    # 문단 없이 텍스트만 들어있는 셀(드묾)에 대한 대비
     return "".join(t.text or "" for t in tc.iter(f"{HP}t")).strip()
 
 
-# 공백·줄바꿈을 모두 없앤 형태. 표를 찾거나 분류를 알아볼 때 쓴다.
+# 공백·줄바꿈 처리
 def _squeeze(text):
     return re.sub(r"\s+", "", text or "")
 
@@ -110,7 +109,6 @@ def _walk_document(root):
 
 
 # 고시(hwpx)를 문서 순서대로 읽어 문단/표 블록 목록 반환
-# 표만 필요하면 parse_tables 사용
 def parse_document(hwpx_path):
     blocks = []
     with zipfile.ZipFile(hwpx_path) as z:
@@ -129,7 +127,7 @@ def parse_document(hwpx_path):
                 if kind == "text":
                     if _CHAPTER.match(payload):
                         chapter = payload
-                        item = None  # 장이 바뀌면 항목도 처음부터
+                        item = None
                     elif _ITEM.match(payload):
                         # 항목이 긴 문장인 경우 앞부분만 저장
                         item = (payload if len(payload) <= _ITEM_MAX
@@ -142,7 +140,6 @@ def parse_document(hwpx_path):
                         for tr in payload.iter(f"{HP}tr")
                     ]
                     width = max((len(r) for r in grid), default=0)
-                    # 병합된 칸 때문에 짧아진 행을 채워 화면에서 표가 어긋나지 않게 한다
                     grid = [row + [""] * (width - len(row)) for row in grid]
                     blocks.append({
                         "종류": "표",
@@ -155,18 +152,18 @@ def parse_document(hwpx_path):
     return blocks
 
 
-# 고시(hwpx)의 모든 표를 문서 순서대로 반환
+# 고시의 모든 표를 문서 순서대로 반환
 def parse_tables(hwpx_path):
     return [b for b in parse_document(hwpx_path) if b["종류"] == "표"]
 
 
-# 표의 제목은 문맥(장 + 항목)을 하나의 문자열로 적는다
+# 표의 제목은 문맥(장 + 항목)을 하나의 문자열로 작성
 def _heading(table):
     ctx = table["문맥"]
     return " ".join(x for x in [ctx.get("장"), ctx.get("항목")] if x)
 
 
-# 서비스 이름으로 표 찾기
+# 서비스 이름으로 표 탐색
 def find_table(tables, service, anchors=None):
     anchors = anchors or ANCHORS
     spec = anchors[service]
@@ -202,7 +199,7 @@ def find_table(tables, service, anchors=None):
     return hits[0]
 
 
-# 17,270원 -> int로 추출(계산 가능하게)
+# 구두점 처리 및 int 추출
 def _amounts(text):
     return [int(m.replace(",", "")) for m in _MONEY.findall(text)]
 
@@ -217,7 +214,7 @@ def _make_source(hwpx_path, table, row, col, label, raw):
         "열": col,
         "라벨": label,
         "원문": raw,
-        "문맥": table["문맥"],  # {"장": ..., "항목": ...} 사람이 고시에서 찾아갈 좌표
+        "문맥": table["문맥"],
     }
 
 
@@ -229,11 +226,11 @@ def _read_hwaldong(hwpx_path, table):
         raw = " ".join(row)
         nums = _amounts(raw)
         if not nums:
-            continue  # 헤더 행
+            continue
         if len(nums) != 2:
             raise ValueError(
                 f"활동보조 행에서 금액 2개(시간당+가산수당)를 기대했으나 {nums}: {raw}")
-        # 라벨의 키워드로 분류
+
         squeezed = _squeeze(label)
         if "심야" in squeezed:
             key = "심야"
@@ -264,8 +261,6 @@ def _read_mokyok(hwpx_path, table):
             continue
         if len(nums) != 1:
             raise ValueError(f"방문목욕 행에서 금액 1개를 기대했으나 {nums}: {raw}")
-        # 주의: 가정내입욕 라벨에도 "차량 내 온수"라는 문구가 들어있으므로
-        # "차량"이 아니라 목욕 장소를 나타내는 특징 문구로 구분한다
         squeezed = _squeeze(label)
         if "이동목욕용" in squeezed and "차량내에서" in squeezed:
             key = "차량내입욕"
@@ -411,7 +406,7 @@ def _add_item_name(label):
         for phrase, index in _ADD_TIERS:
             if phrase in squeezed:
                 return names[index]
-        return names[1]  # 380~399점 구간 (표기가 ～ / ~ 로 갈려 문구 대신 소거법)
+        return names[1]  # 380~399점 구간
     return None
 
 
@@ -421,7 +416,7 @@ def _read_add_benefit(hwpx_path, table):
         label = row[0] if row else ""
         nums = _amounts(" ".join(row))
         if not nums:
-            continue  # 머리행
+            continue
         name = _add_item_name(label)
         if name is None:
             raise ValueError(f"추가급여 항목을 알아보지 못했습니다: {label}")
@@ -463,16 +458,16 @@ def _read_jugan(hwpx_path, table):
     return result
 
 
-_LABEL_MAX = 20  # 한 줄에 같이 붙일 라벨 길이
+_LABEL_MAX = 20
 
 
-# 화면 라벨에 넣기 전에 줄바꿈·연속 공백을 없애고 너무 길면 자른다
+# 화면 라벨에 넣기 전에 줄바꿈·연속 공백 처리
 def _one_line(text, limit=_LABEL_MAX):
     text = " ".join((text or "").split())
     return text if len(text) <= limit else text[:limit] + "…"
 
 
-# 값이 나온 고시 위치를 한 줄로 적는다 (장 › 항목 › 표/행 › 라벨)
+# 고시 위치를 한 줄로 작성
 def where_text(source):
     ctx = source.get("문맥") or {}
     parts = [x for x in (ctx.get("장"), ctx.get("항목")) if x]
@@ -483,7 +478,7 @@ def where_text(source):
     return " › ".join(parts)
 
 
-# 금액과 출처를 담당자가 읽을 수 있도록 한 줄로 만든다
+# 금액, 출처 한 줄로 작성
 def show_price(item):
     return f'{item["금액"]:,}원  —  {where_text(item["출처"])}'
 
@@ -504,7 +499,7 @@ def validate_prices(prices, limits=None):
                                      f"금액이 0 이하입니다. 현재 값: {show_price(item)}",
                                      item["출처"]))
 
-    # 방문간호: 제공시간이 길수록 금액이 커야 한다
+    # 방문간호: 제공시간이 길수록 금액이 커야 함
     g = prices.get("방문간호") or {}
     order = ["30분미만", "30분이상60분미만", "60분이상"]
     if all(k in g for k in order):
@@ -516,7 +511,7 @@ def validate_prices(prices, limits=None):
                 + "\n".join(f"·  {k}  {show_price(g[k])}" for k in order),
                 g[order[0]]["출처"]))
 
-    # 활동보조: 심야/공휴일은 일반보다 높아야 하고, 가산수당은 기본 단가보다 작아야 한다
+    # 활동보조: 심야/공휴일은 일반보다 높고, 가산수당은 기본 단가보다 작아야 함
     h = prices.get("활동보조") or {}
     if "일반" in h:
         low = [k for k in ("심야", "공휴일")
@@ -534,12 +529,12 @@ def validate_prices(prices, limits=None):
                     f"가산수당({item['가산수당']:,}원)이 시간당 금액 이상입니다.\n"
                     f"·  {show_price(item)}", item["출처"]))
 
-    # 월 한도액을 함께 읽었다면 고시 안에서의 앞뒤도 본다
+    # 월 한도액을 함께 읽었다면 고시 안에서의 앞뒤 확인
     if limits:
         issues.extend(_validate_limits(limits))
     return issues
 
-# 주간활동 기본형 - 월 한도액 테이블 두개가 같은지 확인
+# 주간활동 기본형 - 월 한도액 테이블 두개가 동일한지 확인
 def _validate_limits(limits):
     issues = []
     base = limits.get("활동지원급여") or {}
@@ -582,7 +577,7 @@ def _validate_limits(limits):
     return issues
 
 
-# 고시에서 읽은 월 한도액을 조견표 파서와 같이 딕셔너리 모양으로 펴기
+# 월 한도액을 조견표 파서와 동일한 형식의 딕셔너리 모양으로 펴기
 def flatten_limits(limits):
     flat = {}
     for segment, item in (limits.get("주간활동") or {}).items():
@@ -607,7 +602,7 @@ def _norm_key(key):
     return re.sub(r"[\s()（）\[\]「」『』·・,\.\-_/]", "", str(key))
 
 
-# 조견표에서 온 값을 금액(int)으로 맞춰서 일치여부  처리
+# 조견표에서 온 값을 금액(int)으로 맞춰서 일치여부 처리
 def _as_amount(value):
     if value is None or isinstance(value, bool):
         return None
@@ -617,8 +612,7 @@ def _as_amount(value):
     return int(digits) if digits else None
 
 
-# 고시 값과 조견표 값을 대조한다.
-# 조견표에만 있는 키(본인부담률·상한액 등 고시에 없는 항목)는 대조 대상에서 제외
+# 고시 값과 조견표 값 대조
 def compare_with_reference(limits, reference, prices=None):
     reference = reference or {}
     gosi = flatten_limits(limits)
@@ -633,8 +627,6 @@ def compare_with_reference(limits, reference, prices=None):
 
     for key in sorted(gosi, key=_sort_key):
         item = gosi[key]
-        # [수정 4] 기존: ref_value = reference.get(key) 를 그대로 == 비교
-        # [수정 12] 정확히 같은 키 -> 별칭 -> 공백·기호를 지운 형태 순으로 찾는다
         matched_key = None
         for candidate in (key, PRICE_KEY_ALIASES.get(key)):
             if candidate and candidate in reference:
@@ -670,21 +662,12 @@ def compare_with_reference(limits, reference, prices=None):
 
 
 def _sort_key(key):
-    # "…(기본형).10구간" 이 "…2구간" 보다 뒤에 오도록 구간 번호를 숫자로 본다
     m = _SEGMENT.search(key)
     return (key[:key.rfind(".")] if "." in key else key,
             int(m.group(1)) if m else 0)
 
 
-# 고시(hwpx)에서 서비스별 단가를 추출한다.
-# 반환 구조 (모든 금액에 출처 포함):
-# {
-#     "활동보조": {"일반"|"심야"|"공휴일": {"금액", "가산수당", "출처"}},
-#     "방문목욕": {"차량내입욕"|"가정내입욕": {"금액", "출처"}},
-#     "방문간호": {"30분미만"|"30분이상60분미만"|"60분이상": {"금액", "출처"}},
-#     "방문간호지시서": {"의료기관_방문"|"의료기관_의사내방"|
-#                       "보건기관_방문"|"보건기관_의사내방": {"금액", "출처"}},
-# }
+# 고시에서 서비스별 단가를 추출
 def read_gosi_prices(hwpx_path, tables=None, issues=None):
     tables = tables if tables is not None else parse_tables(hwpx_path)
     readers = {"활동보조": _read_hwaldong, "방문목욕": _read_mokyok,
@@ -700,8 +683,8 @@ def read_gosi_prices(hwpx_path, tables=None, issues=None):
     return prices
 
 
-# 고시에서 월 한도액을 읽는다 (조견표 대조 전용).
-def read_gosi_limits(hwpx_path, tables=None, issues=None):  # [수정 5] 월한도액/주간활동도 동일
+# 고시에서 월 한도액 읽기 (조견표 대조용).
+def read_gosi_limits(hwpx_path, tables=None, issues=None):
     tables = tables if tables is not None else parse_tables(hwpx_path)
     readers = {"활동지원급여": ("월한도액", _read_wolhando),
                "주간활동": ("주간활동", _read_jugan),
@@ -718,8 +701,7 @@ def read_gosi_limits(hwpx_path, tables=None, issues=None):  # [수정 5] 월한�
     return limits
 
 
-# 화면이 쓰는 진입점. 단가·월한도액·검증·대조를 한 번에 돌려준다.
-# 표 하나가 실패해도 나머지는 계속 읽고, 실패 사유는 issues 에 남긴다.
+# 고시 읽기 함수(메인로직)
 def read_gosi(hwpx_path, reference=None, flow="notice_verify"):
     blocks = parse_document(hwpx_path)
     tables = [b for b in blocks if b["종류"] == "표"]
@@ -737,9 +719,9 @@ def read_gosi(hwpx_path, reference=None, flow="notice_verify"):
 
     return {
         "파일": hwpx_path,
-        "블록": blocks,          # 화면의 고시 원문 패널용
-        "단가": prices,          # 결제단가표로 넘길 값
-        "월한도액": limits,       # 조견표 대조용 (넘기지 않는다)
+        "블록": blocks,
+        "단가": prices,
+        "월한도액": limits, 
         "검증": issues,
         "대조": compare_result
     }
