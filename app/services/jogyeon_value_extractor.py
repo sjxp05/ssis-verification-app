@@ -49,6 +49,14 @@ class ValueExtractor:
     def cell_map(self)->dict[str,tuple[str,int,int]]:
         return dict(self._cell_map)
 
+    def _mark_sync_cells(self,norm,sheet_name):
+        for value_key,anchor in (("기본단가",BASE_PRICE),("A값",A_VALUE)):
+            try:
+                r,c=self._find_first(norm,anchor)
+            except ExtractError:
+                continue
+            self._mark(f"{value_key}@{sheet_name}",sheet_name,r,c+1)
+
     def source_path(self)-> Path |None:
         return self._source_path
 
@@ -227,6 +235,9 @@ class ValueExtractor:
         for k in ADD_ITEMS:
             limits[k]=self._num(df.iat[base_r+1, base_c + col_map[k]])
             self._mark(f"추가급여 월한도액.{k}",sheet_name, base_r+1, base_c + col_map[k])
+
+        #기본단가,A값이 인정조사 변경시 같이 갱신되도록 기록
+        self._mark_sync_cells(norm,sheet_name)
 
         return {
             "종합조사/산정특례 본인부담금 상한액": copay_cap,
