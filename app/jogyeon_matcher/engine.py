@@ -1,9 +1,4 @@
-# 기준 조견표와 업로드된 조견표의 라벨 매칭, 결과 리포트 생성
-#
-# 판정 순서: 원문 일치 -> 정규화 일치 -> 규칙 파서 동등 -> 유사도 비교
-# - 앞의 셋은 일치했을 때 auto pass 가능
-# - 유사도 점수는 높게 나오더라도 사람의 검수 필요
-# - 한 시트 내에서만 매칭
+# review_flow._MatchTask에서 호출되어 두 조견표를 비교한 MatchReport를 반환
 
 from __future__ import annotations
 
@@ -42,7 +37,7 @@ def match_workbooks(
     target_path: str | Path,
     config: HybridConfig | None = None,
 ) -> MatchReport:
-    config = config or HybridConfig()
+    config = config or HybridConfig()#실험을 통해 찾아낸 최적의 모델 하이퍼파라미터 hybrid.py에서 불러오기
     baseline = loader.load(baseline_path, anchors.JOGYEON_SHEET_NAMES)
     target = loader.load(target_path, anchors.JOGYEON_SHEET_NAMES)
 
@@ -73,6 +68,7 @@ def match_workbooks(
     # 유사도 대조가 필요한 경우에만 지연 로딩되는 인코더, 모든 시트에서 공유
     encoder = DenseEncoder()
 
+    # ValueExtractor와 동일하게 라벨 매칭을 같은 시트 안에서만 수행
     for sheet in baseline.sheets:
         if sheet not in target.sheets:
             continue
@@ -92,7 +88,7 @@ def match_workbooks(
 
 
 # 올해 파일에서 값을 읽을 수 있는지 미리 확인
-# 추출기와 같은 방식으로 부분문자열로 탐색. 단 등급, 구간 등 행·열 이름은 정확히 일치해야 함
+# 추출기(ValueExtractor)와 같은 방식으로 부분문자열로 탐색. 단 등급, 구간 등 행·열 이름은 정확히 일치해야 함
 def _find_missing(
     target_labels: dict[str, dict[str, LabelRef]],
     matchers: dict[str, HybridMatcher | None],
@@ -133,7 +129,7 @@ def _find_missing(
     return missing
 
 
-# 못 찾은 문구를 대신할 만한 올해 문구 후보
+# 필수 문구 누락 시 올해 라벨에서 대체 후보 3개 제시
 def _suggest(
     key: str, matcher: HybridMatcher | None, labels: dict[str, LabelRef]
 ) -> list[Candidate]:
@@ -166,7 +162,7 @@ def _summarize(items: list[MatchItem]) -> Summary:
     )
 
 
-# 표에서 라벨 후보 추출. 정규형이 같으면 먼저 나온 셀 우선
+# 표에서 라벨 후보 추출. 정규형이 같으면 먼저 나온 셀 우선, 이후 find_normalization_collisions()로 따로 탐지
 def _collect_labels(regions: list) -> dict[str, LabelRef]:
     labels: dict[str, LabelRef] = {}
     for region in regions:
@@ -202,8 +198,7 @@ def _match_sheet(
     # 라벨마다 매번 전체 순회하면 O(라벨²)로 성능이 저하되므로 시트당 인덱스는 한 번만 생성
     det = _DeterministicIndex(target_labels)
 
-    # 결정론 매칭 안 되는 (유사도 비교 필요한) 라벨을 미리 골라 배치로 한 번에 인코딩
-    # (라벨마다 단건 인코딩 시 ONNX 호출 오버헤드 발생)
+    # 결정론 매칭에 실패한 라벨만 배치로 한번에 ONNX 호출하여 비용 최소화
     if matcher is not None:
         pending = [
             ref.normalized
@@ -255,7 +250,7 @@ def _match_one(
         item = MatchItem(
             item_id,
             ref,
-            Status.AUTO_PASS,
+            Status.AUTO_PASS,#일치판정:EXACT, NORMALIZED, RULE_PARSER
             path,
             candidates=[Candidate(1, found.raw, 1.0, 1.0, 1.0, found.location)],
             matched_label=found.raw,
@@ -300,6 +295,8 @@ def _match_deterministic(
         return MatchPath.EXACT, key
     if ref.normalized in target_labels:
         return MatchPath.NORMALIZED, ref.normalized
+
+    #구조 일치 비교(예: 100%이하 == 100 % 이하)
     token = rule_parser.parse(ref.normalized)
     if token is not None:
         key = det.parsed.get(token)
