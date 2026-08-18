@@ -41,7 +41,7 @@ class FlowCard(QFrame):
         line_layout.addStretch(1)
 
         layout.addLayout(line_layout)
-
+        
         content_wrapper = QWidget()
         content_wrapper.setObjectName("MenuCardContent")
         content_layout = QVBoxLayout(content_wrapper)

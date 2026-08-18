@@ -22,7 +22,8 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QFileDialog,
-    QMessageBox
+    QMessageBox,
+    QApplication
 )
 
 import pandas as pd
@@ -32,6 +33,7 @@ from ui.components.card import Card
 from ui.components.button import PrimaryButton, GhostButton 
 from ui.components.tab_bar import SegmentedTabBar
 from ui.widgets.value_field import ValueField
+from ui.components.spinner import Spinner
 from utils.qss import set_state
 
 # 단가표 생성 상태
@@ -164,6 +166,9 @@ class ConstantsPage(QWidget):
         self._hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._hint.setWordWrap(True)
 
+        #spinner 추가
+        self._spinner=Spinner(size=22)
+
         self._export_button=GhostButton("수정된 조견표 저장")
         self._export_button.clicked.connect(self._on_export_jogyeon)
         self._export_button.setVisible(self._flow == "unit_price")
@@ -186,6 +191,8 @@ class ConstantsPage(QWidget):
         content = QVBoxLayout()
         content.setSpacing(16)
         content.addWidget(self._card, 1)
+        #spinner추가
+        content.addWidget(self._spinner,alignment=Qt.AlignmentFlag.AlignCenter)
         content.addWidget(self._next)
         content.addWidget(self._hint)
 
@@ -394,6 +401,8 @@ class ConstantsPage(QWidget):
         if not path:
             return
         from services.jogyeon_exporter import export_modified_jogyeon
+        #진행 모래시계보여주기
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
             skipped=export_modified_jogyeon(
                 self._export_src,path,self._export_cells,changed
@@ -401,6 +410,8 @@ class ConstantsPage(QWidget):
         except Exception as error:
             QMessageBox.critical(self,"저장 실패",str(error))
             return
+        finally:
+            QApplication.restoreOverrideCursor()
 
         if skipped:
             detail = "\n".join(f"· {k}\n   {reason}" for k, reason in skipped)
@@ -412,7 +423,7 @@ class ConstantsPage(QWidget):
 
     # --- API --------------------------------------------------------------
     def set_flow(self, flow: str) -> None:
-        # flow가 바뀔 때만 탭바를 새로 만들고, 이전 흐름에서 만든 필드를 비운다.
+        # flow가 바뀔 때만 탭바를 새로 만들고 이전 흐름에서 만든 필드를 비운다.
         if flow == self._flow:
             return
         self._flow = flow
@@ -421,9 +432,6 @@ class ConstantsPage(QWidget):
         self._export_button.setVisible(flow=="unit_price")
 
     def set_values(self, values: dict | list[dict]) -> None:
-        # value_extractor는 탭 개수에 맞춰 dict의 list를 돌려준다 —
-        # dict 하나가 탭 하나에 해당하므로 각각 페이지를 새로 만든다.
-        # 단순 dict가 오면(예: 값 초기화) 이미 만들어진 필드에 값만 채운다.
         if isinstance(values, list):
             self._rebuild_pages(values)
             return
@@ -491,7 +499,7 @@ class ConstantsPage(QWidget):
             self._start_table_write(self.values())
         elif self._state == READY and self._tables is not None:
             # '다음 단계로' 버튼: 표를 화면에 채우는 동안(느림) 버튼만 잠깐 회색으로 보여준다.
-            # 상태(FSM)는 그대로 READY 로 두고, 순수 UI만 바꿨다가 화면 전환 후 되돌린다.
+            # 상태는 그대로 READY 로 두고, 순수 UI만 바꿨다가 화면 전환 후 되돌린다.
             self._next.setEnabled(False)
             self._next.setText(_LOADING_TEXT)
             self._next.repaint()  # 바로 이어지는 무거운 작업 전에 강제로 다시 그려서 보이게 한다
@@ -543,6 +551,11 @@ class ConstantsPage(QWidget):
             self._hint.setText(
                 f"단가표를 생성하지 못했습니다: {reason}\n값을 확인한 뒤 다시 시도해 주세요."
             )
+
+        if state==BUSY:
+            self._spinner.start()
+        else:
+            self._spinner.stop()
 
         set_state(self._hint, "state", state)
         self._hint.setVisible(True)
