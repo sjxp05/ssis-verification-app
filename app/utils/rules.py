@@ -28,6 +28,7 @@ TYPE_MAP = {
     "bool": (bool,),
 }
 
+# 단가표 생성에 사용되는 계산식 종류
 RULE_COPAYMENT = "copayment"
 RULE_COPAYMENT_EXTENDED = "copayment_extended"
 RULE_ADD_COPAYMENT = "add_copayment"
@@ -43,6 +44,7 @@ class RuleConfig:
     def __init__(self):
         self.set_functions()
 
+    # 각 항이 함수에 들어가는 인자 또는 상수인지 구분해서 값을 찾아 반환
     def _resolve_operand(self, arg, inputs: list, values: dict):
         if isinstance(arg, str):
             for input in inputs:
@@ -54,11 +56,13 @@ class RuleConfig:
                         return value
 
         elif isinstance(arg, dict):
+            # 항 자체가 계산식인 경우 해당 식의 값을 구함
             return self._evaluate(arg, inputs, values)
 
         # value에 매칭되는 값이 없는 문자열 또는 상수 리터럴인 경우 그대로 반환
         return arg
 
+    # AST를 실제 계산식으로 변환하여 계산
     def _evaluate(self, formula: dict, inputs: list, values: dict) -> int | float:
         op = formula.get("op")
         if op not in OPS:
@@ -93,13 +97,14 @@ class RuleConfig:
         elif op == IF:
             return opnds[2] if opnds[0] == opnds[1] else opnds[3]
 
+    # JSON 파일에 정의된 AST 구조의 계산식을 함수로 만들어 반환
     def _build_formula_function(self, rule_id: str):
         rule = self._rules[rule_id]
 
         inputs = rule["inputs"]
         formula = rule["formula"]
         arg_names = [i["var"] for i in inputs]  # 함수 인자명
-        display = {i["var"]: i["name"] for i in inputs}  # 에러 메시지용
+        display = {i["var"]: i["name"] for i in inputs}  # 에러 메시지 표시용 한글 이름
         types = {i["var"]: i.get("type") for i in inputs}
         defaults = {
             i["var"]: i["default"] for i in inputs if "default" in i
@@ -113,13 +118,14 @@ class RuleConfig:
                     f"[{rule_id}] {n}({display[n]})의 기본값 {d!r}이(가) {types[n]} 타입이 아닙니다."
                 )
 
+        # 연산 함수 생성
         def fn(*args, **kwargs):
-            # 위치/키워드 인자 결합
             if len(args) > len(arg_names):
                 raise TypeError(
                     f"calculate_{rule_id}()는 인자를 최대 {len(arg_names)}개 받습니다"
                 )
 
+            # 함수에서 받은 인자를 JSON에 실제 정의된 것과 매치
             values = dict(zip(arg_names, args))
             for k, v in kwargs.items():
                 if k not in arg_names:

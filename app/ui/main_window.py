@@ -65,7 +65,7 @@ class MainWindow(QMainWindow):
         self.resize(1180, 820)
         self._flow: FlowSpec | None = None
         self._table_count = 0
-        # 업로드 화면에서 파일이 바뀌어 2,3단계를 잠갔을 때, 되돌릴 max_reached 값
+        # 업로드 화면에서 파일이 바뀌었을 때 직전 파일로 진행했던 단계 번호(max_reached) 저장
         self._locked_max_reached: int | None = None
 
         self._header = HeaderBar(
@@ -175,7 +175,7 @@ class MainWindow(QMainWindow):
         self.go_to_step(self._steps.current() if self._steps else 0)
 
     def go_to_step(self, step: int) -> None:
-        # 0 = 문서 업로드, step 1 = 단가 정보 확인, step 2 = 단가표 생성
+        # step 0 = 문서 업로드, step 1 = 단가 정보 확인, step 2 = 단가표 생성
         if self._steps is None or self._flow is None:
             return
         step = max(0, min(step, len(self._flow.steps) - 1))
@@ -278,7 +278,7 @@ class MainWindow(QMainWindow):
 
         else:
             self.constants_page.set_values(values)
-            # 조견표 수정본 저장에 쓸 원본경로, 셀 좌표 넘김
+            # 조견표 수정본 저장에 쓸 원본 경로, 셀 좌표 넘김
             src, cells = self.upload_page.export_info()
             self.constants_page.set_export_source(src, cells)
 
@@ -286,8 +286,8 @@ class MainWindow(QMainWindow):
         self.go_to_step(Screen.CONSTANTS.step)
 
     def _on_upload_files_diverged(self, diverged: bool) -> None:
-        # 업로드 화면에서 파일이 원래 추출에 쓰인 파일과 달라졌을 때: 2,3단계 이동을 막음
-        # 원래 파일로 되돌아오면 다시 풀어줌 (2,3단계 값은 그대로 남아 있음).
+        # 업로드 화면에서 파일이 원래 추출에 쓰인 파일과 달라지면 2,3단계 이동을 막음
+        # 원래 파일로 되돌아오면 다시 풀어줌 (2,3단계 값은 그대로 남아 있음)
         if self._steps is None:
             return
         if diverged:
@@ -305,7 +305,7 @@ class MainWindow(QMainWindow):
             self._steps.reset()
 
     def _on_values_changed(self) -> None:
-        # 상수를 고치면 이미 만든 단가표 버리고 3단계 접근 막음
+        # 상수를 고치면 이미 만든 단가표를 버리고 3단계 접근 막음
         if self._steps is not None:
             self._steps.set_max_reached(Screen.CONSTANTS.step)
 
@@ -313,8 +313,8 @@ class MainWindow(QMainWindow):
         if self._steps is not None:
             self._steps.set_max_reached(Screen.TABLES.step)
 
-    # 상수 확인 화면에서 단가표 생성을 마치고 '다음 단계로'를 눌렀을 때
     def _on_tables_ready(self, tables: dict) -> None:
+        # 상수 확인 화면에서 단가표 생성을 마치고 '다음 단계로'를 눌렀을 때
         if self._flow.key == NOTICE_VERIFY.key:
             self._on_gosi_prices_confirmed(tables)
             return

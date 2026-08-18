@@ -1,4 +1,4 @@
-# 메인 화면
+# 메인 화면 (플로우 선택 화면)
 
 from __future__ import annotations
 
@@ -186,7 +186,7 @@ class MainPage(QWidget):
         info_layout.addWidget(info_icon)
         info_layout.addWidget(info_text, 1)
 
-        # 전체 화면 가운데 정렬 조립
+        # 전체 화면에 가운데 정렬로 요소 배치
         layout = QVBoxLayout(self)
         layout.addStretch(1)
         layout.addWidget(title)

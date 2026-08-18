@@ -22,14 +22,14 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QFileDialog,
-    QMessageBox
+    QMessageBox,
 )
 
 import pandas as pd
 from pathlib import Path
 from services.table_writer import TableWriter
 from ui.components.card import Card
-from ui.components.button import PrimaryButton, GhostButton 
+from ui.components.button import PrimaryButton, GhostButton
 from ui.components.tab_bar import SegmentedTabBar
 from ui.widgets.value_field import ValueField
 from utils.qss import set_state
@@ -79,7 +79,7 @@ TABS = {
 
 class _TableWriteSignals(QObject):
     finished = pyqtSignal(int, object)  # generation, Tables
-    failed = pyqtSignal(int, str)  # generation, 사유
+    failed = pyqtSignal(int, str)  # generation, 실패 원인
 
 
 # 단가표 생성기를 GUI 스레드 밖에서 돌린다.
@@ -104,11 +104,6 @@ class _TableWriteTask(QRunnable):
                 tables = self._table_writer.write_basic_add_tables(
                     values=self._values,
                 )
-            else:
-                tables = self._table_writer.write_payment_table(
-                    service_prices=self._values,
-                    basic_df=None,  # TODO: 여기에 기본급여 단가표 혹은 단가표 엑셀파일의 path를 넣어줄 것
-                )
         except Exception as error:
             self.signals.failed.emit(
                 self._generation, str(error) or type(error).__name__
@@ -120,7 +115,9 @@ class _TableWriteTask(QRunnable):
 class ConstantsPage(QWidget):
     # tablesReady(dict): 단가표 생성이 끝나 다음 단계로 넘어가도 된다는 신호
     tablesReady = pyqtSignal(object)
-    valuesChanged = pyqtSignal()  # 값이 수정되면 이미 만든 단가표는 낡은 것이 된다
+    valuesChanged = (
+        pyqtSignal()
+    )  # 수정된 값이 있으면 반영하여 단가표를 다시 만들도록 알리는 신호
     valuesKept = (
         pyqtSignal()
     )  # 값 수정했다가 취소한 경우 바뀌지 않은 것으로 처리, 단가표 페이지로 정상적 이동 가능
@@ -147,7 +144,9 @@ class ConstantsPage(QWidget):
 
         self._card = Card()
 
-        self._stack = QStackedWidget()  # 값이 오기 전까지는 비어 있다
+        self._stack = (
+            QStackedWidget()
+        )  # 페이지 안에 들어갈 위젯들. 값이 오기 전까지는 비어 있음
         self._card.add_widget(self._stack)
 
         self._is_table_generated = False  # 단가표 최초 생성 했는지 여부
@@ -164,11 +163,11 @@ class ConstantsPage(QWidget):
         self._hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._hint.setWordWrap(True)
 
-        self._export_button=GhostButton("수정된 조견표 저장")
+        self._export_button = GhostButton("수정된 조견표 저장")
         self._export_button.clicked.connect(self._on_export_jogyeon)
         self._export_button.setVisible(self._flow == "unit_price")
-        self._export_src: Path |None=None
-        self._export_cells: dict[str,tuple[str,int,int]]={}
+        self._export_src: Path | None = None
+        self._export_cells: dict[str, tuple[str, int, int]] = {}
 
         content = QVBoxLayout()
         content.setSpacing(16)
@@ -176,8 +175,7 @@ class ConstantsPage(QWidget):
         content.addWidget(self._next)
         content.addWidget(self._hint)
 
-        #수정된 조견표 저장버튼
-        # 탭 + 조견표 저장 버튼을 한 줄에 (탭 왼쪽, 버튼 오른쪽)
+        # 탭 버튼, 조견표 저장 버튼을 한 줄에 배치
         self._tabs_row = QHBoxLayout()
         self._tabs_row.addWidget(self._tabs)
         self._tabs_row.addStretch(1)
@@ -208,7 +206,7 @@ class ConstantsPage(QWidget):
     def _infer_kind(self, key: str, value: object) -> str:
         if key in YEAR_KEYS:
             return "year"
-        # bool은 int의 하위 타입이라 먼저 걸러낸다.
+        # bool은 int의 하위 타입이라 먼저 걸러냄
         if not isinstance(value, bool) and isinstance(value, (int, float)):
             return "int"
         return "text"  # 숫자가 아닌 값이면 그대로 표시
@@ -223,7 +221,7 @@ class ConstantsPage(QWidget):
         return field
 
     def _add_group_fields(self, column: QVBoxLayout, key: str, values: dict) -> None:
-        # 상위 key는 그룹 라벨로만 쓰고, 하위 key들을 그리드로 나열한다.
+        # 상위 key는 그룹 라벨로만 쓰고, 하위 key들을 그리드로 나열
         column.addWidget(self._group_label(key))
         columns = GROUP_COLUMN_OVERRIDES.get(key, GROUP_GRID_COLUMNS)
         metrics = QFontMetrics(self.font())
@@ -231,7 +229,7 @@ class ConstantsPage(QWidget):
         grid.setHorizontalSpacing(16)
         grid.setVerticalSpacing(8)
         for i, (sub_key, sub_value) in enumerate(values.items()):
-            # 라벨 폭을 텍스트 길이에 맞춰 잡아서 긴 라벨이 잘리지 않게 한다.
+            # 라벨 폭을 텍스트 길이에 맞춰서 긴 라벨이 잘리지 않도록 함
             label_width = metrics.horizontalAdvance(sub_key) + 8
             is_percent = "본인부담률" in key and sub_key in PERCENT_GRADES
             field = self._make_field(
@@ -243,14 +241,13 @@ class ConstantsPage(QWidget):
                 input_width=92,
                 right_align_input=key in GROUP_RIGHT_ALIGN,
             )
-            # 정렬 없이 그대로 셀을 채우게 둔다 — 라벨은 왼쪽에 고정되고,
-            # right_align_input이 켜진 필드는 남는 폭을 이용해 입력칸만 오른쪽에 붙는다.
+            # 정렬 없이 그대로 셀을 채우게 둔다
+            # 라벨은 왼쪽에 고정, right_align_input이 켜진 필드만 입력칸을 그리드 오른쪽으로 붙임
             grid.addWidget(field, i // columns, i % columns)
         column.addLayout(grid)
 
     def _row_groups_for(self, index: int) -> list[tuple[str, ...]]:
-        # unit_price 흐름의 키 구성을 기준으로 정한 묶음이라 첫 번째 flow에만 적용
-        # 두 번째 flow는 어떤 값이 들어올지 미정
+        # unit_price (첫 번째 flow) 한정으로 한 줄로 표시할 키 목록을 정함
         if self._flow == "unit_price" and index == 0:
             return PAGE1_ROW_GROUPS
         return []
@@ -264,7 +261,7 @@ class ConstantsPage(QWidget):
         bold_font.setBold(True)
         metrics = QFontMetrics(bold_font)
         for key in keys:
-            # 라벨 폭을 텍스트 길이에 맞춰 줄여서 입력칸이 바로 붙게 한다.
+            # 라벨 폭을 텍스트 길이에 맞춰 줄여서 입력칸이 라벨 바로 옆에 붙게 한다 (right_align_input 없는 경우)
             label_width = metrics.horizontalAdvance(key) + 4
             field = self._make_field(
                 key,
@@ -307,8 +304,8 @@ class ConstantsPage(QWidget):
 
         column.addStretch(1)
 
-        # 스타일시트 없는 선택자는 자식 위젯(FieldInput 테두리 등)까지 덮어써 버리므로
-        # 반드시 objectName + ID 선택자로 범위를 한정한다.
+        # 스타일시트가 없으면 해당 페이지 내 자식 위젯의 스타일이 유지되지 않고 현재 것으로 덮어씌워짐
+        # -> objectName + ID 선택자로 스타일 적용할 범위 한정
         body = QWidget()
         body.setLayout(column)
         body.setObjectName("ConstantsScrollBody")
@@ -341,13 +338,13 @@ class ConstantsPage(QWidget):
 
         self._on_tab_changed(self._flow, self._tabs.current())
 
-        # 새로 받은 값이므로 이전에 만든 단가표는 낡은 것으로 친다.
+        # 새로 받은 값이 있으므로 이전에 만든 단가표를 버림
         self._is_table_generated = False
         self._tables = None
         self._refresh_state()
 
     def _build_tabs(self, flow: str) -> None:
-        # flow가 바뀔 때만 탭바를 새로 만들어 자리에 갈아 끼운다.
+        # flow가 바뀌면 탭 바를 새로 만들어 원래 있던 탭과 교체
         old_tabs = self._tabs
         new_tabs = SegmentedTabBar([tab["label"] for tab in TABS[flow]], flow=flow)
         new_tabs.currentChanged.connect(self._on_tab_changed)
@@ -366,10 +363,10 @@ class ConstantsPage(QWidget):
             self.valuesChanged.emit()
         self._refresh_state()
 
-    # --- 조견표 수정한 것 저장 -----------------------------------------------
-    def set_export_source(self,src_path,cell_map)->None:
-        self._export_src=src_path
-        self._export_cells=cell_map or {}
+    # --- 수정한 조견표 저장 -----------------------------------------------
+    def set_export_source(self, src_path, cell_map) -> None:
+        self._export_src = src_path
+        self._export_cells = cell_map or {}
 
     def _collect_changed(self) -> dict[str, object]:
         return {
@@ -378,56 +375,68 @@ class ConstantsPage(QWidget):
             if field.is_modified() and field.is_valid()
         }
 
-    def _on_export_jogyeon(self)->None:
-        changed=self._collect_changed()
+    def _on_export_jogyeon(self) -> None:
+        changed = self._collect_changed()
         if not changed:
-            QMessageBox.information(self,"안내","수정된 값이 없습니다.")
+            QMessageBox.information(self, "안내", "수정된 값이 없습니다.")
             return
         if self._export_src is None:
-            QMessageBox.warning(self,"안내","원본 조견표 정보를 찾을 수 없습니다.\n조견표를 다시 업로드해 주세요.")
+            QMessageBox.warning(
+                self,
+                "안내",
+                "원본 조견표 정보를 찾을 수 없습니다.\n조견표를 다시 업로드해 주세요.",
+            )
             return
-        path,_=QFileDialog.getSaveFileName(
-            self,"수정된 조견표 저장",
-            str(Path(self._export_src).with_stem(Path(self._export_src).stem+"_수정본")),
-            "Excel (*.xlsx)")
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "수정된 조견표 저장",
+            str(
+                Path(self._export_src).with_stem(
+                    Path(self._export_src).stem + "_수정본"
+                )
+            ),
+            "Excel (*.xlsx)",
+        )
 
         if not path:
             return
         from services.jogyeon_exporter import export_modified_jogyeon
+
         try:
-            skipped=export_modified_jogyeon(
-                self._export_src,path,self._export_cells,changed
+            skipped = export_modified_jogyeon(
+                self._export_src, path, self._export_cells, changed
             )
         except Exception as error:
-            QMessageBox.critical(self,"저장 실패",str(error))
+            QMessageBox.critical(self, "저장 실패", str(error))
             return
 
         if skipped:
             detail = "\n".join(f"· {k}\n   {reason}" for k, reason in skipped)
             QMessageBox.warning(
-                self, "일부 값 미반영",
-                f"조견표를 저장했지만 다음 값은 반영되지 않았습니다:\n\n{detail}")
+                self,
+                "일부 값 미반영",
+                f"조견표를 저장했지만 다음 값은 반영되지 않았습니다:\n\n{detail}",
+            )
         else:
             QMessageBox.information(self, "완료", "수정된 조견표를 저장했습니다.")
 
     # --- API --------------------------------------------------------------
     def set_flow(self, flow: str) -> None:
-        # flow가 바뀔 때만 탭바를 새로 만들고, 이전 흐름에서 만든 필드를 비운다.
+        # flow가 바뀌면 탭바를 새로 만들고 이전에 표시했던 내용 초기화
         if flow == self._flow:
             return
         self._flow = flow
         self._build_tabs(flow)
         self._rebuild_pages([])
-        self._export_button.setVisible(flow=="unit_price")
+        self._export_button.setVisible(flow == "unit_price")
 
     def set_values(self, values: dict | list[dict]) -> None:
-        # value_extractor는 탭 개수에 맞춰 dict의 list를 돌려준다 —
-        # dict 하나가 탭 하나에 해당하므로 각각 페이지를 새로 만든다.
-        # 단순 dict가 오면(예: 값 초기화) 이미 만들어진 필드에 값만 채운다.
+        # value_extractor는 탭 개수에 맞춰 list[dict] 반환 -> 각 탭마다 dict 하나에 있는 값들을 넣는다
         if isinstance(values, list):
             self._rebuild_pages(values)
             return
         for key, value in values.items():
+            # 단순 dict를 받으면(값 초기화 등의 상황) 이미 만들어진 필드에 값만 채운다
             if key in self._fields:
                 self._fields[key].set_value(value, keep_original=True)
         self._refresh_state()
@@ -451,7 +460,7 @@ class ConstantsPage(QWidget):
             self._stack.setCurrentIndex(index)
 
     def _commit_original_values(self) -> None:
-        # 생성에 사용한 값을 새 기본값으로 삼아, 수정 표시(파란 테두리)를 지운다.
+        # 생성에 사용한 값을 새로운 기본값으로 설정하고 수정 표시(파란 테두리)를 지운다
         for field in self._fields.values():
             field.set_value(field.value(), keep_original=True)
 
@@ -489,16 +498,16 @@ class ConstantsPage(QWidget):
         if self._state in (FILLED, FAILED):
             # '단가표 생성' 버튼: 값이 다 채워졌거나 생성이 실패해 재시도하는 경우
             self._start_table_write(self.values())
+
         elif self._state == READY and self._tables is not None:
-            # '다음 단계로' 버튼: 표를 화면에 채우는 동안(느림) 버튼만 잠깐 회색으로 보여준다.
-            # 상태(FSM)는 그대로 READY 로 두고, 순수 UI만 바꿨다가 화면 전환 후 되돌린다.
+            # '다음 단계로' 버튼: 표를 불러오는 동안 버튼의 색상과 아이콘만 로딩 상태로 바꿔준다
             self._next.setEnabled(False)
             self._next.setText(_LOADING_TEXT)
-            self._next.repaint()  # 바로 이어지는 무거운 작업 전에 강제로 다시 그려서 보이게 한다
+            self._next.repaint()  # 단가표 로딩 작업을 시작하기 전 버튼 UI를 미리 바꿈
             self.tablesReady.emit(self._tables)
 
     def reset_next_button(self) -> None:
-        # TableViewerPage로 넘어간 뒤 호출: 로딩 표시로 바꿨던 버튼 모양을 되돌린다.
+        # 단가표 불러오기까지 끝난 뒤 호출, 로딩 표시로 바꿨던 버튼의 아이콘과 색상 원래대로 변경
         if self._state == READY:
             self._next.setEnabled(True)
             self._next.setText(_NEXT_TEXT)
