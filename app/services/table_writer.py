@@ -658,8 +658,7 @@ class TableWriter:
                         }
                         for time in TIME_DIVISIONS[prefix]:
                             for service_kind in SERVICE_KINDS[prefix]:
-                                formatted_prices[prefix][time].setdefault(
-                                    service_kind,
+                                formatted_prices[prefix][time][service_kind].update(
                                     (
                                         activity_30min_prices
                                         if time == 30
