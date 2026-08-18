@@ -17,6 +17,7 @@ from ui.components.scroll_page import centered_scroll_page
 from utils.qss import set_state
 from ui.widgets.upload_card import UploadCard
 from pathlib import Path
+from ui.components.spinner import Spinner
 
 from utils.date import yearConfig
 
@@ -109,6 +110,9 @@ class UploadPage(QWidget):
         self._label_reviewer = label_reviewer
         self._pool = QThreadPool.globalInstance()
 
+        #멈춤상황에서 spinner추가하기
+        self._spinner=Spinner(size=22)
+
         self._flow: FlowSpec | None = None
         self._cards: dict[str, UploadCard] = {}
         self._values: ConstantValues | None = None
@@ -156,6 +160,7 @@ class UploadPage(QWidget):
         column.addWidget(self._cards_holder)
         column.addSpacing(6)
         column.addWidget(self._load_cache_btn)  # 타이틀 아래에 캐시 로드 버튼 추가
+        column.addWidget(self._spinner, alignment=Qt.AlignmentFlag.AlignCenter)
         column.addWidget(self._next)
         column.addWidget(self._hint)
         column.addStretch(1)
@@ -358,6 +363,11 @@ class UploadPage(QWidget):
             self._hint.setText(
                 f"문서를 읽지 못했습니다.\n{reason}\n올바른 형식의 파일인지 확인해 주세요."
             )
+
+        if state==BUSY:
+            self._spinner.start()
+        else:
+            self._spinner.stop()
 
         set_state(self._hint, "state", state)
         self._hint.setVisible(True)

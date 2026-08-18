@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-
+from PyQt6.QtCore import Qt
 from services.table_writer import TableWriter
 from services import recent_files
 
@@ -352,6 +352,8 @@ class MainWindow(QMainWindow):
         )
         if not path:
             return
+        #저장시 커서 돌림 추가
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
             df.to_excel(path, index=False)
         except PermissionError:
@@ -390,3 +392,6 @@ class MainWindow(QMainWindow):
                     recent_files.set_recent_path(
                         yearConfig.SYSTEM_YEAR, "payment_unit_price", Path(path)
                     )
+        finally:
+            #저장시 커서 돌림 추가
+            QApplication.restoreOverrideCursor()

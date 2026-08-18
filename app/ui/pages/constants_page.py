@@ -14,6 +14,7 @@ from __future__ import annotations
 from PyQt6.QtCore import QObject, QRunnable, Qt, QThreadPool, pyqtSignal
 from PyQt6.QtGui import QFontMetrics
 from PyQt6.QtWidgets import (
+    QApplication,
     QGridLayout,
     QHBoxLayout,
     QLabel,
@@ -32,6 +33,7 @@ from ui.components.card import Card
 from ui.components.button import PrimaryButton, GhostButton
 from ui.components.tab_bar import SegmentedTabBar
 from ui.widgets.value_field import ValueField
+from ui.components.spinner import Spinner
 from utils.qss import set_state
 
 # 단가표 생성 상태
@@ -163,6 +165,9 @@ class ConstantsPage(QWidget):
         self._hint.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._hint.setWordWrap(True)
 
+        # spinner 추가
+        self._spinner = Spinner(size=22)
+
         self._export_button = GhostButton("수정된 조견표 저장")
         self._export_button.clicked.connect(self._on_export_jogyeon)
         self._export_button.setVisible(self._flow == "unit_price")
@@ -184,6 +189,8 @@ class ConstantsPage(QWidget):
         content = QVBoxLayout()
         content.setSpacing(16)
         content.addWidget(self._card, 1)
+        # spinner 추가
+        content.addWidget(self._spinner, alignment=Qt.AlignmentFlag.AlignCenter)
         content.addWidget(self._next)
         content.addWidget(self._hint)
 
@@ -402,6 +409,8 @@ class ConstantsPage(QWidget):
             return
         from services.jogyeon_exporter import export_modified_jogyeon
 
+        # 진행 모래시계 보여주기
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
             skipped = export_modified_jogyeon(
                 self._export_src, path, self._export_cells, changed
@@ -409,6 +418,8 @@ class ConstantsPage(QWidget):
         except Exception as error:
             QMessageBox.critical(self, "저장 실패", str(error))
             return
+        finally:
+            QApplication.restoreOverrideCursor()
 
         if skipped:
             detail = "\n".join(f"· {k}\n   {reason}" for k, reason in skipped)
@@ -552,6 +563,11 @@ class ConstantsPage(QWidget):
             self._hint.setText(
                 f"단가표를 생성하지 못했습니다: {reason}\n값을 확인한 뒤 다시 시도해 주세요."
             )
+
+        if state == BUSY:
+            self._spinner.start()
+        else:
+            self._spinner.stop()
 
         set_state(self._hint, "state", state)
         self._hint.setVisible(True)

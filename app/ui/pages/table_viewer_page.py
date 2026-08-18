@@ -13,7 +13,7 @@
 from __future__ import annotations
 import os
 import pandas as pd
-from PyQt6.QtCore import QModelIndex, pyqtSignal
+from PyQt6.QtCore import QModelIndex, pyqtSignal,Qt
 from PyQt6.QtWidgets import (
     QFileDialog,
     QHBoxLayout,
@@ -22,6 +22,7 @@ from PyQt6.QtWidgets import (
     QStackedWidget,
     QVBoxLayout,
     QWidget,
+    QApplication,
 )
 
 from models.dataframe_model import DataFrameModel
@@ -394,7 +395,6 @@ class TableViewerPage(QWidget):
 
     def _on_load_table(self) -> None:
         # 외부 단가표(엑셀)를 현재 탭에 불러와서 바로 검증한다.
-        # 다른 파일로 바꾸려면 한 번 눌러 취소한 뒤 다시 불러오면 된다.
         tab = self._tabs.current()
  
         if tab in self._loaded_names:
@@ -402,8 +402,12 @@ class TableViewerPage(QWidget):
             df, formulas = self._original_tables.pop(tab, (None, None))
             self._loaded_names.pop(tab, None)
             if df is not None:
-                self._tables[tab].set_dataframe(df, formulas)
-                self._run_validation(tab)
+                QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+                try:
+                    self._tables[tab].set_dataframe(df, formulas)
+                    self._run_validation(tab)
+                finally:
+                    QApplication.restoreOverrideCursor()
             self._update_load_button()
             return
  
@@ -412,18 +416,22 @@ class TableViewerPage(QWidget):
         )
         if not path:
             return
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
-            df = read_prev_table(path)
-        except Exception as error:
-            QMessageBox.warning(self, "불러오기 실패", f"단가표를 읽지 못했습니다:\n{error}")
-            return
-        # 취소 시 되돌릴 수 있게 현재(생성된) 표를 저장해 둔다
-        model = self._model_of(tab)
-        self._original_tables[tab] = (model.dataframe().copy(), model._formulas)
-        self._loaded_names[tab] = os.path.basename(path)
-        self._tables[tab].set_dataframe(df, None)
-        self._update_load_button()
-        self._run_validation(tab)
+            try:
+                df = read_prev_table(path)
+            except Exception as error:
+                QMessageBox.warning(self, "불러오기 실패", f"단가표를 읽지 못했습니다:\n{error}")
+                return
+            # 취소 시 되돌릴 수 있게 현재(생성된) 표를 저장해 둔다
+            model = self._model_of(tab)
+            self._original_tables[tab] = (model.dataframe().copy(), model._formulas)
+            self._loaded_names[tab] = os.path.basename(path)
+            self._tables[tab].set_dataframe(df, None)
+            self._update_load_button()
+            self._run_validation(tab)
+        finally:
+            QApplication.restoreOverrideCursor()
  
     def _on_load_prev(self) -> None:
         # 작년 단가표를 불러오면 등급구분으로 짝지어 증가율을 툴팁에 덧붙인다.
@@ -431,25 +439,33 @@ class TableViewerPage(QWidget):
         tab = self._tabs.current()
  
         if tab in self._prev_names:
-            self._prev_tables.pop(tab, None)
-            self._prev_names.pop(tab, None)
-            self._update_prev_button()
-            self._run_validation(tab)  # 증가율 지표가 빠진 상태로 재계산
-            return
+            QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+            try:
+                self._prev_tables.pop(tab, None)
+                self._prev_names.pop(tab, None)
+                self._update_prev_button()
+                self._run_validation(tab)  # 증가율 지표가 빠진 상태로 재계산
+                return
+            finally:
+                QApplication.restoreOverrideCursor()
  
         path, _ = QFileDialog.getOpenFileName(
             self, "작년 단가표 선택", "", "Excel 파일 (*.xlsx *.xls)"
         )
         if not path:
             return
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
-            self._prev_tables[tab] = read_prev_table(path)
-        except Exception as error:  # 형식이 다른 파일 등
-            QMessageBox.warning(self, "불러오기 실패", f"작년 단가표를 읽지 못했습니다:\n{error}")
-            return
-        self._prev_names[tab] = os.path.basename(path)
-        self._update_prev_button()
-        self._run_validation(tab)
+            try:
+                self._prev_tables[tab] = read_prev_table(path)
+            except Exception as error:  # 형식이 다른 파일 등
+                QMessageBox.warning(self, "불러오기 실패", f"작년 단가표를 읽지 못했습니다:\n{error}")
+                return
+            self._prev_names[tab] = os.path.basename(path)
+            self._update_prev_button()
+            self._run_validation(tab)
+        finally:
+            QApplication.restoreOverrideCursor()
 
     def _toggle_panel(self) -> None:
         # 검증 패널 접기/펼치기 — 접으면 표가 화면 전체 폭을 쓴다
