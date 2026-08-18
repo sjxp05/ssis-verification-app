@@ -11,7 +11,7 @@ class YearConfig:
         today = datetime.today()
         return f"🕐 {today.year}. {today.month}. {today.day}."
 
-    def set_system_year(self, year: str):
+    def set_system_year(self, year: int):
         self.SYSTEM_YEAR = year
 
 

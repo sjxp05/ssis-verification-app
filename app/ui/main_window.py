@@ -38,7 +38,6 @@ from utils.date import yearConfig
 STEPS = ["조견표 업로드", "단가 정보 확인", "단가표 생성 및 저장"]
 
 
-
 class Screen(IntEnum):
     HOME = 0
     UPLOAD = 1
@@ -141,7 +140,10 @@ class MainWindow(QMainWindow):
 
     # 2단계(값 확인)
     def _constants_page(self) -> QWidget:
-        if self._flow is not None and self._flow.key in (NOTICE_VERIFY.key, PAYMENT_PRICE.key):
+        if self._flow is not None and self._flow.key in (
+            NOTICE_VERIFY.key,
+            PAYMENT_PRICE.key,
+        ):
             return self.notice_page
         return self.constants_page
 
@@ -152,10 +154,6 @@ class MainWindow(QMainWindow):
         if step == Screen.CONSTANTS.step:
             return self._constants_page()
         return self.table_viewer_page
-
-    def _on_year_changed(self) -> None:
-        # 사업년도를 바꾸면 업로드 화면에 남아 있던 파일은 다른 연도 것이므로 새로 선택
-        self.upload_page.reset()
 
     def go_home(self) -> None:
         # 메인 화면 가기: 진행 중이던 flow 는 그대로 두었다가 변경없으면 다시 진행
@@ -280,10 +278,10 @@ class MainWindow(QMainWindow):
 
         else:
             self.constants_page.set_values(values)
-            #조견표 수정본 저장에 쓸 원본경로, 셀 좌표 넘김
+            # 조견표 수정본 저장에 쓸 원본경로, 셀 좌표 넘김
             src, cells = self.upload_page.export_info()
             self.constants_page.set_export_source(src, cells)
-            
+
         self._on_upload_files_diverged(False)
         self.go_to_step(Screen.CONSTANTS.step)
 
@@ -299,6 +297,12 @@ class MainWindow(QMainWindow):
         elif self._locked_max_reached is not None:
             self._steps.set_max_reached(self._locked_max_reached)
             self._locked_max_reached = None
+
+    def _on_year_changed(self) -> None:
+        # 사업년도를 바꾸면 업로드 화면에 남아 있던 파일은 다른 연도 것이므로 새로 선택하게 함
+        self.upload_page.reset()
+        if self._steps is not None:
+            self._steps.reset()
 
     def _on_values_changed(self) -> None:
         # 상수를 고치면 이미 만든 단가표 버리고 3단계 접근 막음

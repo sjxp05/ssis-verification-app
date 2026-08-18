@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget, QHBoxLayout, QPushButton
+from PyQt6.QtWidgets import (
+    QFrame,
+    QLabel,
+    QVBoxLayout,
+    QWidget,
+    QHBoxLayout,
+    QPushButton,
+)
 from models.flows import FLOWS, FlowSpec
 from ui.widgets.value_field import ValueField
 from utils.date import yearConfig
@@ -21,7 +28,7 @@ class FlowCard(QFrame):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        
+
         top_line = QFrame()
         top_line.setObjectName("CardTopLine")
         top_line.setFixedHeight(2)
@@ -44,14 +51,14 @@ class FlowCard(QFrame):
         # 상단 아이콘, 화살표
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 0, 0)
-        
+
         icon_label = QLabel(self._get_icon())
         icon_label.setObjectName("MenuIcon")
         icon_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        
+
         arrow_label = QLabel("→")
         arrow_label.setObjectName("MenuArrow")
-        
+
         header_layout.addWidget(icon_label)
         header_layout.addStretch()
         header_layout.addWidget(arrow_label)
@@ -59,28 +66,28 @@ class FlowCard(QFrame):
         # 카드 제목, 설명
         title = QLabel(flow.menu_title)
         title.setObjectName("MenuTitle")
-        
+
         desc = QLabel(flow.menu_description)
         desc.setObjectName("MenuDesc")
         desc.setWordWrap(True)
-        desc.setMinimumHeight(45) # 텍스트 길이에 상관없이 카드 높이 맞춤
+        desc.setMinimumHeight(45)  # 텍스트 길이에 상관없이 카드 높이 맞춤
 
         # Steps 안내
         steps_layout = QVBoxLayout()
         steps_layout.setContentsMargins(0, 0, 0, 0)
         steps_layout.setSpacing(8)
-        
+
         for i, step_text in enumerate(flow.steps):
             step_row = QHBoxLayout()
             step_row.setContentsMargins(0, 0, 0, 0)
-            
+
             badge = QLabel(str(i + 1))
             badge.setObjectName("StepBadge")
             badge.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            
+
             text = QLabel(step_text)
             text.setObjectName("MenuStepText")
-            
+
             step_row.addWidget(badge)
             step_row.addWidget(text)
             step_row.addStretch()
@@ -95,14 +102,13 @@ class FlowCard(QFrame):
             self.start_btn.setEnabled(False)
             self.start_btn.setText("준비 중")
 
-
         # 카드 전체 레이아웃 조립
         content_layout.addLayout(header_layout)
         content_layout.addWidget(title)
         content_layout.addWidget(desc)
         content_layout.addSpacing(4)
         content_layout.addLayout(steps_layout)
-        content_layout.addStretch() # 버튼을 항상 맨 밑으로
+        content_layout.addStretch()  # 버튼을 항상 맨 밑으로
         content_layout.addWidget(self.start_btn, alignment=Qt.AlignmentFlag.AlignLeft)
 
         layout.addWidget(content_wrapper)
@@ -118,7 +124,7 @@ class FlowCard(QFrame):
 
 class MainPage(QWidget):
     flowRequested = pyqtSignal(FlowSpec)  # FlowSpec
-    yearChanged = pyqtSignal() # 사업년도
+    yearChanged = pyqtSignal()  # 사업년도
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -129,7 +135,9 @@ class MainPage(QWidget):
         title.setObjectName("MainTitle")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        subtitle = QLabel("기존에 업로드했던 문서는 각 메뉴의 파일 업로드 페이지에서 자동 연동할 수 있습니다.")
+        subtitle = QLabel(
+            "기존에 업로드했던 문서는 각 메뉴의 파일 업로드 페이지에서 자동 연동할 수 있습니다."
+        )
         subtitle.setObjectName("MainSubtitle")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
@@ -147,9 +155,7 @@ class MainPage(QWidget):
             kind="year",
         )
 
-        self.year_field.valueChanged.connect(
-            lambda _key, value: yearConfig.set_system_year(value)
-        )
+        self.year_field.valueChanged.connect(self._on_year_changed)
 
         year_layout.addWidget(self.year_field)
 
@@ -166,17 +172,17 @@ class MainPage(QWidget):
         info_box.setObjectName("MainInfoBox")
         info_layout = QHBoxLayout(info_box)
         info_layout.setContentsMargins(20, 16, 20, 16)
-        
+
         info_icon = QLabel("ⓘ")
         info_icon.setObjectName("InfoIcon")
-        
+
         info_text = QLabel(
             "세 메뉴는 독립적으로 실행 가능합니다. 각 메뉴의 파일 업로드 페이지에서 '작업기록 불러오기'를 통해 동일 사업년도의 이전 파일을 자동으로 연동할 수 있습니다."
             " 단, 저장 경로를 변경할 경우 연동이 지원되지 않으며, 사용자가 업로드한 원본 파일의 내용은 프로그램에 별도로 수집되지 않습니다."
         )
         info_text.setObjectName("InfoText")
         info_text.setWordWrap(True)
-        
+
         info_layout.addWidget(info_icon)
         info_layout.addWidget(info_text, 1)
 
@@ -200,17 +206,16 @@ class MainPage(QWidget):
         cards_container.addLayout(cards_layout)
         cards_container.addStretch(1)
         layout.addLayout(cards_container)
-        
+
         layout.addSpacing(40)
-        
+
         info_container = QHBoxLayout()
         info_container.addStretch(1)
         info_container.addWidget(info_box)
         info_container.addStretch(1)
         layout.addLayout(info_container)
-        
-        layout.addStretch(1)
 
+        layout.addStretch(1)
 
     def _on_year_changed(self, _key: str, value: object) -> None:
         yearConfig.set_system_year(value)

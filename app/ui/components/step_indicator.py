@@ -113,6 +113,12 @@ class StepIndicator(QFrame):
         self._max_reached = max(index, self._current)
         self._refresh()
 
+    def reset(self) -> None:
+        # 1단계로 되돌리고 이후 단계는 모두 잠금 (예: 사업년도 변경)
+        self._current = 0
+        self._max_reached = 0
+        self._refresh()
+
     # --- 내부 ------------------------------------------------------------
     def _refresh(self) -> None:
         for i, chip in enumerate(self._chips):
