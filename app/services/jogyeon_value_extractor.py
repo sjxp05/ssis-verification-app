@@ -6,8 +6,8 @@ from pathlib import Path
 from models.dto import UploadedFile
 from utils.date import yearConfig
 
-# 조견표에서 찾는 문구는 라벨 매처와 함께 쓰므로 config/anchors.py 에 모아 두었다.
-from jogyeon_matcher.config.anchors import (  # noqa: F401  (외부에서 이 모듈 경유로 참조)
+# TODO: 현재 config/anchors.py 에 있는 상수포함 탐색, 서식용 상수들 app 아래 폴더 만들어서 정리
+from jogyeon_matcher.config.anchors import (
     A_VALUE,
     ADD_ITEMS,
     BASE_PRICE,
@@ -28,8 +28,7 @@ from jogyeon_matcher.config.anchors import (  # noqa: F401  (외부에서 이 �
 from jogyeon_matcher.ingest import xlsx_scan
 from jogyeon_matcher.matching.normalizer import sanitize
 
-# 공백류. 비가시 문자(ZWSP·BOM 등)는 문자로 열거하지 않고 sanitize 가 유니코드
-# 카테고리로 걷어낸다. 열거 방식은 항상 누락이 생긴다.
+# 공백, 비가시문자
 _WS = re.compile(r"\s+")
 
 
@@ -42,7 +41,7 @@ class ValueExtractor:
         self._cell_map:dict[str,tuple[str,int,int]]={}
         self._source_path: Path | None=None
 
-    #값을 읽은 셀 좌표 기록함(수정본 저장 시 사용하기 위해 필요함)
+    # 값을 읽은 셀 좌표 기록(수정본 저장 시 사용하기 위해 필요함)
     def _mark(self,key:str,sheet:str,r:int,c:int)->None:
         self._cell_map[key]=(sheet,r,c)
 
@@ -60,14 +59,12 @@ class ValueExtractor:
     def source_path(self)-> Path |None:
         return self._source_path
 
-    # 비교용으로 공백과 비가시 문자를 걷어낸다
+    # 문자열 처리
     def _squeeze(self, text):
         return _WS.sub("", sanitize(text))
 
     # 파일 읽고 원본(df)과 공백 제거한 검색용 사본(norm)을 함께 반환
     def _load(self, file_path, sheet_name):
-        # 서식만 남은 빈 행이 시트 끝까지 부풀어 있는 파일 방어 — 값이 있는
-        # 마지막 행까지만 읽는다. 탐지 실패 시 기존대로 전체를 읽는다.
         cap = xlsx_scan.true_row_counts(file_path).get(sheet_name)
         df = pd.read_excel(
             file_path,
@@ -79,7 +76,7 @@ class ValueExtractor:
         norm = df.astype(str).map(self._squeeze)
         return df, norm
 
-    # 키워드가 나오는 모든 칸을 읽는 순서(위→아래, 왼→오른쪽)로 반환
+    # 키워드가 나오는 모든 칸을 읽는 순서대로 반환
     def _find_all(self, norm, keyword):
         key = self._squeeze(keyword)
         # 모든 칸을 True, False 로 표시
@@ -91,14 +88,14 @@ class ValueExtractor:
             raise ExtractError(f"'{keyword}'를 찾지 못했습니다.")
         return found
 
-    # 한 곳에만 있어야 하는 문구, 여러 번 나오면 예외
+    # 한 곳에만 있어야 하는 문구 (여러 번 나오면 예외)
     def _find_one(self, norm, keyword):
         found = self._find_all(norm, keyword)
         if len({r for r, _ in found}) > 1:
             raise ExtractError(f"'{keyword}'가 여러 표에 있습니다")
         return found[0]
 
-    # 여러 곳에 반복되는 게 정상인 문구. 첫 번째만 쓴다
+    # 여러 곳에 반복되는 게 정상인 문구 (첫 번째 탐색 셀 채택)
     def _find_first(self, norm, keyword):
         return self._find_all(norm, keyword)[0]
 
@@ -137,22 +134,6 @@ class ValueExtractor:
         base_price = self._num(df.iat[r, c + 1])
         self._mark("기본단가",sheet_name,r,c+1)
 
-        # 본인 부담률 - 가·나는 고정값, 다~바는 조견표에서 읽는다
-        # r, c = self._find_one(norm, BASIC_RATE)
-        # basic_rates = {
-        #     **FIXED_BASIC_RATE
-        #     **{
-        #         g: self._num(df.iat[r, c + i])
-        #         for i, g in enumerate(RATE_GRADES, start=1)
-        #     },
-        # }
-        # add_rates = {
-        #     **FIXED_ADD_RATE,
-        #     **{
-        #         g: self._num(df.iat[r + 1, c + i])
-        #         for i, g in enumerate(RATE_GRADES, start=1)
-        #     },
-        # }
         r, c = self._find_one(norm, BASIC_RATE)
         basic_rates = {**FIXED_BASIC_RATE}
         add_rates = {**FIXED_ADD_RATE}
@@ -200,17 +181,14 @@ class ValueExtractor:
     def read_sj_value(self, file_path, sheet_name):
         df, norm = self._load(file_path, sheet_name)
 
-        # 본인부담금 상한액 - "상한액" 문구 바로 왼쪽 칸에 값이 있다
+        # 본인부담금 상한액 
         r, c = self._find_one(norm, CAP_LABEL)
         copay_cap = self._num(df.iat[r, c - 1])
         self._mark("종합조사/산정특례 본인부담금 상한액",sheet_name,r,c-1)
 
-        # 본인부담률 - 가·나는 고정값, 다~바는 조견표에서 읽는다
+        # 본인부담률 
         r, c = self._find_one(norm, INCOME_HEADER)
-        # rates = {
-        #     **FIXED_BASIC_RATE,
-        #     **{g: self._num(df.iat[r + 1, c + i]) for i, g in enumerate(RATE_GRADES)},
-        # }
+
         rates={**FIXED_BASIC_RATE}
         for i,g in enumerate(RATE_GRADES):
             rates[g]=self._num(df.iat[r+1,c+i])
@@ -228,15 +206,12 @@ class ValueExtractor:
         if missing:
             raise ExtractError(f"추가급여 항목을 찾지 못했습니다: {missing}")
 
-        # limits = {
-        #     k: self._num(df.iat[base_r + 1, base_c + col_map[k]]) for k in ADD_ITEMS
-        # }
         limits={}
         for k in ADD_ITEMS:
             limits[k]=self._num(df.iat[base_r+1, base_c + col_map[k]])
             self._mark(f"추가급여 월한도액.{k}",sheet_name, base_r+1, base_c + col_map[k])
 
-        #기본단가,A값이 인정조사 변경시 같이 갱신되도록 기록
+        #기본단가, A값이 인정조사 변경시 같이 갱신되도록 기록
         self._mark_sync_cells(norm,sheet_name)
 
         return {
@@ -262,10 +237,7 @@ class ValueExtractor:
         missing = [z for z in JH_ZONES if z not in col_map]
         if missing:
             raise ExtractError(f"'{keyword}' 표에서 구간을 찾지 못했습니다: {missing}")
-        # return {
-        #     label: self._num(df.iat[base_r, col_map[zone]])
-        #     for label, zone in zip(JH_LABELS, JH_ZONES, strict=True)
-        # }
+
         result={}
         for label,zone in zip(JH_LABELS,JH_ZONES,strict=True):
             result[label]=self._num(df.iat[base_r, col_map[zone]])
@@ -307,7 +279,7 @@ class ValueExtractor:
         if len(data["추가급여 월한도액"]) != len(ADD_ITEMS):
             raise ExtractError(f"'추가급여 월한도액'이 {len(ADD_ITEMS)}개가 아닙니다.")
 
-        # 금액은 모두 양수여야 한다 (가·나는 면제/정액 고정값이라 제외)
+        # 금액은 모두 양수 (가·나는 면제/정액 고정값이라 제외)
         amounts = {k: data[k] for k in self._AMOUNT_KEYS}
         for key in self._LIMIT_KEYS:
             amounts.update({f"{key}[{label}]": v for label, v in data[key].items()})
@@ -327,7 +299,7 @@ class ValueExtractor:
                     "\n조치: 조견표의 구간 배치가 바뀌었는지 확인하세요."
                 )
 
-    # 인정조사 탭(1페이지)에 표시할 키
+    # 인정조사 탭에 표시할 키
     _TAB1_KEYS = (
         "기본단가",
         "A값",
@@ -338,7 +310,7 @@ class ValueExtractor:
         "인정조사 월한도액 (확장형)",
         "추가급여 월한도액",
     )
-    # 종합조사/산정특례 탭(2페이지)에 표시할 키
+    # 종합조사/산정특례 탭에 표시할 키
     _TAB2_KEYS = (
         "종합조사/산정특례 본인부담금 상한액",
         "종합조사/산정특례 본인부담률",
