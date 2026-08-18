@@ -1,8 +1,4 @@
 # pandas DataFrame 을 QTableView 에 붙이기 위한 모델
-#
-# - 숫자 컬럼은 천단위 콤마 + 우측 정렬
-# - accent_columns 로 지정한 컬럼은 파란 글씨 (등급코드 등)
-# - 셀마다 산식 문자열을 따로 들고 있다가 말풍선에 넘겨준다
 
 from __future__ import annotations
 
@@ -15,11 +11,11 @@ from PyQt6.QtGui import QColor
 
 from resources.styles import theme
 
-ERROR_BG = theme.ERROR_BG    # 오류 셀 (분명한 빨강 계열)
-WARNING_BG = theme.WARNING_BG  # 확인 필요 셀 (분명한 노랑 계열)
+ERROR_BG = theme.ERROR_BG
+WARNING_BG = theme.WARNING_BG
 
 class DataFrameModel(QAbstractTableModel):
-    # 더블클릭 편집으로 셀 값이 바뀌었을 때 (행, 컬럼명) 뷰어가 재검증한다
+    # 더블클릭 편집으로 셀 값 변경시
     cellEdited = pyqtSignal(int, str)
 
     def __init__(
@@ -33,7 +29,7 @@ class DataFrameModel(QAbstractTableModel):
         self._df = df if df is not None else pd.DataFrame()
         self._formulas = formulas if formulas is not None else {}
         self._accent = set(accent_columns or [])
-        # 검증 결과: 오류 셀 / 확인 필요(⚠) 셀 / 행 지표 텍스트
+        # 검증 결과: 오류 셀 / 확인 필요 셀 / 행 지표 텍스트
         self._issue_cells: dict[tuple[int, str], str] = {}
         self._warn_cells: dict[tuple[int, str], str] = {}
         self._row_metrics: dict[int, str] = {}
@@ -58,7 +54,7 @@ class DataFrameModel(QAbstractTableModel):
     # --- 셀 값 수정 (오류 수정 기능) ---------------------------------------
     def set_cell_value(self, row: int, column: str, value) -> bool:
         # 패널의 '추천값 적용'/'직접 입력'으로 셀 값을 바꾼다.
-        # _df 자체를 바꾸므로 이후 엑셀 저장(dataframe())에 그대로 반영된다.
+        # _df 자체를 바꾸므로 이후 엑셀 저장(dataframe())에 그대로 반영
         if column not in self._df.columns:
             return False
         if not (0 <= row < len(self._df.index)):
@@ -84,7 +80,7 @@ class DataFrameModel(QAbstractTableModel):
         row_metrics: dict[int, str] | None,
         warn_cells: dict[tuple[int, str], str] | None = None,
     ) -> None:
-        #issue_cells: (행, 컬럼명) -> 오류 요약 (셀 배경을 빨갛게 칠할 대상)
+        #issue_cells: (행, 컬럼명) -> 오류 요약 (빨간 셀로 표시)
         #row_metrics: 행 -> 부담률/증가율 지표 
         #warn_cells: (행, 컬럼명) -> 확인 필요 사유 (노란 셀로 표시)
         self._issue_cells = dict(issue_cells or {})
@@ -103,15 +99,15 @@ class DataFrameModel(QAbstractTableModel):
         return (index.row(), column) in self._issue_cells
     
     # --- 기본 구현 --------------------------------------------------------
-    def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:  # noqa: N802
+    def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
         return 0 if parent.isValid() else len(self._df.index)
 
-    def columnCount(self, parent: QModelIndex = QModelIndex()) -> int:  # noqa: N802
+    def columnCount(self, parent: QModelIndex = QModelIndex()) -> int:
         return 0 if parent.isValid() else len(self._df.columns)
 
     def headerData(
         self, section: int, orientation: Qt.Orientation, role: int
-    ):  # noqa: N802
+    ):
         if role != Qt.ItemDataRole.DisplayRole:
             return None
         if orientation == Qt.Orientation.Horizontal:
@@ -143,10 +139,7 @@ class DataFrameModel(QAbstractTableModel):
                 return str(int(value))
             return str(value)
 
-        # if role == Qt.ItemDataRole.ForegroundRole and column in self._accent:
-        #     return QColor(theme.ACCENT)
-
-        #검증 표시 셀: 오류는 빨강, 확인 필요는 노랑(오류가 우선)
+        # 검증 표시 셀: 오류 - 빨강, 확인 필요 - 노랑
         if role == Qt.ItemDataRole.BackgroundRole:
             if (index.row(), column) in self._issue_cells:
                 return QColor(ERROR_BG)
@@ -155,7 +148,7 @@ class DataFrameModel(QAbstractTableModel):
             return None
  
         if role == Qt.ItemDataRole.ForegroundRole:
-            # 오류·경고 셀은 배경색으로만 구분하고 글씨는 기본색(검정)을 유지한다
+            # 오류·경고 셀은 배경색으로만 구분하고 글씨는 검정 유지
             if column in self._accent:
                 return QColor(theme.ACCENT)
             return None
@@ -165,8 +158,8 @@ class DataFrameModel(QAbstractTableModel):
 
         return None
 
-    # 더블클릭 편집 반영. 숫자 셀이면 숫자로, 아니면 문자 그대로.
-    def setData(self, index: QModelIndex, value, role: int = Qt.ItemDataRole.EditRole) -> bool:  # noqa: N802
+    # 더블클릭 편집 반영: 숫자 셀이면 숫자, 아니면 문자 그대로
+    def setData(self, index: QModelIndex, value, role: int = Qt.ItemDataRole.EditRole) -> bool:
         if role != Qt.ItemDataRole.EditRole or not index.isValid():
             return False
         column = str(self._df.columns[index.column()])
@@ -187,7 +180,7 @@ class DataFrameModel(QAbstractTableModel):
         self.cellEdited.emit(index.row(), column)
         return True
 
-    # at 위치에 행 삽입 (None 이면 맨 아래).
+    # at 위치에 행 삽입 (None 이면 맨 아래)
     def add_row(self,values:dict,at:int|None=None)->int:
         row=len(self._df.index) if at is None else max(0, min(at,len(self._df.index)))
         self.beginInsertRows(QModelIndex(), row, row)
@@ -230,7 +223,7 @@ class DataFrameModel(QAbstractTableModel):
         )
 
     def cell_label(self, index: QModelIndex) -> str:
-        # 말풍선 제목에 쓸 '행 · 컬럼' 라벨.
+        # 말풍선 제목에 쓸 '행 · 컬럼' 라벨
         if not index.isValid():
             return ""
         return f"{index.row() + 1}행 · {self._df.columns[index.column()]}"

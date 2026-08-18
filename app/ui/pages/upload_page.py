@@ -1,7 +1,4 @@
-# 0단계 — 문서 업로드 화면
-#
-# 카드에 파일이 다 채워지면 '확인' 버튼이 켜지고, 버튼을 눌러야 그때 백그라운드에서 문서를 읽어 상수를 뽑는다.
-# 추출이 성공하면 바로 다음 단계로 넘어간다. (다음 화면 시작할 때 여기서 읽어온 값이 필요하기 때문)
+# 문서 업로드 화면
 
 from __future__ import annotations
 import os
@@ -23,9 +20,6 @@ from pathlib import Path
 
 from utils.date import yearConfig
 
-# 파일 묶음을 받아 상수를 돌려준다. 예외를 던지면 화면에 사유가 뜬다.
-# ValueExtractor = Callable[[dict[str, UploadedFile]], ConstantValues]
-
 WAITING, FILLED, BUSY, READY, FAILED = "waiting", "filled", "busy", "ready", "failed"
 
 _LOAD_CACHE_BTN_TEXT = "📂 {system_year}년도 작업 기록 불러오기"
@@ -40,26 +34,26 @@ class _ExtractSignals(QObject):
     failed = pyqtSignal(int, str)  # generation, 사유
 
 
-# 추출기를 GUI 스레드 밖에서 돌린다.
+# 추출기는 GUI 스레드 밖에서
 class _ExtractTask(QRunnable):
     def __init__(
         self,
         extractor: ValueExtractor,
         files: dict[str, UploadedFile],
-        flow_key: str,
+        flow: FlowSpec,
         generation: int,
     ) -> None:
         super().__init__()
         self.signals = _ExtractSignals()
         self._extractor = extractor
         self._files = files
-        self._flow_key = flow_key
+        self._flow = flow
         self._generation = generation
 
     def run(self) -> None:
         try:
             # self._files["jogyeon"] -> 슬롯이 없으면 KeyError 대신 읽을 수 있는 메시지 표시
-            if self._flow_key == "payment_price":
+            if self._flow.key == PAYMENT_PRICE.key:
                 values = {}
             else:
                 jogyeon = self._files.get("jogyeon")
@@ -67,7 +61,7 @@ class _ExtractTask(QRunnable):
                     raise ValueError("조견표 파일이 없습니다.")
                 values = self._extractor.extract_jogyeon_values(jogyeon)
 
-            if self._flow_key in ("notice_verify", "payment_price"):
+            if self._flow.key in (NOTICE_VERIFY.key,PAYMENT_PRICE.key):
                 guide = self._files.get("guide")
                 if guide is None:
                     raise ValueError("고시 파일이 없습니다.")
@@ -80,7 +74,7 @@ class _ExtractTask(QRunnable):
                                 reference_dict[f"{k}.{sk}"] = sv
                         else:
                             reference_dict[k] = v
-                result = read_gosi(guide.path, reference_dict, self._flow_key)
+                result = read_gosi(guide.path, reference_dict, self._flow.key)
 
                 if not result.get("단가"):
                     issues = result.get("검증") or []
@@ -97,11 +91,8 @@ class _ExtractTask(QRunnable):
 
 
 class UploadPage(QWidget):
-    # valuesReady(ConstantValues): 다음 단계로 넘어가도 된다는 신호
-    valuesReady = pyqtSignal(object)
-    # filesDiverged(bool): 지금 올라온 파일이 마지막으로 추출에 쓰인 파일과 다른지 여부.
-    # True면 2,3단계 값이 낡았을 수 있다는 뜻(단계 이동 잠금), False면 원래 파일로 되돌아왔다는 뜻(잠금 해제)
-    filesDiverged = pyqtSignal(bool)
+    valuesReady = pyqtSignal(object) # 다음 단계로 넘어가도 된다는 신호
+    filesDiverged = pyqtSignal(bool) # 지금 올라온 파일이 마지막으로 추출에 쓰인 파일과 다른지 여부 / True: 단계 이동 잠금, False: 단계 이동 가능
 
     def __init__(
         self,
@@ -114,7 +105,7 @@ class UploadPage(QWidget):
         super().__init__(parent)
         self.setObjectName("PageBody")
         self._extractor = extractor
-        # 값을 읽기 전에 작년 조견표와 라벨을 대조한다. False 를 돌려주면 중단한다.
+        # 값을 읽기 전에 작년 조견표와 라벨 대조
         self._label_reviewer = label_reviewer
         self._pool = QThreadPool.globalInstance()
 
@@ -177,18 +168,18 @@ class UploadPage(QWidget):
     def set_extractor(self, extractor: ValueExtractor | None) -> None:
         self._extractor = extractor
 
+    # flow 세팅
     def set_flow(self, flow: FlowSpec) -> None:
-        # 흐름이 바뀌면 문구와 업로드 카드를 통째로 갈아 끼운다.
         if self._flow is not None and self._flow.key == flow.key:
-            return  # 같은 흐름으로 되돌아온 경우: 올린 파일을 유지
+            return 
         self._flow = flow
         self._title.setText(flow.upload_title)
         self._subtitle.setText(flow.upload_description)
         self.reset()
 
+    # 진행상황 리셋 (flow 바뀌거나 다른 파일 업로드시 동작)
     def reset(self) -> None:
-        # 카드를 새로 만들고 상태를 처음으로 되돌린다.
-        self._generation += 1  # 돌고 있던 추출 결과를 무효로 만든다
+        self._generation += 1
         self._values = None
         self._confirmed_files = {}
         self._confirmed_values = None
@@ -201,12 +192,6 @@ class UploadPage(QWidget):
         if self._flow is None:
             return
 
-        # slot.remember_last==True 인 슬롯은 카드를 만든 뒤 저장된 경로가 있는지 확인
-        #   -> 있으면 card.set_path(path) 를 바로 호출해 자동으로 채운다.
-        #   -> 없거나 파일이 사라졌을 때만 지금처럼 빈 카드로 두고 직접 업로드를 받는다.
-        # 주의: 이 루프 중간에 자동 채움이 fileSelected -> _on_file_selected 를 곧바로 태우면
-        # 아직 안 만들어진 카드까지 "다 찼다"고 오판할 수 있음
-        # 카드를 전부 만든 다음 한 번에 자동 채움을 돌리는 편이 안전하다.
         has_cache = False
         for slot in self._flow.uploads:
             card = UploadCard(slot.title, slot.description, slot.extensions, slot.icon)
@@ -233,7 +218,7 @@ class UploadPage(QWidget):
     def _files(self) -> dict[str, UploadedFile]:
         return {
             key: card.file() for key, card in self._cards.items() if card.file()
-        }  # type: ignore[misc]
+        } 
 
     #마지막 추출에 사용한 원본경로와 셀 좌표
     def export_info(self) -> tuple[Path | None, dict]:
@@ -241,21 +226,25 @@ class UploadPage(QWidget):
             return None, {}
         return self._extractor.source_path(), self._extractor.cell_map()
 
+    # 기존 작업이 있다면 무효로(사용자가 파일을 올렸을 때 동작)
     def _on_file_selected(self) -> None:
-        self._generation += 1  # 진행 중이던 추출이 있었다면 무효로 만든다
+        self._generation += 1
         self._refresh_files_state()
 
-    # _on_file_selected 안에 있던 상태 재계산을 꺼내서 재사용 가능하게 분리
+    # 지금 파일은 그대로 들고 ui 상태만 다시 계산
     def _refresh_files_state(self) -> None:
         files = self._files()
-        # 추출에 성공한 적이 없으면(_confirmed_files 비어있음) 아직 비교할 대상 자체가 없다.
+        # _confirmed_files : 추출 성공해서 들고 있는 파일
         matches_confirmed = (
             bool(self._confirmed_files) and files == self._confirmed_files
         )
+
+        # 원래 추출에 썼던 파일 그대로 돌아온 경우
         if matches_confirmed:
-            # 원래 추출에 썼던 파일 그대로 돌아온 경우: 다시 읽을 필요 없이 그 값을 그대로 쓴다.
             self._values = self._confirmed_values
             self._set_state(READY)
+
+        # 추출에 성공한 적이 없는 경우
         else:
             self._values = None
             self._set_state(FILLED if len(files) == len(self._cards) else WAITING)
@@ -263,8 +252,8 @@ class UploadPage(QWidget):
         self.filesDiverged.emit(diverged)
 
     def _start_extract(self, files: dict[str, UploadedFile]) -> None:
+        # 추출기가 없는 경우: 파일 확인까지만 하고 READY 로
         if self._extractor is None:
-            # 추출기를 안 붙인 경우: 파일 확인까지만 하고 READY 로 넘어간다
             self._values = {}
             self._confirmed_files = dict(files)
             self._confirmed_values = self._values
@@ -272,16 +261,18 @@ class UploadPage(QWidget):
             return
 
         self._set_state(BUSY)
-        task = _ExtractTask(self._extractor, files, self._flow.key, self._generation)
+        task = _ExtractTask(self._extractor, files, self._flow, self._generation)
         task.signals.finished.connect(self._on_extracted)
         task.signals.failed.connect(self._on_extract_failed)
         self._pool.start(task)
 
+    # 추출 함수
     def _on_extracted(self, generation: int, values: ConstantValues) -> None:
+        # 중간에 파일이 바뀐 경우
         if generation != self._generation:
-            return  # 중간에 파일이 바뀐 경우: 결과가 낡은 값이므로 다시 읽어야 함
+            return
 
-        # 추출에 성공한 파일 조합이면 캐시로 저장
+        # 추출에 성공한 파일은 캐시로 저장
         if self._flow is not None:
             # 어느 플로우에서든 조견표/고시/단가표를 올리면 다른 플로우도 자동으로 불러올 수 있음
             for key, file in self._files().items():
@@ -302,23 +293,19 @@ class UploadPage(QWidget):
         if self._state in (FILLED, FAILED):
             # '확인' 버튼: 파일이 다 준비됐거나 추출이 실패해 재시도하는 경우
             files = self._files()
-            # 대조가 백그라운드에서 도는 동안에도 카드를 잠가 둔다
             self._set_state(BUSY)
             self._review_labels(files, lambda ok: self._after_review(ok, files))
         elif self._state == READY and self._values is not None:
             self.valuesReady.emit(self._values)
 
     def _after_review(self, ok: bool, files: dict[str, UploadedFile]) -> None:
+        # 검토 취소시 값 읽지 않고 원래 상태로
         if not ok:
-            self._refresh_files_state()  # 검토를 취소하면 값을 읽지 않고 원래 상태로 되돌린다
+            self._refresh_files_state()
             return
         self._start_extract(files)
 
-    def _review_labels(
-        self, files: dict[str, UploadedFile], on_done: Callable[[bool], None]
-    ) -> None:
-        # 서식이 바뀌었는데 그대로 값을 읽으면 조용히 틀린 값이 나온다.
-        # 추출 전에 작년 조견표와 라벨을 대조해 사람이 확인하게 한다.
+    def _review_labels(self, files: dict[str, UploadedFile], on_done: Callable[[bool], None]) -> None:
         sheet = files.get("jogyeon")
         if self._label_reviewer is None or sheet is None:
             on_done(True)
@@ -340,9 +327,7 @@ class UploadPage(QWidget):
 
         if not loaded:
             return
-        # 다 불러왔으면 버튼 숨기기
         self._load_cache_btn.setVisible(False)
-        # set_path 가 fileSelected 를 쏘지 않는 구현일 수 있어 상태를 직접 다시 계산한다.
         self._refresh_files_state()
 
     # --- 내부 -------------------------------------------------------------
@@ -358,7 +343,6 @@ class UploadPage(QWidget):
         )
 
         if state == WAITING:
-            # missing = len(self._cards) - len(self._files())
             self._hint.setText("파일을 업로드해야 다음 단계로 갈 수 있습니다.")
         elif state == FILLED:
             self._hint.setText(
