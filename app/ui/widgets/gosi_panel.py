@@ -1,8 +1,9 @@
-# ui/widgets/gosi_document_viewer.py (새로 생성)
+# flow 2, 3 고시 뷰어 패널
 import re
 from PyQt6.QtWidgets import QTextBrowser
 from PyQt6.QtCore import QTimer
 
+# html 렌더링용 스타일
 _DOC_CSS = """
     .chapter { font-size: 16px; font-weight: bold; color: #2c3e50; margin-top: 16px; }
     .item { font-size: 14px; font-weight: bold; color: #34495e; margin-top: 12px; }
@@ -34,11 +35,9 @@ class GosiDocumentViewer(QTextBrowser):
         self.setObjectName("NoticeDocument")
         self.setOpenExternalLinks(False)
         self._blocks = []
-        self._chapters = []  # 현재 화면에 보여줄 장(章)
+        self._chapters = []  # 현재 화면에 보여줄 고시의 장
 
     def set_blocks(self, blocks: list[dict], chapters: tuple[str, ...] | None = None):
-        # 블록과 장 필터를 함께 바꿀 때는 한 번만 렌더하도록 chapters 를 같이 받는다.
-        # set_blocks 후 set_visible_chapters 를 잇달아 부르면 큰 문서를 두 번 렌더한다.
         self._blocks = blocks
         if chapters is not None:
             self._chapters = chapters
@@ -62,6 +61,7 @@ class GosiDocumentViewer(QTextBrowser):
         target = ((highlight["표번호"], highlight["행"]) if highlight else None)
         parts = [
             f"<style>{_DOC_CSS}</style>",
+            # 뷰어 안내문
             """
             <div style='background-color: #fff8e1; border: 1px solid #ffe082; color: #b08d00; 
                         padding: 12px; margin-bottom: 20px; border-radius: 6px; font-size: 12px; line-height: 1.5;'>

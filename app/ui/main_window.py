@@ -56,9 +56,6 @@ class Screen(IntEnum):
 
 
 class MainWindow(QMainWindow):
-    # uploadRequested = pyqtSignal()
-    # homeRequested = pyqtSignal()
-
     def __init__(
         self,
         value_extractor: ValueExtractor | None = None,
@@ -89,7 +86,7 @@ class MainWindow(QMainWindow):
         self.main_page.flowRequested.connect(self.start_flow)
         self.main_page.yearChanged.connect(self._on_year_changed)
 
-        # 값을 읽기 전에 작년 조견표와 문구를 대조시킨다
+        # 값을 읽기 전에 작년 조견표와 문구를 대조
         self._label_review = LabelReviewFlow(self)
         self.upload_page = UploadPage(value_extractor, self._label_review.run)
         self.upload_page.valuesReady.connect(self._on_values_ready)
@@ -132,12 +129,12 @@ class MainWindow(QMainWindow):
 
         self.go_home()
 
-    def closeEvent(self, event) -> None:  # noqa: N802 (Qt 시그니처)
+    def closeEvent(self, event) -> None:
         # 메인 창을 닫을 때 셀에 표시되는 말풍선을 항상 숨김
         self.table_viewer_page.hide_bubbles()
         super().closeEvent(event)
 
-    def moveEvent(self, event) -> None:  # noqa: N802 (Qt 시그니처)
+    def moveEvent(self, event) -> None:
         # 창을 옮기면 말풍선 위치가 어긋나므로 항상 숨김
         self.table_viewer_page.hide_bubbles()
         super().moveEvent(event)
@@ -157,11 +154,11 @@ class MainWindow(QMainWindow):
         return self.table_viewer_page
 
     def _on_year_changed(self) -> None:
-        # 사업년도를 바꾸면 업로드 화면에 남아 있던 파일은 다른 연도 것이므로 새로 고른다.
+        # 사업년도를 바꾸면 업로드 화면에 남아 있던 파일은 다른 연도 것이므로 새로 선택
         self.upload_page.reset()
 
     def go_home(self) -> None:
-        # 메인 화면으로. 진행 중이던 흐름은 그대로 두었다가 다시 들어오면 이어간다.
+        # 메인 화면 가기: 진행 중이던 flow 는 그대로 두었다가 변경없으면 다시 진행
         self.table_viewer_page.hide_bubbles()
         self._stack.setCurrentWidget(self.main_page)
         self._header.set_title("사회보장정보원 단가표 생성 앱")
@@ -187,7 +184,7 @@ class MainWindow(QMainWindow):
         self.table_viewer_page.hide_bubbles()
 
         if step == Screen.TABLES.step:
-            # 고시 검증 화면에는 modified_keys 가 없으므로 있을 때만 물어보
+            # 고시 검증 화면에는 modified_keys 가 없으므로 있을 때만 물어봄
             modified_keys = getattr(self._constants_page(), "modified_keys", None)
             if modified_keys is not None and modified_keys() != []:
                 self.table_viewer_page.reset_tab(self._flow.key, 0)
@@ -197,7 +194,7 @@ class MainWindow(QMainWindow):
 
     # --- 흐름 준비 --------------------------------------------------------
     def _reset_flow(self, flow: FlowSpec) -> None:
-        # 다른 작업을 고르면 앞선 작업의 흔적을 지운다.
+        # 다른 flow 선택 시 앞선 flow 진행상황 삭제
         self._install_steps(flow)
         self.upload_page.set_flow(flow)
 
@@ -291,8 +288,8 @@ class MainWindow(QMainWindow):
         self.go_to_step(Screen.CONSTANTS.step)
 
     def _on_upload_files_diverged(self, diverged: bool) -> None:
-        # 업로드 화면에서 파일이 원래 추출에 쓰인 파일과 달라졌을 때: 2,3단계 이동을 막는다.
-        # 원래 파일로 되돌아오면 막았던 만큼 다시 풀어 준다 (2,3단계 값은 그대로 남아 있음).
+        # 업로드 화면에서 파일이 원래 추출에 쓰인 파일과 달라졌을 때: 2,3단계 이동을 막음
+        # 원래 파일로 되돌아오면 다시 풀어줌 (2,3단계 값은 그대로 남아 있음).
         if self._steps is None:
             return
         if diverged:
@@ -304,7 +301,7 @@ class MainWindow(QMainWindow):
             self._locked_max_reached = None
 
     def _on_values_changed(self) -> None:
-        # 상수를 고치면 이미 만든 단가표는 낡은 값이므로 3단계를 다시 잠근다.
+        # 상수를 고치면 이미 만든 단가표 버리고 3단계 접근 막음
         if self._steps is not None:
             self._steps.set_max_reached(Screen.CONSTANTS.step)
 

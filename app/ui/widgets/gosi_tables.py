@@ -2,10 +2,11 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QTableWidget, QTableWidgetItem, QAbstractItemView, QHeaderView
 from PyQt6.QtGui import QBrush, QColor, QIntValidator
 from PyQt6.QtWidgets import QLineEdit, QStyledItemDelegate, QStyle
+from resources.styles.theme import SUCCESS, DANGER, WARNING_BG
 
 COMPARE_COLUMNS = [("항목", False, True), ("조견표", True, False), ("고시", True, False), ("결과", False, False)]
 PRICE_COLUMNS = [("급여", False, False), ("구분", False, True), ("금액", True, False), ("가산수당", True, False)]
-RESULT_COLORS = {"일치": "#2F855A", "불일치": "#C53030", "조견표에 없음": "#96620F"}
+RESULT_COLORS = {"일치": SUCCESS, "불일치": DANGER, "조견표에 없음": WARNING_BG}
 
 def _to_int(value) -> int | None:
     if value is None or isinstance(value, bool): return None
@@ -27,7 +28,7 @@ class PriceEditDelegate(QStyledItemDelegate):
             painter.fillRect(option.rect, background)
         super().paint(painter, option, index)
 
-    def createEditor(self, parent, option, index):
+    def createEditor(self, parent):
         editor = QLineEdit(parent)
         editor.setObjectName("CellEditor")
         editor.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)

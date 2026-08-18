@@ -1,13 +1,10 @@
-# 메인 화면 (기본급여단가표/결제단가표 중 어떤 작업을 할지 선택)
-#
-# 버튼 목록은 models.flows.FLOWS 에서 import하기 때문에 흐름이 늘어나도 이 파일은 고칠 필요 X
+# 메인 화면
 
 from __future__ import annotations
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget, QHBoxLayout, QPushButton
 from models.flows import FLOWS, FlowSpec
-from ui.components.scroll_page import centered_scroll_page
 from ui.widgets.value_field import ValueField
 from utils.date import yearConfig
 
@@ -44,7 +41,7 @@ class FlowCard(QFrame):
         content_layout.setContentsMargins(28, 24, 28, 28)
         content_layout.setSpacing(16)
 
-        # 1. 상단 아이콘, 화살표
+        # 상단 아이콘, 화살표
         header_layout = QHBoxLayout()
         header_layout.setContentsMargins(0, 0, 0, 0)
         
@@ -59,7 +56,7 @@ class FlowCard(QFrame):
         header_layout.addStretch()
         header_layout.addWidget(arrow_label)
 
-        # 2. 카드 제목, 설명
+        # 카드 제목, 설명
         title = QLabel(flow.menu_title)
         title.setObjectName("MenuTitle")
         
@@ -68,7 +65,7 @@ class FlowCard(QFrame):
         desc.setWordWrap(True)
         desc.setMinimumHeight(45) # 텍스트 길이에 상관없이 카드 높이 맞춤
 
-        # 3. Steps 안내
+        # Steps 안내
         steps_layout = QVBoxLayout()
         steps_layout.setContentsMargins(0, 0, 0, 0)
         steps_layout.setSpacing(8)
@@ -89,7 +86,7 @@ class FlowCard(QFrame):
             step_row.addStretch()
             steps_layout.addLayout(step_row)
 
-        # 4. 시작하기 버튼
+        # 시작하기 버튼
         self.start_btn = QPushButton("시작하기 ›")
         self.start_btn.setObjectName("MenuStartBtn")
         self.start_btn.clicked.connect(lambda: self.clicked.emit(self._flow))
@@ -99,7 +96,7 @@ class FlowCard(QFrame):
             self.start_btn.setText("준비 중")
 
 
-        # 5. 카드 전체 레이아웃 조립
+        # 카드 전체 레이아웃 조립
         content_layout.addLayout(header_layout)
         content_layout.addWidget(title)
         content_layout.addWidget(desc)
@@ -120,17 +117,14 @@ class FlowCard(QFrame):
 
 
 class MainPage(QWidget):
-    # flowRequested(FlowSpec) — 사용자가 작업을 골랐을 때
-    # yearChanged() — 사업년도를 바꿨을 때 (업로드 화면의 파일을 새로 고쳐야 함)
-
     flowRequested = pyqtSignal(FlowSpec)  # FlowSpec
-    yearChanged = pyqtSignal()
+    yearChanged = pyqtSignal() # 사업년도
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setObjectName("PageBody")
 
-        # 1. 헤더 (타이틀 & 서브타이틀)
+        # 헤더 (타이틀 & 서브타이틀)
         title = QLabel("무엇을 하시겠어요?")
         title.setObjectName("MainTitle")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -139,7 +133,7 @@ class MainPage(QWidget):
         subtitle.setObjectName("MainSubtitle")
         subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-        # 2. 사업년도 필드
+        # 사업년도 필드
         year_container = QFrame()
         year_container.setObjectName("YearSelectorBox")
         year_layout = QHBoxLayout(year_container)
@@ -159,7 +153,7 @@ class MainPage(QWidget):
 
         year_layout.addWidget(self.year_field)
 
-        # 3. 카드
+        # 메뉴 카드
         cards_layout = QHBoxLayout()
         cards_layout.setSpacing(24)
         for flow in FLOWS:
@@ -167,7 +161,7 @@ class MainPage(QWidget):
             card.clicked.connect(self.flowRequested.emit)
             cards_layout.addWidget(card)
 
-        # 4. 인포박스
+        # 인포박스
         info_box = QFrame()
         info_box.setObjectName("MainInfoBox")
         info_layout = QHBoxLayout(info_box)
@@ -186,7 +180,7 @@ class MainPage(QWidget):
         info_layout.addWidget(info_icon)
         info_layout.addWidget(info_text, 1)
 
-        # 5. 전체 화면 가운데 정렬 조립
+        # 전체 화면 가운데 정렬 조립
         layout = QVBoxLayout(self)
         layout.addStretch(1)
         layout.addWidget(title)
