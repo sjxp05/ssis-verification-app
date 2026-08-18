@@ -1,10 +1,6 @@
 # 조견표 라벨 매칭 엔진
 #
-# 작년 조견표를 기준으로 올해 조견표의 라벨 대응을 찾는다. 문구가 바뀌면 값
-# 추출이 조용히 어긋나므로, 그 변화를 사람이 확인할 수 있게 만든다.
-#
-#     from jogyeon_matcher import match_workbooks
-#     report = match_workbooks("조견표_2026.xlsx", "조견표_2027.xlsx")
+# 조견표의 형식(라벨명 등)이 달라졌을 경우 기존 형식의 라벨에 대응하는 새 조견표의 라벨을 매칭함
 
 from .contracts.schemas import (
     Candidate,

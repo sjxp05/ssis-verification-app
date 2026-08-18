@@ -11,9 +11,9 @@ class UploadSlot:
     description: str
     extensions: tuple[str, ...]
     icon: str = "📄"
-    # True면 services.recent_files 에 저장된 최근 경로가 있을 때 업로드를 건너뛸 후보
-    # (경로 저장은 구현됨. 카드 자동 채움은 미구현 — upload_page.py 의 TODO 참고)
-    remember_last: bool = False
+    remember_last: bool = (
+        False  # True면 services.recent_files 에 저장된 최근 경로가 있을 때 자동 채움
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -90,7 +90,6 @@ NOTICE_VERIFY = FlowSpec(
             remember_last=True,
         ),
     ),
-    # export_names=("결제단가표.xlsx",),
 )
 
 PAYMENT_PRICE = FlowSpec(
@@ -122,7 +121,6 @@ PAYMENT_PRICE = FlowSpec(
         ),
     ),
     export_names=("결제단가표.xlsx",),
-    stub=False,
 )
 
 FLOWS: tuple[FlowSpec, ...] = (UNIT_PRICE, NOTICE_VERIFY, PAYMENT_PRICE)

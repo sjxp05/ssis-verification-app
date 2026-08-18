@@ -1,15 +1,9 @@
-# 파이프라인 조립 — 엑셀 적재부터 MatchReport 생성까지
+# 기준 조견표와 업로드된 조견표의 라벨 매칭, 결과 리포트 생성
 #
-# 작년 조견표의 라벨 하나하나에 대해 올해 대응물을 찾는다. 감시 대상을 고정
-# 목록으로 두지 않는 이유는, 값 추출이 의존하는 것이 앵커 문자열만이 아니라
-# 그것을 둘러싼 헤더·행 이름 전체이기 때문이다.
-#
-# 판정 순서가 곧 신뢰 순서다.
-#     원문 일치 -> 정규화 일치 -> 규칙 파서 동등 -> 하이브리드
-# 앞의 셋만 auto_pass 근거가 된다. 유사도 점수는 0.99 가 나와도 근거가 못 된다.
-#
-# 매칭은 시트 스코프 안에서만 한다. 추출기가 시트별로 값을 읽으므로 다른 시트의
-# 동명 라벨과 이어붙이면 그 자체가 오류다.
+# 판정 순서: 원문 일치 -> 정규화 일치 -> 규칙 파서 동등 -> 유사도 비교
+# - 앞의 셋은 일치했을 때 auto pass 가능
+# - 유사도 점수는 높게 나오더라도 사람의 검수 필요
+# - 한 시트 내에서만 매칭
 
 from __future__ import annotations
 
@@ -37,7 +31,7 @@ from .matching.hybrid import HybridConfig, HybridMatcher
 from .matching.normalizer import find_normalization_collisions, normalize
 from .validation import value_checks
 
-# 라벨이 아니라 값 자체를 나타내는 문구
+# 라벨이 아닌 값 자체를 나타내는 문구. 해당 문구가 있는 셀은 다른 셀과 유사도 비교하지 않음
 IGNORED = frozenset({"면제", "-", "해당없음", "비고"})
 
 TOP_K = 3
@@ -71,10 +65,12 @@ def match_workbooks(
     report.value_anomalies += value_checks.compare_regions(base_regions, target_regions)
 
     base_labels = {s: _collect_labels(base_regions.get(s, [])) for s in baseline.sheets}
-    target_labels = {s: _collect_labels(target_regions.get(s, [])) for s in target.sheets}
+    target_labels = {
+        s: _collect_labels(target_regions.get(s, [])) for s in target.sheets
+    }
     matchers: dict[str, HybridMatcher | None] = {}
-    # 시트마다 새 인코더(=새 ONNX 세션)를 만들지 않도록 워크북 전체가 하나를 공유한다.
-    # 규칙 판정으로 다 끝나면 이 인코더도 결국 로드되지 않는다(지연 로딩).
+
+    # 유사도 대조가 필요한 경우에만 지연 로딩되는 인코더, 모든 시트에서 공유
     encoder = DenseEncoder()
 
     for sheet in baseline.sheets:
@@ -82,7 +78,8 @@ def match_workbooks(
             continue
         matcher = (
             HybridMatcher(list(target_labels[sheet]), config, encoder=encoder)
-            if target_labels[sheet] else None
+            if target_labels[sheet]
+            else None
         )
         matchers[sheet] = matcher
         report.items += _match_sheet(
@@ -94,11 +91,8 @@ def match_workbooks(
     return report
 
 
-# 올해 파일에서 값을 읽을 수 있는지 미리 확인한다.
-#
-# 추출기와 똑같은 방식으로 찾아본다. 부분문자열로 찾되 서로 다른 행에 흩어져 있으면
-# 추출기가 실패하고(_find_one), 등급·구간 같은 행·열 이름은 셀 내용이 정확히 같아야 한다.
-# 여기서 걸리면 그 표를 만들 수 없으므로 담당자가 반드시 짚어야 한다.
+# 올해 파일에서 값을 읽을 수 있는지 미리 확인
+# 추출기와 같은 방식으로 부분문자열로 탐색. 단 등급, 구간 등 행·열 이름은 정확히 일치해야 함
 def _find_missing(
     target_labels: dict[str, dict[str, LabelRef]],
     matchers: dict[str, HybridMatcher | None],
@@ -117,6 +111,7 @@ def _find_missing(
             if not hits:
                 reason = "올해 파일에서 찾지 못했습니다"
             elif len(rows) > 1:
+                # 부분/전체 일치하는 후보가 여러 행에 중복으로 있으면 실패 (_find_one)
                 reason = f"서로 다른 {len(rows)}개 행에 나뉘어 있어 어디서 읽을지 정할 수 없습니다"
             else:
                 reason = ""
@@ -124,20 +119,24 @@ def _find_missing(
             continue
 
         baseline_ref = base_labels.get(required.sheet, {}).get(key)
-        missing.append(MissingValue(
-            label=required.label,
-            sheet=required.sheet,
-            produces=required.produces,
-            tables=required.tables,
-            reason=reason,
-            candidates=_suggest(key, matchers.get(required.sheet), labels),
-            baseline_location=baseline_ref.location if baseline_ref else None,
-        ))
+        missing.append(
+            MissingValue(
+                label=required.label,
+                sheet=required.sheet,
+                produces=required.produces,
+                tables=required.tables,
+                reason=reason,
+                candidates=_suggest(key, matchers.get(required.sheet), labels),
+                baseline_location=baseline_ref.location if baseline_ref else None,
+            )
+        )
     return missing
 
 
 # 못 찾은 문구를 대신할 만한 올해 문구 후보
-def _suggest(key: str, matcher: HybridMatcher | None, labels: dict[str, LabelRef]) -> list[Candidate]:
+def _suggest(
+    key: str, matcher: HybridMatcher | None, labels: dict[str, LabelRef]
+) -> list[Candidate]:
     if matcher is None or not labels:
         return []
     keys = matcher.labels
@@ -167,7 +166,7 @@ def _summarize(items: list[MatchItem]) -> Summary:
     )
 
 
-# 표에서 라벨 후보를 모은다. 정규형이 같으면 먼저 나온 셀을 대표로 삼는다.
+# 표에서 라벨 후보 추출. 정규형이 같으면 먼저 나온 셀 우선
 def _collect_labels(regions: list) -> dict[str, LabelRef]:
     labels: dict[str, LabelRef] = {}
     for region in regions:
@@ -188,21 +187,27 @@ def _match_sheet(
     for norm_form, originals in find_normalization_collisions(
         [ref.raw for ref in base_labels.values()]
     ).items():
-        report.structural_alerts.append(StructuralAlert(
-            "NORMALIZATION_COLLISION", sheet,
-            f"서로 다른 라벨이 정규화 후 같아집니다: {originals} -> {norm_form!r}",
-        ))
+        report.structural_alerts.append(
+            StructuralAlert(
+                "NORMALIZATION_COLLISION",
+                sheet,
+                f"서로 다른 라벨이 정규화 후 같아집니다: {originals} -> {norm_form!r}",
+            )
+        )
 
     items: list[MatchItem] = []
     claimed: set[str] = set()
     reviewed: list[tuple[MatchItem, np.ndarray]] = []
+
+    # 라벨마다 매번 전체 순회하면 O(라벨²)로 성능이 저하되므로 시트당 인덱스는 한 번만 생성
     det = _DeterministicIndex(target_labels)
 
-    # 결정론 경로에서 못 걸릴 라벨을 미리 골라 쿼리를 한 번의 배치로 인코딩한다.
-    # 라벨마다 단건 인코딩하면 ONNX 호출 오버헤드가 라벨 수만큼 쌓인다.
+    # 결정론 매칭 안 되는 (유사도 비교 필요한) 라벨을 미리 골라 배치로 한 번에 인코딩
+    # (라벨마다 단건 인코딩 시 ONNX 호출 오버헤드 발생)
     if matcher is not None:
         pending = [
-            ref.normalized for ref in base_labels.values()
+            ref.normalized
+            for ref in base_labels.values()
             if _match_deterministic(ref, target_labels, det) is None
         ]
         matcher.precompute_queries(pending)
@@ -217,13 +222,18 @@ def _match_sheet(
             reviewed.append((item, scores))
         items.append(item)
 
-    # 역방향: 작년에 없던 올해 라벨. 신설 항목이거나 개칭의 반대쪽이다.
+    # 비교 대상 조견표에 없는 신설/개칭 항목 발견 시 등록
     for key, ref in target_labels.items():
         if key not in claimed and key not in base_labels:
-            items.append(MatchItem(
-                f"{sheet}-new-{len(items):03d}", ref,
-                Status.UNMATCHED, MatchPath.HYBRID, flags=["NEW_IN_TARGET"],
-            ))
+            items.append(
+                MatchItem(
+                    f"{sheet}-new-{len(items):03d}",
+                    ref,
+                    Status.UNMATCHED,
+                    MatchPath.HYBRID,
+                    flags=["NEW_IN_TARGET"],
+                )
+            )
 
     if reviewed:
         for position in constraints.find_contested(np.vstack([s for _, s in reviewed])):
@@ -243,7 +253,10 @@ def _match_one(
         path, key = matched
         found = target_labels[key]
         item = MatchItem(
-            item_id, ref, Status.AUTO_PASS, path,
+            item_id,
+            ref,
+            Status.AUTO_PASS,
+            path,
             candidates=[Candidate(1, found.raw, 1.0, 1.0, 1.0, found.location)],
             matched_label=found.raw,
         )
@@ -255,28 +268,30 @@ def _match_one(
     scores, candidates = _rank_candidates(ref.normalized, target_labels, matcher)
     passes = bool(candidates) and candidates[0].final >= matcher.config.cutoff
     item = MatchItem(
-        item_id, ref,
+        item_id,
+        ref,
         Status.NEEDS_REVIEW if passes else Status.UNMATCHED,
-        MatchPath.HYBRID, candidates, constraints.margin_flag(scores),
+        MatchPath.HYBRID,
+        candidates,
+        constraints.margin_flag(scores),
     )
     return item, normalize(candidates[0].base_label) if passes else None, scores
 
 
-# 결정론 판정용 색인. 라벨마다 대상 전체를 다시 훑으면 O(라벨²)이 되어 큰
-# 조견표에서 수 초씩 걸리므로 시트당 한 번만 만든다. '먼저 나온 라벨 우선'
-# 규칙은 setdefault 로 그대로 보존된다.
+# 결정론 판정용 인덱스
 class _DeterministicIndex:
     def __init__(self, target_labels: dict[str, LabelRef]):
         self.raw: dict[str, str] = {}
         self.parsed: dict[object, str] = {}
         for key, found in target_labels.items():
+            # setdefault()로 먼저 나온 라벨 우선 적용
             self.raw.setdefault(found.raw, key)
             token = rule_parser.parse(key)
             if token is not None:
                 self.parsed.setdefault(token, key)
 
 
-# 유사도가 아니라 동등성으로 판정되는 경로. 여기서 걸리면 auto_pass 다.
+# 규칙 기반 결정론적 경로 (auto pass)
 def _match_deterministic(
     ref: LabelRef, target_labels: dict[str, LabelRef], det: _DeterministicIndex
 ) -> tuple[MatchPath, str] | None:
@@ -303,10 +318,17 @@ def _rank_candidates(
     candidates = []
     for rank, i in enumerate(np.argsort(-adjusted)[:TOP_K], start=1):
         found = target_labels[keys[i]]
-        candidates.append(Candidate(
-            rank, found.raw, float(adjusted[i]), float(sparse[i]), float(dense[i]),
-            found.location, flags=list(veto_flags[i]),
-        ))
+        candidates.append(
+            Candidate(
+                rank,
+                found.raw,
+                float(adjusted[i]),
+                float(sparse[i]),
+                float(dense[i]),
+                found.location,
+                flags=list(veto_flags[i]),
+            )
+        )
     if len(candidates) >= 2:
         candidates[0].margin_to_next = candidates[0].final - candidates[1].final
     return adjusted, candidates
