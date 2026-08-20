@@ -75,7 +75,7 @@ def search_jogyeon_history(year: int, key: str = "jogyeon") -> Path | None:
             data = json.load(f)
 
         for y in sorted(data.keys(), reverse=True):
-            if int(y) >= year:
+            if not y.isdigit() or int(y) >= year:
                 continue
             path_str = data[y].get(key)
             if path_str is not None:

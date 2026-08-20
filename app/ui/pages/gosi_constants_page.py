@@ -222,6 +222,11 @@ class GosiConstantsPage(QWidget):
                 if amount is not None:
                     formatted[f"{service}.{key}"] = amount
 
+        #증가율에서 사용되는 값 넘기기
+        for key in ("기본단가", "작년 기본단가"):
+            if key in self._reference:
+                formatted[key] = self._reference[key]
+
         return formatted
 
     def _prices(self) -> dict:

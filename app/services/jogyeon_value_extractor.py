@@ -298,6 +298,7 @@ class ValueExtractor:
                     f"'{key}'가 구간 순으로 감소하지 않습니다: {series}"
                     "\n조치: 조견표의 구간 배치가 바뀌었는지 확인하세요."
                 )
+        #TODO: 친절한 error공지를 띄워주도록 엑셀의 위치와 설명을 명확하게 하는게 좋을듯
 
     # 인정조사 탭에 표시할 키
     _TAB1_KEYS = (
@@ -318,6 +319,41 @@ class ValueExtractor:
         "종합조사 월한도액 (확장형)",
     )
 
+    #작년 조견표가 캐시에 있는 경우 기본단가만 읽어서 반환한다
+    def read_prev_unit_price(self, year: int) -> int | float | None:
+        from services import recent_files
+
+        path = recent_files.search_jogyeon_history(year)
+        if path is None or not path.exists():
+            return None
+        saved = dict(self._cell_map) 
+        try:
+            return self.read_ij_value(path, JOGYEON_SHEET_NAMES[0])["기본단가"]
+        except Exception:
+            return None
+        finally:
+            self._cell_map = saved
+
+    # 조견표를 직접 올리지 않는 결제단가표 플로우에서 인상률 기준으로 쓴다.
+    def read_cached_unit_prices(self, year: int) -> dict:
+        from services import recent_files
+
+        result: dict = {}
+        saved = dict(self._cell_map)
+        try:
+            curr_path = recent_files.get_recent_path(year, "jogyeon")
+            if curr_path is not None:
+                try:
+                    result["기본단가"] = self.read_ij_value(curr_path, JOGYEON_SHEET_NAMES[0])["기본단가"]
+                except Exception:
+                    pass
+            prev = self.read_prev_unit_price(year)
+            if prev is not None:
+                result["작년 기본단가"] = prev
+        finally:
+            self._cell_map = saved
+        return result
+
     def extract_jogyeon_values(self, file: UploadedFile):
         self._cell_map.clear()
         self._source_path=file.path
@@ -333,5 +369,9 @@ class ValueExtractor:
         # 화면에 탭(페이지) 2개로 나눠 보여주기 위해 dict 2개짜리 list로 반환
         tab1 = {"사업년도": yearConfig.SYSTEM_YEAR, "차수": 1}
         tab1.update({key: data[key] for key in self._TAB1_KEYS})
+        #작년 조견표가 있으면 기본단가 인상률 계산을 위해 함께 넘김
+        prev=self.read_prev_unit_price(yearConfig.SYSTEM_YEAR)
+        if prev is not None:
+            tab1["작년 기본단가"] = prev
         tab2 = {key: data[key] for key in self._TAB2_KEYS}
         return [tab1, tab2]

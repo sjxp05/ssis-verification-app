@@ -13,13 +13,15 @@
 from __future__ import annotations
 import os
 import pandas as pd
-from PyQt6.QtCore import QModelIndex, pyqtSignal,Qt
+from PyQt6.QtCore import QModelIndex, pyqtSignal,Qt,QTimer
 from PyQt6.QtWidgets import (
+    QAbstractItemView,
     QFileDialog,
     QHBoxLayout,
     QLabel,
     QMessageBox,
     QStackedWidget,
+    QSplitter,
     QVBoxLayout,
     QWidget,
     QApplication,
@@ -219,10 +221,12 @@ class TableViewerPage(QWidget):
         self._tabs = new_tabs
 
     def _build_tables(self, flow: str) -> None:
-        for table in self._tables:
-            self._stack.removeWidget(table)
-            table.deleteLater()
+        for splitter in getattr(self,"_splitters",[]):
+            self._stack.removeWidget(splitter)
+            splitter.deleteLater()
         self._tables = []
+        self._splitters:list[QSplitter]=[]
+        self._prev_views:list[DataFrameModel]=[]
         self._reports.clear()
         self._prev_tables.clear()
         self._prev_names.clear()
@@ -238,7 +242,38 @@ class TableViewerPage(QWidget):
                 lambda row, col, tab=index: self._on_cell_edited(tab, row, col)
             )
             self._tables.append(table)
-            self._stack.addWidget(table)
+
+            #작년 단가표 패널 평소 숨어있지만 불러오면 스플릿으로 나타남
+            prev_view = DataFrameTable(
+                accent_columns=ACCENT_COLUMNS, show_row_numbers=False
+            )
+            prev_view.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+            prev_view.setVisible(False)
+
+            # 스크롤 동기화
+            self._link_scrollbars(table, prev_view)
+
+            splitter = QSplitter(Qt.Orientation.Horizontal)
+            splitter.setObjectName("TableSplitter")
+            splitter.setChildrenCollapsible(False)
+            splitter.addWidget(table)
+            splitter.addWidget(prev_view)
+            splitter.setStretchFactor(0, 1)
+            splitter.setStretchFactor(1, 1)
+
+            self._prev_views.append(prev_view)
+            self._splitters.append(splitter)
+            self._stack.addWidget(splitter)
+
+    @staticmethod
+    def _link_scrollbars(a: QAbstractItemView, b: QAbstractItemView) -> None:
+        # 세로·가로 스크롤을 양방향으로 묶는다.
+        for bar_a, bar_b in (
+            (a.verticalScrollBar(), b.verticalScrollBar()),
+            (a.horizontalScrollBar(), b.horizontalScrollBar()),
+        ):
+            bar_a.valueChanged.connect(bar_b.setValue)
+            bar_b.valueChanged.connect(bar_a.setValue)
 
     def current_dataframe(self) -> pd.DataFrame:
         return self._tables[self._tabs.current()].dataframe()
@@ -246,6 +281,8 @@ class TableViewerPage(QWidget):
     def hide_bubbles(self) -> None:
         for table in self._tables:
             table.hide_bubble()
+        for view in getattr(self,"_prev_views",[]):
+            view.hide_bubble()
 
     def reset_tab(self, flow: str = "unit_price", index: int = 0) -> None:
         self._tabs.set_current(index)  # 버튼 상태
@@ -443,6 +480,7 @@ class TableViewerPage(QWidget):
             try:
                 self._prev_tables.pop(tab, None)
                 self._prev_names.pop(tab, None)
+                self._hide_prev_split(tab)
                 self._update_prev_button()
                 self._run_validation(tab)  # 증가율 지표가 빠진 상태로 재계산
                 return
@@ -462,10 +500,25 @@ class TableViewerPage(QWidget):
                 QMessageBox.warning(self, "불러오기 실패", f"작년 단가표를 읽지 못했습니다:\n{error}")
                 return
             self._prev_names[tab] = os.path.basename(path)
+            self._show_prev_split(tab)
             self._update_prev_button()
             self._run_validation(tab)
         finally:
             QApplication.restoreOverrideCursor()
+
+    #작년단가표 스플릿 뷰
+    def _show_prev_split(self,tab:int)->None:
+        df=self._prev_tables.get(tab)
+        if df is None:
+            return
+        self._prev_views[tab].set_dataframe(df,None)
+        self._prev_views[tab].setVisible(True)
+        splitter=self._splitters[tab]
+        QTimer.singleShot(0, lambda: splitter.setSizes([1, 1]))
+
+    def _hide_prev_split(self,tab:int)->None:
+        self._prev_views[tab].hide_bubble()
+        self._prev_views[tab].setVisible(False)
 
     def _toggle_panel(self) -> None:
         # 검증 패널 접기/펼치기 — 접으면 표가 화면 전체 폭을 쓴다
@@ -491,10 +544,12 @@ class TableViewerPage(QWidget):
             self._prev_button.setText(_PREV_DONE_TEXT)
             self._prev_button.setToolTip(f"불러온 파일: {name}\n다시 누르면 다른 파일로 교체합니다.")
             set_state(self._prev_button, "state", "loaded")
+            self._card_hint.setText(f"오른쪽: 작년 · {os.path.splitext(name)[0][:20]}")
         else:
             self._prev_button.setText(_PREV_TEXT)
             self._prev_button.setToolTip("")
             set_state(self._prev_button, "state", "")
+            self._card_hint.setText("")
 
     def _update_load_button(self) -> None:
         # 현재 탭에 외부 단가표가 불러와져 있으면 초록 '불러옴' 상태로 바꾼다.

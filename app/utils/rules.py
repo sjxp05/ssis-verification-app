@@ -2,7 +2,7 @@ import inspect
 import json
 import math
 
-RULES_PATH = "rules_2025.json"
+RULES_PATH = "rules_2026.json"
 
 # 가능한 연산 종류
 ADD = "+"

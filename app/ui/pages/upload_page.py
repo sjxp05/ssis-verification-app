@@ -55,7 +55,7 @@ class _ExtractTask(QRunnable):
         try:
             # self._files["jogyeon"] -> 슬롯이 없으면 KeyError 대신 읽을 수 있는 메시지 표시
             if self._flow.key == PAYMENT_PRICE.key:
-                values = {}
+                values = self._extractor.read_cached_unit_prices(yearConfig.SYSTEM_YEAR)
             else:
                 jogyeon = self._files.get("jogyeon")
                 if jogyeon is None:
