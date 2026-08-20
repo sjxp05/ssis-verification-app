@@ -22,12 +22,8 @@ from utils.qss import set_state
 
 IDLE, HOVER, DONE, REJECTED = "idle", "hover", "done", "rejected"
 
-
+# 드래그앤드롭 또는 클릭으로 파일 한 개를 받는 카드
 class UploadCard(QFrame):
-    # 드래그앤드롭 또는 클릭으로 파일 한 개를 받는 카드
-    #
-    # UploadCard("조견표", "설명", (".xlsx", ".xls"), "▦") 처럼 쓴다.
-
     fileSelected = pyqtSignal(object)  # UploadedFile
 
     def __init__(
@@ -85,8 +81,8 @@ class UploadCard(QFrame):
     def file(self) -> UploadedFile | None:
         return self._file
 
+    # 파일 지정: 확장자 틀리면 False
     def set_path(self, path: str | Path) -> bool:
-        # 파일을 지정한다. 확장자가 맞지 않으면 False 를 돌려준다.
         if Path(path).suffix.lower() not in self._extensions:
             self._apply_state(REJECTED)
             return False
@@ -95,8 +91,8 @@ class UploadCard(QFrame):
         self.fileSelected.emit(self._file)
         return True
 
+    # 추출하는 중 파일 변경 불가
     def set_locked(self, locked: bool) -> None:
-        # 추출이 돌아가는 동안 파일을 못 바꾸게 잠근다.
         self.setAcceptDrops(not locked)
         self.setCursor(
             Qt.CursorShape.ArrowCursor if locked else Qt.CursorShape.PointingHandCursor

@@ -5,11 +5,25 @@ from __future__ import annotations
 
 import pandas as pd
 from PyQt6.QtCore import QModelIndex, Qt, pyqtSignal
-from PyQt6.QtWidgets import QAbstractItemView, QHeaderView, QTableView, QWidget
+from PyQt6.QtWidgets import (
+    QAbstractItemView,
+    QHeaderView,
+    QStyle,
+    QStyledItemDelegate,
+    QTableView,
+    QWidget,
+)
 
 from models.dataframe_model import DataFrameModel
 from ui.widgets.formula_bubble import FormulaBubble
 
+class _CellBackgroundDelegate(QStyledItemDelegate):
+    # 검증 오류(빨강)/경고(노랑) 셀 배경이 온전히 보이도록 여기서 직접 칠한다.
+    def paint(self, painter, option, index):
+        background = index.data(Qt.ItemDataRole.BackgroundRole)
+        if background is not None and not (option.state & QStyle.StateFlag.State_Selected):
+            painter.fillRect(option.rect, background)
+        super().paint(painter, option, index)
 
 class DataFrameTable(QTableView):
     # set_dataframe(df, formulas) 로 데이터를 넣는다.
@@ -29,6 +43,7 @@ class DataFrameTable(QTableView):
         self.setModel(self._model)
 
         self._bubble = FormulaBubble(self)
+        self.setItemDelegate(_CellBackgroundDelegate(self)) 
 
         self.setAlternatingRowColors(True)
         self.setShowGrid(True)
@@ -36,7 +51,10 @@ class DataFrameTable(QTableView):
         self.setCornerButtonEnabled(False)
         self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectItems)
-        self.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.setEditTriggers(
+            QAbstractItemView.EditTrigger.DoubleClicked
+            | QAbstractItemView.EditTrigger.EditKeyPressed
+        )
         self.setHorizontalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
         self.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
 

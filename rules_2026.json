@@ -1,0 +1,269 @@
+{
+	"copayment": {
+		"name": "본인부담금(주간활동 기본형)",
+		"inputs": [
+			{ "var": "monthly_limit", "name": "월한도액", "type": "int" },
+			{ "var": "cap", "name": "본인부담금상한액", "type": "int" },
+			{
+				"var": "income_range",
+				"name": "소득구간",
+				"type": "str",
+				"default": ""
+			},
+			{
+				"var": "copayment_rate",
+				"name": "본인부담률",
+				"type": "float",
+				"default": 0
+			}
+		],
+		"formula": {
+			"op": "IF",
+			"args": [
+				"소득구간",
+				"가",
+				0,
+				{
+					"op": "IF",
+					"args": [
+						"소득구간",
+						"나",
+						20000,
+						{
+							"op": "MIN",
+							"args": [
+								{
+									"op": "ROUNDDOWN",
+									"args": [
+										{
+											"op": "*",
+											"args": ["월한도액", "본인부담률"]
+										},
+										-2
+									]
+								},
+								"본인부담금상한액"
+							]
+						}
+					]
+				}
+			]
+		}
+	},
+	"copayment_extended": {
+		"name": "본인부담금(주간활동 확장형)",
+		"inputs": [
+			{ "var": "monthly_limit", "name": "월한도액", "type": "int" },
+			{ "var": "cap", "name": "본인부담금상한액", "type": "int" },
+			{
+				"var": "income_range",
+				"name": "소득구간",
+				"type": "str",
+				"default": ""
+			},
+			{
+				"var": "copayment_rate",
+				"name": "본인부담률",
+				"type": "float",
+				"default": 0
+			}
+		],
+		"formula": {
+			"op": "IF",
+			"args": [
+				"소득구간",
+				"가",
+				0,
+				{
+					"op": "IF",
+					"args": [
+						"소득구간",
+						"나",
+						0,
+						{
+							"op": "MIN",
+							"args": [
+								{
+									"op": "ROUNDDOWN",
+									"args": [
+										{
+											"op": "*",
+											"args": ["월한도액", "본인부담률"]
+										},
+										-2
+									]
+								},
+								"본인부담금상한액"
+							]
+						}
+					]
+				}
+			]
+		}
+	},
+	"add_copayment": {
+		"name": "추가급여 본인부담금",
+		"inputs": [
+			{ "var": "monthly_limit", "name": "월한도액", "type": "int" },
+			{
+				"var": "income_range",
+				"name": "소득구간",
+				"type": "str",
+				"default": ""
+			},
+			{
+				"var": "copayment_rate",
+				"name": "본인부담률",
+				"type": "float",
+				"default": 0
+			}
+		],
+		"formula": {
+			"op": "IF",
+			"args": [
+				"소득구간",
+				"가",
+				0,
+				{
+					"op": "IF",
+					"args": [
+						"소득구간",
+						"나",
+						0,
+						{
+							"op": "ROUNDDOWN",
+							"args": [
+								{
+									"op": "*",
+									"args": ["월한도액", "본인부담률"]
+								},
+								-2
+							]
+						}
+					]
+				}
+			]
+		}
+	},
+	"sj_monthly_limit": {
+		"name": "산정특례 월한도액",
+		"inputs": [
+			{ "var": "basic_monthly_limit", "name": "기본급여", "type": "int" },
+			{
+				"var": "main_add_monthly_limit",
+				"name": "main추가급여",
+				"type": "int"
+			},
+			{
+				"var": "is_school",
+				"name": "학교생활",
+				"type": "bool",
+				"default": false
+			},
+			{
+				"var": "school_monthly_limit",
+				"name": "학교생활급여",
+				"type": "int",
+				"default": 0
+			},
+			{
+				"var": "is_work",
+				"name": "직장생활",
+				"type": "bool",
+				"default": false
+			},
+			{
+				"var": "work_monthly_limit",
+				"name": "직장생활급여",
+				"type": "int",
+				"default": 0
+			}
+		],
+		"formula": {
+			"op": "+",
+			"args": [
+				{
+					"op": "+",
+					"args": [
+						{ "op": "+", "args": ["기본급여", "main추가급여"] },
+						{
+							"op": "IF",
+							"args": ["학교생활", true, "학교생활급여", 0]
+						}
+					]
+				},
+				{ "op": "IF", "args": ["직장생활", true, "직장생활급여", 0] }
+			]
+		}
+	},
+	"extended_monthly_limit": {
+		"name": "확장형 월한도액",
+		"inputs": [
+			{ "var": "monthly_limit", "name": "월한도액", "type": "int" },
+			{ "var": "unit_price", "name": "기본단가", "type": "int" }
+		],
+		"formula": {
+			"op": "ROUNDUP",
+			"args": [
+				{
+					"op": "-",
+					"args": [
+						"월한도액",
+						{ "op": "*", "args": ["기본단가", 22] }
+					]
+				},
+				-3
+			]
+		}
+	},
+	"government_support": {
+		"name": "정부지원금",
+		"inputs": [
+			{ "var": "monthly_limit", "name": "월한도액", "type": "int" },
+			{ "var": "copayment", "name": "본인부담금", "type": "int" }
+		],
+		"formula": {
+			"op": "-",
+			"args": ["월한도액", "본인부담금"]
+		}
+	},
+	"activity_support_30min": {
+		"name": "활동보조 30분단가",
+		"inputs": [{ "var": "unit_price", "name": "기본단가", "type": "int" }],
+		"formula": {
+			"op": "ROUNDDOWN",
+			"args": [{ "op": "*", "args": ["기본단가", 0.5] }, -1]
+		}
+	},
+	"activity_support_30min_night": {
+		"name": "활동보조 30분단가(심야)",
+		"inputs": [{ "var": "unit_price", "name": "기본단가", "type": "int" }],
+		"formula": {
+			"op": "ROUNDDOWN",
+			"args": [
+				{
+					"op": "*",
+					"args": [
+						{
+							"op": "ROUNDDOWN",
+							"args": [
+								{ "op": "*", "args": ["기본단가", 0.5] },
+								-1
+							]
+						},
+						1.5
+					]
+				},
+				-1
+			]
+		}
+	},
+	"bath_40min": {
+		"name": "방문목욕 40분단가",
+		"inputs": [{ "var": "price_60min", "name": "60분단가", "type": "int" }],
+		"formula": {
+			"op": "ROUNDDOWN",
+			"args": [{ "op": "*", "args": ["60분단가", 0.8] }, -1]
+		}
+	}
+}

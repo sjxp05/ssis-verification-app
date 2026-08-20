@@ -1,0 +1,32 @@
+# 임베딩 모델을 다시 변환할 때만 필요한 패키지 (tools/export_model.py 전용)
+#
+#
+# ■ 대부분의 경우 설치할 필요가 없다
+#
+#   앱 실행과 exe 빌드에는 requirements.txt 만 있으면 된다.
+#   변환된 모델은 이미 app/jogyeon_matcher/resources/model/ 에 커밋되어 있다.
+#
+#   여기 있는 패키지는 그 모델을 "만드는" 도구다. 만들어진 모델을 "쓰는" 데는
+#   onnxruntime 과 tokenizers 만 필요하고, 그 둘은 requirements.txt 에 있다.
+#
+#
+# ■ 언제 설치하나
+#
+#   조견표에 한자가 나와 어휘 축소 수위를 조정해야 할 때,
+#   임베딩 모델 자체를 교체할 때, 모델 파일이 손상됐을 때.
+#
+#   pip install -r requirements-dev.txt
+#   python tools/export_model.py
+#
+#
+# ■ 주의
+#
+#   설치 용량이 약 3GB다. torch 가 대부분을 차지한다.
+#   변환할 때만 쓰이고 exe 번들에는 들어가지 않으므로, 배포 용량과는 무관하다.
+#   모델을 HuggingFace 에서 내려받으므로 인터넷이 되는 PC에서 실행해야 한다.
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+
+onnx==1.22.0
+torch==2.13.0+cpu
+transformers==5.14.1

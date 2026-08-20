@@ -264,12 +264,12 @@ QScrollBar:vertical {
     margin: 0;
 }
 QScrollBar::handle:vertical {
-    background: #C3C9D1;
+    background: ${SCROLLBAR_THUMB};
     border-radius: 5px;
     min-height: 30px;
 }
 QScrollBar::handle:vertical:hover {
-    background: #A9B1BB;
+    background: ${NAVY_LIGHT};
 }
 QScrollBar::add-line, QScrollBar::sub-line {
     height: 0;
@@ -280,7 +280,7 @@ QScrollBar:horizontal {
     height: 10px;
 }
 QScrollBar::handle:horizontal {
-    background: #C3C9D1;
+    background: ${SCROLLBAR_THUMB};
     border-radius: 5px;
     min-width: 30px;
 }
@@ -315,35 +315,115 @@ QLabel#BubbleFoot {
     background: ${BG};
 }
 
-/* --- 메인 화면의 작업 선택 버튼 ------------------------------------ */
-#FlowButton {
-    background: ${SURFACE};
-    border: 1px solid ${BORDER};
-    border-radius: ${RADIUS};
-}
-#FlowButton:hover {
-    border-color: ${NAVY};
-    background: ${BORDER_SOFT};
-}
-#FlowButton:disabled {
-    background: ${BG};
-    border-color: ${BORDER_SOFT};
-}
-#FlowButtonTitle {
-    font-size: 15px;
-    font-weight: 600;
+/*  Main Page */
+
+QLabel#MainTitle {
+    font-size: 24px;
+    font-weight: 700;
     color: ${TEXT};
-    background: transparent;
 }
-#FlowButtonDesc {
-    font-size: 12px;
-    color: ${TEXT_MUTED};
-    background: transparent;
-}
-#FlowButton:disabled #FlowButtonDesc {
-    color: ${TEXT_MUTED};
+QLabel#MainSubtitle {
+    font-size: 14px;
+    color: ${SUB_TEXT};
+    margin-top: 8px;
 }
 
+QFrame#YearSelectorBox {
+    background: ${SURFACE};
+    border-radius: 30px;
+    min-width: 280px;
+}
+
+QFrame#MenuCard {
+    background: ${SURFACE};
+    border-radius: 12px;
+    min-width: 250px;
+    max-width: 270px;
+}
+
+QFrame#CardTopLine {
+    background: ${NAVY};
+    border-radius: 1.5px;
+}
+
+QFrame#MenuCard:hover {
+    border-top: 3px solid ${NAVY};
+    border: 1px solid ${NAVY_LIGHT};
+}
+
+QFrame#MenuCard QLabel#MenuArrow {
+    color: ${TEXT_MUTED};
+    font-size: 15px;
+    font-weight: 400;
+}
+
+/* 아이콘 (연한 파란색 배경) */
+QLabel#MenuIcon {
+    background: ${TEXT_GRAY};
+    font-size: 22px;
+    border-radius: 8px;
+    min-width: 44px;
+    max-width: 44px;
+    min-height: 44px;
+    max-height: 44px;
+}
+
+/* 텍스트 */
+QLabel#MenuTitle {
+    font-size: 18px;
+    font-weight: 700;
+    color: ${TEXT};
+}
+QLabel#MenuDesc {
+    font-size: 13px;
+    color: ${SUB_TEXT};
+    line-height: 1.5;
+}
+
+/* 단계 표시 (1, 2, 3 동그라미) */
+QLabel#StepBadge {
+    background: ${TEXT_GRAY};
+    color: ${NAVY};
+    font-size: 10px;
+    font-weight: 600;
+    border-radius: 7.5px;
+    border: 1px solid ${NAVY};
+    min-width: 15px;
+    max-width: 15px;
+    min-height: 15px;
+    max-height: 15px;
+}
+QLabel#MenuStepText {
+    font-size: 13px;
+    color: ${SUB_TEXT};
+}
+
+/* 시작하기 버튼 */
+QPushButton#MenuStartBtn {
+    background: ${NAVY};
+    color: ${SURFACE};
+    border: none;
+    border-radius: 6px;
+    padding: 10px 18px;
+    font-size: 14px;
+    font-weight: 700;
+}
+
+/* --- 하단 안내문 (Info Banner) --- */
+QFrame#MainInfoBox {
+    background: ${SURFACE};
+    min-width: 830px;
+    max-width: 880px;
+}
+QLabel#InfoIcon {
+    color: ${NAVY};
+    font-size: 16px;
+    font-weight: 700;
+}
+QLabel#InfoText {
+    font-size: 13px;
+    color: ${SUB_TEXT};
+}
 /* --- 업로드 카드 ---------------------------------------------------- */
 #UploadCard {
     background: ${SURFACE};
@@ -463,4 +543,172 @@ QLabel#BubbleFoot {
     color: ${TEXT_MUTED};
     border-color: ${BORDER};
 }
+/* ---------- 검증 사이드 패널 ---------- */
+QFrame#ValidationPanel {
+    background: ${SURFACE};
+    border: 1px solid ${BORDER};
+    border-radius: ${RADIUS};
+}
+QLabel#ValidationTitle {
+    font-size: 13px;
+    font-weight: 700;
+    color: ${TEXT};
+}
+QLabel#ValidationCaption {
+    font-size: 11px;
+    font-weight: 700;
+    color: ${TEXT_MUTED};
+}
+QLabel#ValidationBadge {
+    font-size: 12px;
+    font-weight: 700;
+    color: ${TEXT_MUTED};
+    background: ${STEP_BG};
+    border: 1px solid ${BORDER};
+    border-radius: ${RADIUS_SM};
+    padding: 8px 10px;
+}
+QLabel#ValidationBadge[state="pass"] {
+    color: ${SUCCESS_DARK};
+    background: ${SUCCESS_BG};
+    border-color: ${SUCCESS_BORDER};
+}
+QLabel#ValidationBadge[state="fail"] {
+    color: ${DANGER_DARK};
+    background: ${DANGER_BG};
+    border-color: ${DANGER_BORDER};
+}
+QListWidget#IssueList {
+    background: ${SURFACE};
+    border: 1px solid ${BORDER_SOFT};
+    border-radius: ${RADIUS_SM};
+    outline: none;
+    font-size: 12px;
+}
+QListWidget#IssueList::item {
+    padding: 7px 10px;
+    border-bottom: 1px solid ${BORDER_SOFT};
+    color: ${DANGER_DARK};
+}
+QListWidget#IssueList::item:hover {
+    background: ${DANGER_BG};
+}
+QListWidget#IssueList::item:selected {
+    background: ${DANGER_BG};
+    color: ${DANGER_DARK};
+    border-left: 3px solid ${DANGER};
+}
+QScrollArea#ValidationDetailArea {
+    background: #FAFBFC;
+    border: 1px solid ${BORDER_SOFT};
+    border-radius: ${RADIUS_SM};
+}
+QLabel#ValidationDetail {
+    font-family: ${FONT_MONO};
+    font-size: 12px;
+    color: ${TEXT};
+    background: #FAFBFC;
+    padding: 10px;
+}
 
+/* ---------- 작년 단가표 적용됨 (초록 버튼 상태) ---------- */
+QPushButton#GhostButton[state="loaded"] {
+    color: ${SUCCESS_DARK};
+    background: ${SUCCESS_BG};
+    border: 1px solid ${SUCCESS_BORDER};
+    font-weight: 700;
+}
+QPushButton#GhostButton[state="loaded"]:hover {
+    background: ${SUCCESS_SOFT};
+}
+
+/* ---------- 값 수정 직접 입력칸 ---------- */
+QLineEdit#FixInput {
+    background: ${SURFACE};
+    border: 1px solid ${BORDER};
+    border-radius: ${RADIUS_SM};
+    padding: 6px 10px;
+    font-size: 12px;
+    color: ${TEXT};
+}
+QLineEdit#FixInput:focus {
+    border-color: ${ACCENT};
+}
+/* ---------- 행 추가/삭제 (+/-) — 기호만, 박스 없음 ---------- */
+QPushButton#RowButton {
+    background: transparent;
+    border: none;
+    color: ${TEXT_MUTED};
+    font-size: 18px;
+    font-weight: 700;
+    padding: 0px;
+}
+QPushButton#RowButton:hover {
+    color: ${ACCENT};
+}
+QPushButton#RowButton:pressed {
+    color: ${NAVY};
+}
+
+/* 고시 원문 뷰어 */
+QTextBrowser#NoticeDocument {
+    background: ${SURFACE};
+    border: 1px solid ${BORDER};
+    border-radius: ${RADIUS_SM};
+    padding: 10px;
+}
+
+/* 스플릿 뷰 핸들러(좌우 분할 구분선) */
+QSplitter::handle {
+    background: ${BORDER_SOFT};
+    width: 4px;
+}
+QSplitter::handle:hover {
+    background: ${NAVY_LIGHT};
+}
+
+/* 우측 패널 스크롤 영역 (파이썬 인라인 스타일 대체) */
+QScrollArea#NoticeScrollArea,
+QWidget#NoticeScrollViewport,
+QWidget#NoticeScrollBody {
+    background: transparent;
+    border: none;
+}
+
+/* 대조 결과 요약 텍스트 */
+QLabel#CompareSummary {
+    font-size: 14px;
+    font-weight: 700;
+    padding: 12px;
+    border-radius: ${RADIUS_SM};
+}
+QLabel#CompareSummary[state="pass"] {
+    color: ${SUCCESS_DARK};
+    background: ${SUCCESS_BG};
+    border: 1px solid ${SUCCESS_BORDER};
+}
+QLabel#CompareSummary[state="fail"] {
+    color: ${DANGER_DARK};
+    background: ${DANGER_BG};
+    border: 1px solid ${DANGER_BORDER};
+}
+
+/* 검증 상세 내역 및 안내 문구 */
+QLabel#FindingDetail {
+    font-size: 12px;
+    color: ${TEXT_MUTED};
+    background: ${SURFACE};
+    border: 1px solid ${BORDER_SOFT};
+    border-radius: ${RADIUS_SM};
+    padding: 12px;
+    line-height: 1.5;
+}
+
+#CellEditor {
+    background: ${SURFACE};
+    color: ${NAVY};
+    border: 1px solid ${NAVY};
+    border-radius: 0;
+    padding: 0 6px;
+    margin: 0;
+}

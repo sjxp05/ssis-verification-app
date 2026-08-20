@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, Qt, pyqtSignal
 from PyQt6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QWidget
 
 _NUMBER_RE = re.compile(r"[^0-9.\-]")
@@ -56,6 +56,7 @@ class ValueField(QWidget):
         self._input.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._input.textEdited.connect(self._on_text_edited)
         self._input.editingFinished.connect(self._reformat)
+        self._input.installEventFilter(self)
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -86,6 +87,10 @@ class ValueField(QWidget):
         if isinstance(value, float) and not value.is_integer():
             return f"{value:,.2f}"
         return f"{int(value):,}"
+
+    def _plain_format(self, value: float | int | str | None) -> str:
+        # 편집 중에는 퍼센트 기호/쉼표 등 표시용 꾸밈을 다 떼고 순수 숫자로 보여준다.
+        return self._format(value).replace(",", "").replace("%", "")
 
     def _parse(self, text: str) -> float | str | None:
         if self.kind == "text":
@@ -136,6 +141,15 @@ class ValueField(QWidget):
         self._input.setReadOnly(read_only)
 
     # --- 내부 ------------------------------------------------------------
+    def eventFilter(self, obj, event):  # noqa: N802 (Qt override)
+        if (
+            obj is self._input
+            and event.type() == QEvent.Type.FocusIn
+            and not self._input.isReadOnly()
+        ):
+            self._input.setText(self._plain_format(self.value()))
+        return super().eventFilter(obj, event)
+
     def _on_text_edited(self, _text: str) -> None:
         self._update_state()
         self.valueChanged.emit(self.key, self.value())

@@ -11,9 +11,9 @@ class UploadSlot:
     description: str
     extensions: tuple[str, ...]
     icon: str = "📄"
-    # True면 services.recent_files 에 저장된 최근 경로가 있을 때 업로드를 건너뛸 후보
-    # (자동 불러오기는 아직 미구현 — services/recent_files.py, upload_page.py 의 관련 TODO 참고)
-    remember_last: bool = False
+    remember_last: bool = (
+        False  # True면 services.recent_files 에 저장된 최근 경로가 있을 때 자동 채움
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,11 +51,12 @@ UNIT_PRICE = FlowSpec(
     upload_description=("조견표를 올리면 단가 계산에 필요한 값을 자동으로 읽어옵니다."),
     uploads=(
         UploadSlot(
-            key="sheet",
+            key="jogyeon",
             title="조견표",
             description="Excel 형식의 조견표 · 등급·구간 정보를 읽습니다",
             extensions=(".xlsx", ".xls"),
             icon="▦",
+            remember_last=True,
         ),
     ),
     export_names=("기본급여_단가표.xlsx", "추가급여_단가표.xlsx"),
@@ -63,13 +64,13 @@ UNIT_PRICE = FlowSpec(
 
 NOTICE_VERIFY = FlowSpec(
     key="notice_verify",
-    menu_title="고시 검증 및 결제단가표 생성",
-    menu_description="고시와 조견표, 단가표를 대조해 고시의 내용이 옳은지 검증합니다.(준비 중)",
-    window_title="고시 검증 및 결제단가표 생성",
-    steps=("문서 업로드", "값 확인", "결제단가표 생성 및 저장"),
+    menu_title="고시 - 조견표 대조",
+    menu_description="고시에서 월 한도액 값을 읽어 조견표의 값과 일치하는지 대조합니다.",
+    window_title="고시 - 조견표 대조",
+    steps=("문서 업로드", "값 확인"),
     upload_title="문서 업로드",
     upload_description=(
-        "고시 문서와 조견표, 기본급여 단가표를 올리면 검증에 필요한 값을 자동으로 읽어옵니다."
+        "고시 문서와 조견표를 올리면 검증에 필요한 값을 자동으로 읽어옵니다."
     ),
     uploads=(
         UploadSlot(
@@ -78,17 +79,40 @@ NOTICE_VERIFY = FlowSpec(
             description="hwpx 형식의 고시 문서를 업로드해 주세요.",
             extensions=(".hwpx",),
             icon="📄",
+            remember_last=True,
         ),
         UploadSlot(
-            key="sheet",
+            key="jogyeon",
             title="조견표",
             description="Excel 형식의 조견표 · 등급·구간 정보를 읽습니다",
             extensions=(".xlsx", ".xls"),
             icon="▦",
             remember_last=True,
         ),
+    ),
+)
+
+PAYMENT_PRICE = FlowSpec(
+    key="payment_price",
+    menu_title="결제단가표 생성",
+    menu_description="고시·기본급여 단가표에서 상수를 읽어 결제 단가표를 만듭니다.",
+    window_title="결제단가표 생성",
+    steps=("문서 업로드", "값 확인", "결제단가표 생성 및 저장"),
+    upload_title="문서 업로드",
+    upload_description=(
+        "고시 문서와 기본급여 단가표를 올리면 단가 계산에 필요한 값을 자동으로 읽어옵니다."
+    ),
+    uploads=(
         UploadSlot(
-            key="unit_price_table",
+            key="guide",
+            title="고시",
+            description="hwpx 형식의 고시 문서를 업로드해 주세요.",
+            extensions=(".hwpx",),
+            icon="📄",
+            remember_last=True,
+        ),
+        UploadSlot(
+            key="basic_unit_price",
             title="기본급여 단가표",
             description="Excel 형식의 기본급여 단가표를 업로드해 주세요.",
             extensions=(".xlsx", ".xls"),
@@ -97,8 +121,6 @@ NOTICE_VERIFY = FlowSpec(
         ),
     ),
     export_names=("결제단가표.xlsx",),
-    stub=True,
-    stub_notice="검증 파이프라인은 준비 중입니다. 파일 확인까지만 가능합니다.",
 )
 
-FLOWS: tuple[FlowSpec, ...] = (UNIT_PRICE, NOTICE_VERIFY)
+FLOWS: tuple[FlowSpec, ...] = (UNIT_PRICE, NOTICE_VERIFY, PAYMENT_PRICE)
