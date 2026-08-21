@@ -36,6 +36,12 @@ class Form:
     kind: str
 
 
+# 원래 표기가 등급인지 구간인지. engine.py에서 표기 변경 여부를 알려주기 위해 사용
+def ordinal_kind_diff(label: str) -> str | None:
+    matched = _ORDINAL.match(label)
+    return matched.group(2) if matched else None
+
+
 def parse(label: str) -> Band | Ordinal | Form | None:
     matched = _BAND.match(label)
     if matched:
@@ -43,7 +49,8 @@ def parse(label: str) -> Band | Ordinal | Form | None:
 
     matched = _ORDINAL.match(label)
     if matched:
-        return Ordinal(int(matched.group(1)), matched.group(2))
+        # 실제 조견표 간 매칭 시에는 '등급'으로 표시
+        return Ordinal(int(matched.group(1)), "등급")
 
     matched = _FORM.match(label)
     if matched:

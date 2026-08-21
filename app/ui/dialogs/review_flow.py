@@ -142,11 +142,6 @@ class LabelReviewFlow:
         self._generation += 1
         generation = self._generation
 
-        # 대조 파일 경로 저장하기
-        recent_files.set_recent_path(
-            yearConfig.SYSTEM_YEAR, BASELINE_KEY, baseline_path
-        )
-
         # 커서 모양을 원형 대기 커서로 바꾸기
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
 
@@ -166,7 +161,7 @@ class LabelReviewFlow:
     def _on_matched(
         self,
         generation: int,
-        baseline: Path,
+        baseline_path: Path,
         target_path: Path,
         report: MatchReport,
         on_done: Callable[[bool], None],
@@ -183,24 +178,28 @@ class LabelReviewFlow:
             and not report.structural_alerts
             and not report.value_anomalies
         ):
-            self._remember(target_path)
             QMessageBox.information(
                 self._parent,
                 "라벨 대조 완료",
-                f"{baseline.name} 과(와) 대조했습니다.\n"
+                f"{baseline_path.name} 과(와) 대조했습니다.\n"
                 f"문구 {report.summary.total_labels}개가 모두 일치해 확인할 항목이 없습니다.",
             )
             on_done(True)
             return
 
-        dialog = ReviewDialog(report, baseline, target_path, self._parent)
+        dialog = ReviewDialog(report, baseline_path, target_path, self._parent)
         if dialog.exec() != QDialog.DialogCode.Accepted:
             on_done(False)
             return
 
         for decision in dialog.decisions():
             decision_log.record(decision)
-        self._remember(target_path)
+
+        # 대조 파일 경로 저장하기
+        recent_files.set_recent_path(
+            yearConfig.SYSTEM_YEAR, BASELINE_KEY, baseline_path
+        )
+
         on_done(True)
 
     def _on_match_failed(
@@ -246,7 +245,3 @@ class LabelReviewFlow:
             self._parent, "대조할 조견표 선택", "", "Excel 파일 (*.xlsx)"
         )
         return Path(path) if path else None
-
-    def _remember(self, path: Path) -> None:
-        # 다음 연도의 기준 파일로 저장한다.
-        recent_files.set_recent_path(yearConfig.SYSTEM_YEAR + 1, BASELINE_KEY, path)
