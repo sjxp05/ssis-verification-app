@@ -37,7 +37,9 @@ def match_workbooks(
     target_path: str | Path,
     config: HybridConfig | None = None,
 ) -> MatchReport:
-    config = config or HybridConfig()#실험을 통해 찾아낸 최적의 모델 하이퍼파라미터 hybrid.py에서 불러오기
+    config = (
+        config or HybridConfig()
+    )  # 실험을 통해 찾아낸 최적의 모델 하이퍼파라미터 hybrid.py에서 불러오기
     baseline = loader.load(baseline_path, anchors.JOGYEON_SHEET_NAMES)
     target = loader.load(target_path, anchors.JOGYEON_SHEET_NAMES)
 
@@ -69,22 +71,35 @@ def match_workbooks(
     encoder = DenseEncoder()
 
     # ValueExtractor와 동일하게 라벨 매칭을 같은 시트 안에서만 수행
+    # 시트 이름이 완전히 같지 않아도(연도 표기 등) _find_missing과 같은 방식으로 찾는다
     for sheet in baseline.sheets:
-        if sheet not in target.sheets:
+        target_sheet = _resolve_sheet(sheet, target.sheets, anchors.JOGYEON_SHEET_NAMES)
+        if target_sheet is None:
             continue
         matcher = (
-            HybridMatcher(list(target_labels[sheet]), config, encoder=encoder)
-            if target_labels[sheet]
+            HybridMatcher(list(target_labels[target_sheet]), config, encoder=encoder)
+            if target_labels[target_sheet]
             else None
         )
-        matchers[sheet] = matcher
+        matchers[target_sheet] = matcher
         report.items += _match_sheet(
-            sheet, base_labels[sheet], target_labels[sheet], matcher, report
+            sheet, base_labels[sheet], target_labels[target_sheet], matcher, report
         )
 
     report.missing_values = _find_missing(target_labels, matchers, base_labels)
     report.summary = _summarize(report.items)
     return report
+
+
+# 시트 이름이 완전히 같지 않을 때(연도 표기 등) 키워드를 포함하는 시트를 찾는다.
+# 완전일치가 있으면 그걸 우선한다.
+def _resolve_sheet(name: str, candidates, keywords: tuple[str, ...]) -> str | None:
+    if name in candidates:
+        return name
+    keyword = next((k for k in keywords if k in name), None)
+    if keyword is None:
+        return None
+    return next((s for s in candidates if keyword in s), None)
 
 
 # 올해 파일에서 값을 읽을 수 있는지 미리 확인
@@ -96,13 +111,21 @@ def _find_missing(
 ) -> list[MissingValue]:
     missing: list[MissingValue] = []
     for required in required_values.REQUIRED:
-        # labels = target_labels.get(required.sheet, {})
-        actual_sheet = next((s for s in target_labels if required.sheet in s), None)
+        actual_sheet = _resolve_sheet(
+            required.sheet, target_labels, anchors.JOGYEON_SHEET_NAMES
+        )
         labels = target_labels.get(actual_sheet, {}) if actual_sheet else {}
         key = normalize(required.label)
 
         if required.exact:
-            reason = "" if key in labels else "올해 파일에서 찾지 못했습니다"
+            found = key in labels
+            if not found:
+                # 등급/구간처럼 표기만 다른 동등 라벨도 인정
+                parsed = rule_parser.parse(key)
+                found = parsed is not None and any(
+                    rule_parser.parse(other) == parsed for other in labels
+                )
+            reason = "" if found else "올해 파일에서 찾지 못했습니다"
         else:
             hits = [ref for norm, ref in labels.items() if key in norm]
             rows = {ref.location.row for ref in hits if ref.location}
@@ -115,13 +138,21 @@ def _find_missing(
                 reason = ""
 
         # 에러 사유가 발생해도 optional 항목인 경우 에러 무시
-        if getattr(required, 'optional', False) and reason == "올해 파일에서 찾지 못했습니다":
+        if (
+            getattr(required, "optional", False)
+            and reason == "올해 파일에서 찾지 못했습니다"
+        ):
             reason = ""
 
         if not reason:
             continue
 
-        baseline_ref = base_labels.get(required.sheet, {}).get(key)
+        actual_base_sheet = _resolve_sheet(
+            required.sheet, base_labels, anchors.JOGYEON_SHEET_NAMES
+        )
+        baseline_ref = (
+            base_labels.get(actual_base_sheet, {}).get(key) if actual_base_sheet else None
+        )
         missing.append(
             MissingValue(
                 label=required.label,
@@ -129,7 +160,7 @@ def _find_missing(
                 produces=required.produces,
                 tables=required.tables,
                 reason=reason,
-                candidates=_suggest(key, matchers.get(required.sheet), labels),
+                candidates=_suggest(key, matchers.get(actual_sheet), labels),
                 baseline_location=baseline_ref.location if baseline_ref else None,
             )
         )
@@ -220,6 +251,18 @@ def _match_sheet(
         )
         if matched:
             claimed.add(matched)
+        if item.match_path is MatchPath.RULE_PARSER:
+            base_kind = rule_parser.ordinal_kind_diff(ref.raw)
+            target_kind = rule_parser.ordinal_kind_diff(item.matched_label or "")
+            if base_kind and target_kind and base_kind != target_kind:
+                report.structural_alerts.append(
+                    StructuralAlert(
+                        "ORDINAL_KIND_CHANGED",
+                        sheet,
+                        f"작년 '{ref.raw}' -> 올해 '{item.matched_label}' "
+                        f"({base_kind}에서 {target_kind}로 표기가 바뀌었습니다)",
+                    )
+                )
         if scores is not None:
             reviewed.append((item, scores))
         items.append(item)
@@ -257,7 +300,7 @@ def _match_one(
         item = MatchItem(
             item_id,
             ref,
-            Status.AUTO_PASS,#일치판정:EXACT, NORMALIZED, RULE_PARSER
+            Status.AUTO_PASS,  # 일치판정:EXACT, NORMALIZED, RULE_PARSER
             path,
             candidates=[Candidate(1, found.raw, 1.0, 1.0, 1.0, found.location)],
             matched_label=found.raw,
@@ -303,7 +346,7 @@ def _match_deterministic(
     if ref.normalized in target_labels:
         return MatchPath.NORMALIZED, ref.normalized
 
-    #구조 일치 비교(예: 100%이하 == 100 % 이하)
+    # 구조 일치 비교(예: 100%이하 == 100 % 이하)
     token = rule_parser.parse(ref.normalized)
     if token is not None:
         key = det.parsed.get(token)
