@@ -569,7 +569,10 @@ def _validate_limits(limits):
             + "\n".join(f"·  {g}  {show_price(injeong[g])}" for g in grades),
             injeong[grades[0]]["출처"]))
 
-    ordered = [base[s]["금액"] for s in sorted(base)]
+    ordered = [
+        base[s]["금액"]
+        for s in sorted(base, key=lambda s: int(re.sub(r"\D", "", s) or 0))
+    ]
     if ordered != sorted(ordered, reverse=True) or len(set(ordered)) != len(ordered):
         issues.append(_issue("활동지원급여",
                              "월 한도액이 구간 순으로 감소하지 않습니다."))

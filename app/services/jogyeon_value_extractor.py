@@ -278,6 +278,9 @@ class ValueExtractor:
                 if name in JH_LABELS and name not in col_map:
                     col_map[name.replace("구간", "등급")] = col
 
+        # 시트에 컬럼이 어떤 순서로 있든 1~15 순서로 고정
+        col_map = dict(sorted(col_map.items(), key=lambda item: int(item[0][:-2])))
+
         missing = [z for z in JH_ZONES if z not in col_map]
         if missing:
             raise ExtractError(f"'{keyword}' 표에서 구간을 찾지 못했습니다: {missing}")

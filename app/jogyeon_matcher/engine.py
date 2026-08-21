@@ -151,7 +151,9 @@ def _find_missing(
             required.sheet, base_labels, anchors.JOGYEON_SHEET_NAMES
         )
         baseline_ref = (
-            base_labels.get(actual_base_sheet, {}).get(key) if actual_base_sheet else None
+            base_labels.get(actual_base_sheet, {}).get(key)
+            if actual_base_sheet
+            else None
         )
         missing.append(
             MissingValue(
