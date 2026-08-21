@@ -96,7 +96,9 @@ def _find_missing(
 ) -> list[MissingValue]:
     missing: list[MissingValue] = []
     for required in required_values.REQUIRED:
-        labels = target_labels.get(required.sheet, {})
+        # labels = target_labels.get(required.sheet, {})
+        actual_sheet = next((s for s in target_labels if required.sheet in s), None)
+        labels = target_labels.get(actual_sheet, {}) if actual_sheet else {}
         key = normalize(required.label)
 
         if required.exact:
@@ -111,6 +113,11 @@ def _find_missing(
                 reason = f"서로 다른 {len(rows)}개 행에 나뉘어 있어 어디서 읽을지 정할 수 없습니다"
             else:
                 reason = ""
+
+        # 에러 사유가 발생해도 optional 항목인 경우 에러 무시
+        if getattr(required, 'optional', False) and reason == "올해 파일에서 찾지 못했습니다":
+            reason = ""
+
         if not reason:
             continue
 

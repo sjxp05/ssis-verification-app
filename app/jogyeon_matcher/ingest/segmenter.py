@@ -250,34 +250,34 @@ def compare_sheets(
                 f"값을 읽어야 하는 '{req}' 관련 시트가 올해 파일에 없습니다.", fatal=True,
             ))
 
-        # 필수 키워드가 없는 시트들은 이름이 완벽히 같으면 매핑
-        for t_sheet in target:
-            if t_sheet not in target_to_base:
-                if t_sheet in baseline and t_sheet not in base_to_target:
-                    base_to_target[t_sheet] = t_sheet
-                    target_to_base[t_sheet] = t_sheet
-                else:
-                    alerts.append(StructuralAlert("SHEET_ADDED", t_sheet, "작년에 없던 시트입니다."))
+    # 필수 키워드가 없는 시트들은 이름이 완벽히 같으면 매핑
+    for t_sheet in target:
+        if t_sheet not in target_to_base:
+            if t_sheet in baseline and t_sheet not in base_to_target:
+                base_to_target[t_sheet] = t_sheet
+                target_to_base[t_sheet] = t_sheet
+            else:
+                alerts.append(StructuralAlert("SHEET_ADDED", t_sheet, "작년에 없던 시트입니다."))
 
-        for b_sheet, t_sheet in base_to_target.items():
-            base_regions = baseline[b_sheet]
-            target_regions = baseline[t_sheet]
+    for b_sheet, t_sheet in base_to_target.items():
+        base_regions = baseline[b_sheet]
+        target_regions = target[t_sheet]
 
-            if len(base_regions) != len(target_regions):
-                alerts.append(StructuralAlert(
-                    "TABLE_COUNT_CHANGED", t_sheet,
-                    f"표가 {len(base_regions)}개에서 {len(target_regions)}개로 늘거나 줄어, "
-                    "이 시트는 값 비교를 건너뜁니다.",
-                ))
-                continue
+        if len(base_regions) != len(target_regions):
+            alerts.append(StructuralAlert(
+                "TABLE_COUNT_CHANGED", t_sheet,
+                f"표가 {len(base_regions)}개에서 {len(target_regions)}개로 늘거나 줄어, "
+                "이 시트는 값 비교를 건너뜁니다.",
+            ))
+            continue
 
-            for base, tgt in zip(base_regions, target_regions):
-                for issue in fingerprint(tgt).diff(fingerprint(base)):
-                    code = "HEADER_ORDER_CHANGED" if "순서" in issue else "TABLE_SHAPE_CHANGED"
-                    alerts.append(StructuralAlert(code, t_sheet, issue, tgt.table_id))
+        for base, tgt in zip(base_regions, target_regions):
+            for issue in fingerprint(tgt).diff(fingerprint(base)):
+                code = "HEADER_ORDER_CHANGED" if "순서" in issue else "TABLE_SHAPE_CHANGED"
+                alerts.append(StructuralAlert(code, t_sheet, issue, tgt.table_id))
 
     for b_sheet in baseline:
-        if b_sheet in base_to_target:
+        if b_sheet not in base_to_target:
             is_missing_req = any(req in b_sheet for req in required)
             if not is_missing_req:
                 alerts.append(StructuralAlert(

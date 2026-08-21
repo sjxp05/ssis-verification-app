@@ -38,16 +38,17 @@ class RequiredLabel:
     produces: str  # 이 문구로 찾을 값
     tables: tuple[str, ...]  # 해당 값이 있어야 만들 수 있는 표
     exact: bool = False  # True이면 셀 내용이 정확히 일치해야 함
+    optional: bool = False 
 
 
 REQUIRED: tuple[RequiredLabel, ...] = (
     # ANCHOR (부분 문자열로 찾음)
     RequiredLabel(BASE_PRICE, "인정조사", "기본단가", (BASIC,)),
-    RequiredLabel(A_VALUE, "인정조사", "인정조사 본인부담금 상한액", (BASIC,)),
+    RequiredLabel(A_VALUE, "인정조사", "인정조사 본인부담금 상한액", (BASIC,),), 
     RequiredLabel(BASIC_RATE, "인정조사", "인정조사 본인부담률", (BASIC, ADD)),
     RequiredLabel(GRADE_HEADER, "인정조사", "인정조사 월한도액", (BASIC,)),
     RequiredLabel(
-        CAP_LABEL, "산정특례", "종합조사·산정특례 본인부담금 상한액", (BASIC,)
+        CAP_LABEL, "산정특례", "종합조사·산정특례 본인부담금 상한액", (BASIC,), optional=True
     ),
     RequiredLabel(INCOME_HEADER, "산정특례", "종합조사·산정특례 본인부담률", (BASIC,)),
     RequiredLabel(JH_BASIC, "종합조사", "종합조사 월한도액 (기본형)", (BASIC,)),
