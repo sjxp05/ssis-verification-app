@@ -109,6 +109,10 @@ class ValueExtractor:
             return int(value) if float(value).is_integer() else float(value)
 
         text = self._squeeze(value).replace(",", "").replace("%", "")
+
+        if text == "-":
+            return 0
+
         if text.lower() in ("", "nan", "none"):
             raise ExtractError("값이 비어 있습니다")
         try:
@@ -311,9 +315,9 @@ class ValueExtractor:
         amounts.update(
             {f"추가급여 월한도액[{k}]": v for k, v in data["추가급여 월한도액"].items()}
         )
-        bad = {k: v for k, v in amounts.items() if v <= 0}
+        bad = {k: v for k, v in amounts.items() if v < 0}
         if bad:
-            raise ExtractError(f"금액이 0 이하인 항목이 있습니다: {bad}")
+            raise ExtractError(f"금액이 음수인 항목이 있습니다: {bad}")
 
         # 종합조사 월 한도액이 구간이 올라갈수록 감소하는지 검증
         for key in ("종합조사 월한도액 (기본형)", "종합조사 월한도액 (확장형)"):
