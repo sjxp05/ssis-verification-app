@@ -228,37 +228,60 @@ def compare_sheets(
     작업용으로 남긴 시트가 사라지거나 표가 더 쪼개지는 일은 정상 범위이고,
     그런 것까지 막으면 정상적인 조견표로도 진행이 안 된다.
     """
+    # 작년 시트이름과 완전히 동일하지 않아도 시트이름에 키워드가 포함되면 일단 매칭을 진행하도록 수정
     alerts: list[StructuralAlert] = []
-    for sheet, target_regions in target.items():
-        base_regions = baseline.get(sheet)
-        if base_regions is None:
-            alerts.append(StructuralAlert("SHEET_ADDED", sheet, "작년에 없던 시트입니다."))
-            continue
 
-        if len(base_regions) != len(target_regions):
+    base_to_target = {}
+    target_to_base = {}
+
+    # 필수키워드가 포함된 작년 - 올해 시트끼리 매칭
+    for req in required:
+        b_sheet = next((s for s in baseline if req in s), None)
+        t_sheet = next((s for s in target if req in s), None)
+
+        if b_sheet and t_sheet:
+            base_to_target[b_sheet] = t_sheet
+            target_to_base[t_sheet] = b_sheet
+
+        # 작년에는 키워드가 포함된 시트가 있었는데 올해는 없는 경우
+        elif b_sheet and not t_sheet: 
             alerts.append(StructuralAlert(
-                "TABLE_COUNT_CHANGED", sheet,
-                f"표가 {len(base_regions)}개에서 {len(target_regions)}개로 늘거나 줄어, "
-                "이 시트는 값 비교를 건너뜁니다.",
+                "SHEET_MISSING", b_sheet,
+                f"값을 읽어야 하는 '{req}' 관련 시트가 올해 파일에 없습니다.", fatal=True,
             ))
-            continue
 
-        for base, tgt in zip(base_regions, target_regions):
-            for issue in fingerprint(tgt).diff(fingerprint(base)):
-                code = "HEADER_ORDER_CHANGED" if "순서" in issue else "TABLE_SHAPE_CHANGED"
-                alerts.append(StructuralAlert(code, sheet, issue, tgt.table_id))
+        # 필수 키워드가 없는 시트들은 이름이 완벽히 같으면 매핑
+        for t_sheet in target:
+            if t_sheet not in target_to_base:
+                if t_sheet in baseline and t_sheet not in base_to_target:
+                    base_to_target[t_sheet] = t_sheet
+                    target_to_base[t_sheet] = t_sheet
+                else:
+                    alerts.append(StructuralAlert("SHEET_ADDED", t_sheet, "작년에 없던 시트입니다."))
 
-    for sheet in baseline:
-        if sheet in target:
-            continue
-        if sheet in required:
-            alerts.append(StructuralAlert(
-                "SHEET_MISSING", sheet,
-                "값을 읽어야 하는 시트인데 올해 파일에 없습니다.", fatal=True,
-            ))
-        else:
-            alerts.append(StructuralAlert(
-                "SHEET_REMOVED", sheet, "작년 파일에만 있던 시트 (값 추출에 쓰지 않음)",
+        for b_sheet, t_sheet in base_to_target.items():
+            base_regions = baseline[b_sheet]
+            target_regions = baseline[t_sheet]
+
+            if len(base_regions) != len(target_regions):
+                alerts.append(StructuralAlert(
+                    "TABLE_COUNT_CHANGED", t_sheet,
+                    f"표가 {len(base_regions)}개에서 {len(target_regions)}개로 늘거나 줄어, "
+                    "이 시트는 값 비교를 건너뜁니다.",
+                ))
+                continue
+
+            for base, tgt in zip(base_regions, target_regions):
+                for issue in fingerprint(tgt).diff(fingerprint(base)):
+                    code = "HEADER_ORDER_CHANGED" if "순서" in issue else "TABLE_SHAPE_CHANGED"
+                    alerts.append(StructuralAlert(code, t_sheet, issue, tgt.table_id))
+
+    for b_sheet in baseline:
+        if b_sheet in base_to_target:
+            is_missing_req = any(req in b_sheet for req in required)
+            if not is_missing_req:
+                alerts.append(StructuralAlert(
+                "SHEET_REMOVED", b_sheet, "작년 파일에만 있던 시트 (값 추출에 쓰지 않음)",
             ))
     return alerts
 

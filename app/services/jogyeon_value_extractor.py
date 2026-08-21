@@ -359,11 +359,25 @@ class ValueExtractor:
         self._source_path=file.path
         readers = (self.read_ij_value, self.read_sj_value, self.read_jh_value)
         data = {}
+        # for reader, sheet in zip(readers, JOGYEON_SHEET_NAMES, strict=True):
+        try:
+            sheet_names = pd.ExcelFile(file.path).sheet_names
+        except ExtractError as error:
+            raise ExtractError(f"엑셀 파일을 읽는 중 오류가 발생했습니다: {error}") from None
+
         for reader, sheet in zip(readers, JOGYEON_SHEET_NAMES, strict=True):
+            matched_sheet = next(
+                (name for name in sheet_names if sheet in name),
+                None
+            )
+            if matched_sheet is None:
+                raise ExtractError(f"'{sheet}'(이)가 포함된 시트를 찾을 수 없습니다.")
+
             try:
-                data.update(reader(file.path, sheet))
+                data.update(reader(file.path, matched_sheet))
             except ExtractError as error:
-                raise ExtractError(f"'{sheet}' 시트 — {error}") from None
+                raise ExtractError(f"'{matched_sheet}' 시트 - {error}") from None
+        
         self._validate(data)
 
         # 화면에 탭(페이지) 2개로 나눠 보여주기 위해 dict 2개짜리 list로 반환

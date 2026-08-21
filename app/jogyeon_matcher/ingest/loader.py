@@ -72,7 +72,13 @@ def load(path: str | Path, required_sheets: tuple[str, ...] = ()) -> Workbook:
         trimmed = _trim_to_used_range(frame)
         workbook.sheets[sheet_name] = _sanitize(trimmed, sheet_name, workbook.audit)
 
-    missing = [s for s in required_sheets if s not in workbook.sheets]
+    # [인정조사, 산정특례, 종합조사] 시트이름 완전일치 탐색에서 키워드 포함 탐색으로 변경
+    # missing = [s for s in required_sheets if s not in workbook.sheets]
+    missing = []
+    for req in required_sheets:
+        if not any(req in actual for actual in workbook.sheets):
+            missing.append(req)
+
     if missing:
         raise IngestError(
             f"필수 시트가 없습니다: {missing}\n"
