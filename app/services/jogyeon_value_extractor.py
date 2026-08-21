@@ -181,10 +181,35 @@ class ValueExtractor:
     def read_sj_value(self, file_path, sheet_name):
         df, norm = self._load(file_path, sheet_name)
 
-        # 본인부담금 상한액 
-        r, c = self._find_one(norm, CAP_LABEL)
-        copay_cap = self._num(df.iat[r, c - 1])
-        self._mark("종합조사/산정특례 본인부담금 상한액",sheet_name,r,c-1)
+        # 본인부담금 상한액
+        copay_cap = None
+        cap_r, cap_c = -1, -1
+
+        try:
+            r, c = self._find_one(norm, CAP_LABEL)
+            copay_cap = self._num(df.iat[r, c - 1])
+            cap_r, cap_c = r, c-1
+        except Exception:
+            pass
+
+        if copay_cap is None:
+            try:
+                r, c = self._find_one(norm, A_VALUE)
+                for offset in (1,2,3):
+                    if c+offset < df.shape[1]:
+                        val = self._num(df.iat[r, c+offset])
+                        if val is not None and 100000 <= val <= 999999:
+                            copay_cap = val
+                            cap_r, cap_c = r, c + offset
+                            break
+            except Exception:
+                pass
+
+            if copay_cap is None:
+                raise ExtractError("종합조사/산정특례 본인부담금 상한액을 찾을 수 없습니다.")
+            
+            self._mark("종합조사/산정특례 본인부담금 상한액",sheet_name,cap_r,cap_c)
+        
 
         # 본인부담률 
         r, c = self._find_one(norm, INCOME_HEADER)
