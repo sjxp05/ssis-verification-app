@@ -804,11 +804,15 @@ class TableWriter:
                             PAYMENT_COL_SUPPORT_AMOUNT: support,
                             PAYMENT_COL_GOV_SUPPORT_AMOUNT: grade[COL_GOV_SUPPORT],
                             PAYMENT_COL_COPAYMENT_AMOUNT: grade[COL_COPAYMENT],
-                            PAYMENT_COL_GOV_SUPPORT_RATE: round(
-                                grade[COL_GOV_SUPPORT] / support, 10
+                            PAYMENT_COL_GOV_SUPPORT_RATE: (
+                                0
+                                if support == 0
+                                else round(grade[COL_GOV_SUPPORT] / support, 10)
                             ),
-                            PAYMENT_COL_COPAYMENT_RATE: round(
-                                grade[COL_COPAYMENT] / support, 10
+                            PAYMENT_COL_COPAYMENT_RATE: (
+                                0
+                                if support == 0
+                                else round(grade[COL_COPAYMENT] / support, 10)
                             ),
                             PAYMENT_COL_USE_YN: "Y",
                             PAYMENT_COL_SERVICE_START_DATE: int(f"{business_year}0101"),

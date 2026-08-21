@@ -28,7 +28,7 @@ class PriceEditDelegate(QStyledItemDelegate):
             painter.fillRect(option.rect, background)
         super().paint(painter, option, index)
 
-    def createEditor(self, parent):
+    def createEditor(self, parent, option, index):
         editor = QLineEdit(parent)
         editor.setObjectName("CellEditor")
         editor.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
