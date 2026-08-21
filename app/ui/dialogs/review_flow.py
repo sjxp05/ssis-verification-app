@@ -33,16 +33,14 @@ from services import recent_files
 from ui.dialogs.review_dialog import ReviewDialog
 from utils.date import yearConfig
 
-# 대조 기준이 되는 조견표 경로를 기억해 두는 키
-BASELINE_KEY = "jogyeon_baseline"
-
-# 전년도 조견표들을 확인하는 키
+# 이번 년도 대조 이력이 있는 조견표 경로를 기억해 두는 키
 JOGYEON_KEY = "jogyeon"
+BASELINE_KEY = "jogyeon_baseline"
 
 
 class _MatchSignals(QObject):
     finished = pyqtSignal(int, object)  # generation, MatchReport
-    failed = pyqtSignal(int, str)  # generation, 사유
+    failed = pyqtSignal(int, str)  # generation, 오류 발생 원인
 
 
 # match_workbooks() 를 GUI 스레드 밖에서 돌린다. upload_page._ExtractTask 와 같은 패턴.
@@ -96,21 +94,13 @@ class LabelReviewFlow:
     def run(self, sheet: UploadedFile, on_done: Callable[[bool], None]) -> None:
         # 기존에 사용한 대조 파일이 있는지 확인
         baseline = recent_files.get_recent_path(yearConfig.SYSTEM_YEAR, BASELINE_KEY)
+        # 이미 해당 년도에 조견표 대조를 한 기록이 있는지
+        match_history = recent_files.get_recent_path(
+            yearConfig.SYSTEM_YEAR, JOGYEON_KEY
+        )
 
-        # 현재 파일을 다른 파일과 대조한 기록이 없는 경우
-        if baseline is None:
-            # 이전 년도 조견표들을 모두 검색해서 가장 가까운 연도의 것을 찾음
-            baseline = recent_files.search_jogyeon_history(
-                yearConfig.SYSTEM_YEAR, JOGYEON_KEY
-            )
-
-            # TODO: 이전 년도 조견표가 있는 경우 (대조한 기록은 없음) 선택할 수 있게 하기
-            #   - search_jogyeon_history()에서 {year: Path} 형태로 반환하도록 바꾸기
-            #   - 받은 dict 중 선택하거나, 다른 파일 선택 옵션 열어두기
-            #   - 다른 파일 선택을 누른 경우 파일 선택기 열어주기
-
-        if baseline is None:
-            # 대조할 파일을 찾지 못한 경우
+        if baseline is None or match_history != sheet.path:
+            # 대조할 파일이 없거나 기록과 다른 파일을 업로드한 경우
             question = (
                 "이전 년도 조견표와 대조하면 문구가 바뀐 항목을 미리 확인할 수 있습니다.\n"
                 "대조할 파일을 선택하시겠습니까?"
