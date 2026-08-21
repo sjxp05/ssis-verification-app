@@ -1,15 +1,4 @@
-# 조견표 라벨 대조 흐름
-#
-# 값을 읽기 전에 작년 조견표와 문구를 대조하고, 달라진 곳을 담당자가 확인하게 한다.
-# 서식이 바뀐 걸 모른 채 값을 읽으면 조용히 틀린 값이 나오기 때문이다.
-#
-# UploadPage 가 '문서 읽기 시작'을 누를 때 run(sheet, on_done) 을 부른다.
-# match_workbooks() 가 무거워 GUI 스레드를 막지 않도록 백그라운드에서 돌리고,
-# 끝나면 on_done(True|False) 를 콜백으로 부른다. 진행해도 되면 True, 담당자가
-# 중단을 택하면 False.
-#
-# 건너뛰는 경우에도 반드시 이유를 알린다. 조용히 통과시키면 기능이 꺼진 것과
-# 구분되지 않는다.
+# 조견표 라벨 대조 시 파일 선택 및 대조 결과를 알림창으로 표시
 
 from __future__ import annotations
 
@@ -45,7 +34,7 @@ class _MatchSignals(QObject):
     failed = pyqtSignal(int, str)  # generation, 사유
 
 
-# match_workbooks() 를 GUI 스레드 밖에서 돌린다. upload_page._ExtractTask 와 같은 패턴.
+# match_workbooks()를 별도 스레드에서 실행
 class _MatchTask(QRunnable):
     def __init__(self, baseline_path: Path, target_path: Path, generation: int) -> None:
         super().__init__()
