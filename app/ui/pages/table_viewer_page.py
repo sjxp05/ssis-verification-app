@@ -288,6 +288,19 @@ class TableViewerPage(QWidget):
         self._tabs.set_current(index)  # 버튼 상태
         self._on_tab_changed(flow, index)  # 제목·부제·표·저장 버튼 문구
 
+    def reset(self) -> None:
+        # 사업년도가 바뀌면 불러왔던 단가표(검증용/작년)는 다른 연도 것이므로 모두 초기화
+        self._reports.clear()
+        self._loaded_names.clear()
+        self._prev_names.clear()
+        self._prev_tables.clear()
+        self._original_tables.clear()
+        for tab in range(len(self._tables)):
+            self._hide_prev_split(tab)
+        self._update_prev_button()
+        self._update_load_button()
+        self._update_panel_button()
+
     # --- 검증 -------------------------------------------------------------
     def _model_of(self, tab_index: int) -> DataFrameModel:
         # DataFrameTable.model() 은 DataFrameModel 을 그대로 돌려준다

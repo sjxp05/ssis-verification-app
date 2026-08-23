@@ -299,8 +299,9 @@ class MainWindow(QMainWindow):
             self._locked_max_reached = None
 
     def _on_year_changed(self) -> None:
-        # 사업년도를 바꾸면 업로드 화면에 남아 있던 파일은 다른 연도 것이므로 새로 선택하게 함
+        # 사업년도를 바꾸면 업로드 화면과 단가표 화면에 남아 있던 파일은 다른 연도 것이므로 새로 선택하게 함
         self.upload_page.reset()
+        self.table_viewer_page.reset()
         if self._steps is not None:
             self._steps.reset()
 
