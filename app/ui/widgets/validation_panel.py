@@ -134,15 +134,26 @@ class ValidationPanel(QFrame):
         if report.notice:
             self._set_badge(report.notice, "waiting")
             return
+
+        warn_count=len(report.warn_cells)
+        warn_tail = f" · 경고 {warn_count}건" if warn_count else ""
+
         if not report.issues:
-            self._set_badge("PASS — 발견된 오류가 없습니다", "pass")
+            self._set_badge(f"PASS — 발견된 오류가 없습니다{warn_tail}", "pass")
             return
 
-        self._set_badge(f"FAIL — 오류 {len(report.issues)}건", "fail")
+        self._set_badge(f"FAIL — 오류 {len(report.issues)}건{warn_tail}", "fail")
         for issue in report.issues:
             item = QListWidgetItem(issue.title())
             item.setData(Qt.ItemDataRole.UserRole, issue)
             item.setToolTip(issue.detail())
+            self._list.addItem(item)
+
+        #경고 목록에 표시
+        for(row,column),msg in sorted(report._warn_cells.items()):
+            first_line=msg.split("\n")[0]
+            item = QListWidgetItem(f"⚠ {row + 1}행 · {column} — {first_line}")
+            item.setToolTip(msg)
             self._list.addItem(item)
 
     def show_cell(self, row: int, column: str) -> None:
@@ -229,6 +240,12 @@ class ValidationPanel(QFrame):
                 return
 
     def _on_item_clicked(self, item: QListWidgetItem) -> None:
+        data=item.data(Qt.ItemDataRole.UserRole)
+        if isinstance(data,tuple):
+            row,column=data
+            self.show_cell(row,column)
+            self.issueActivated.emit(row,column)
+            return
         issue: CellIssue = item.data(Qt.ItemDataRole.UserRole)
         self._detail.setText(issue.detail())
         if not issue.is_table_level() and issue.column:

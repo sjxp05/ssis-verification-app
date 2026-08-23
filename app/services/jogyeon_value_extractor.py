@@ -374,7 +374,7 @@ class ValueExtractor:
     def read_prev_unit_price(self, year: int) -> int | float | None:
         from services import recent_files
 
-        path = recent_files.get_recent_path(year, "jogyeon")
+        path = recent_files.get_recent_path(year-1, "jogyeon")
         if path is None or not path.exists():
             return None
         saved = dict(self._cell_map)
