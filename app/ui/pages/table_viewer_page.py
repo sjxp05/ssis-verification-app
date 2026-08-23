@@ -1,19 +1,9 @@
-# 2단계 — 생성된 단가표 화면.
-#
-# pandas DataFrame 을 엑셀 레이아웃처럼 보여주고,
-# 셀을 클릭하면 그 값이 어떻게 나온 값인지 산식을 말풍선으로 띄운다.
-#
-# [검증] 표가 들어올 때 services.table_validator 로 검증을 돌려서
-#   - 오른쪽 사이드 패널에 전체 오류 목록을 띄우고
-#   - 오류가 난 셀은 빨간 배경으로 표시하고 (셀을 누르면 패널에 상세 설명)
-#   - 모든 셀 hover 툴팁에 부담률(작년 표를 불러오면 증가율도)을 보여준다.
-# 검증 기준값(상한액·부담률·월한도액)은 전부 이전 단계에서 서비스가
-# 조견표에서 추출한 values 를 그대로 쓴다 — set_table() 의 values 인자.
+# 2단계 - 생성된 단가표 화면
 
 from __future__ import annotations
 import os
 import pandas as pd
-from PyQt6.QtCore import QModelIndex, pyqtSignal,Qt,QTimer
+from PyQt6.QtCore import QModelIndex, pyqtSignal, Qt, QTimer
 from PyQt6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
@@ -84,8 +74,12 @@ class TableViewerPage(QWidget):
         self._loaded_names: dict[int, str] = {}  # 탭별 '단가표 불러오기' 파일명
         self._prev_names: dict[int, str] = {}  # 탭별 작년 표 파일명 (버튼 표시용)
         self._loaded_names: dict[int, str] = {}  # 탭별 '단가표 불러오기' 파일명
-        self._original_tables: dict[int, tuple] = {}  # 불러오기 전 원래 표 (취소 시 복원용)
-        self._basic_reference: pd.DataFrame | None = None  # 결제단가 검증 기준(기본급여 표)
+        self._original_tables: dict[int, tuple] = (
+            {}
+        )  # 불러오기 전 원래 표 (취소 시 복원용)
+        self._basic_reference: pd.DataFrame | None = (
+            None  # 결제단가 검증 기준(기본급여 표)
+        )
         self._tabs = SegmentedTabBar([tab["label"] for tab in TABS[flow]], flow=flow)
         self._tabs.currentChanged.connect(self._on_tab_changed)
 
@@ -125,7 +119,7 @@ class TableViewerPage(QWidget):
         card_head.addStretch(1)
         card_head.addWidget(self._card_hint)
         card_head.addWidget(self._add_row_button)
-        card_head.addWidget(self._del_row_button)  
+        card_head.addWidget(self._del_row_button)
         card_head.addWidget(self._load_button)
         card_head.addWidget(self._prev_button)
         card_head.addWidget(self._panel_button)
@@ -171,7 +165,7 @@ class TableViewerPage(QWidget):
 
     # --- API --------------------------------------------------------------
     def set_flow(self, flow: str) -> None:
-        # flow가 바뀔 때만 탭바·표를 새로 만든다.
+        # flow가 바뀔 때만 탭바, 표 새로 만들기
         if flow == self._flow:
             return
         self._flow = flow
@@ -185,7 +179,7 @@ class TableViewerPage(QWidget):
         self._on_tab_changed(flow, 0)
 
     def set_values(self, values: dict | None) -> None:
-        # 검증 기준이 되는 서비스 추출값. set_table 보다 먼저(또는 함께) 넣는다.
+        # 검증 기준이 되는 서비스 추출값
         self._values = values
 
     def set_reference_table(self, df: pd.DataFrame | None) -> None:
@@ -212,7 +206,7 @@ class TableViewerPage(QWidget):
 
     # --- 내부 빌드 ----------------------------------------------------------
     def _build_tabs(self, flow: str) -> None:
-        # flow가 바뀔 때만 탭바를 새로 만들어 자리에 갈아 끼운다.
+        # flow가 바뀔 때만 탭바를 새로 만들어 이전 것과 교체
         old_tabs = self._tabs
         new_tabs = SegmentedTabBar([tab["label"] for tab in TABS[flow]], flow=flow)
         new_tabs.currentChanged.connect(self._on_tab_changed)
@@ -221,12 +215,12 @@ class TableViewerPage(QWidget):
         self._tabs = new_tabs
 
     def _build_tables(self, flow: str) -> None:
-        for splitter in getattr(self,"_splitters",[]):
+        for splitter in getattr(self, "_splitters", []):
             self._stack.removeWidget(splitter)
             splitter.deleteLater()
         self._tables = []
-        self._splitters:list[QSplitter]=[]
-        self._prev_views:list[DataFrameModel]=[]
+        self._splitters: list[QSplitter] = []
+        self._prev_views: list[DataFrameModel] = []
         self._reports.clear()
         self._prev_tables.clear()
         self._prev_names.clear()
@@ -243,7 +237,7 @@ class TableViewerPage(QWidget):
             )
             self._tables.append(table)
 
-            #작년 단가표 패널 평소 숨어있지만 불러오면 스플릿으로 나타남
+            # 작년 단가표 패널, 디폴트는 숨겨져 있고 불러오면 스플릿뷰로 나타남
             prev_view = DataFrameTable(
                 accent_columns=ACCENT_COLUMNS, show_row_numbers=False
             )
@@ -267,7 +261,7 @@ class TableViewerPage(QWidget):
 
     @staticmethod
     def _link_scrollbars(a: QAbstractItemView, b: QAbstractItemView) -> None:
-        # 세로·가로 스크롤을 양방향으로 묶는다.
+        # 세로, 가로 스크롤을 양방향으로 묶는다
         for bar_a, bar_b in (
             (a.verticalScrollBar(), b.verticalScrollBar()),
             (a.horizontalScrollBar(), b.horizontalScrollBar()),
@@ -281,7 +275,7 @@ class TableViewerPage(QWidget):
     def hide_bubbles(self) -> None:
         for table in self._tables:
             table.hide_bubble()
-        for view in getattr(self,"_prev_views",[]):
+        for view in getattr(self, "_prev_views", []):
             view.hide_bubble()
 
     def reset_tab(self, flow: str = "unit_price", index: int = 0) -> None:
@@ -331,8 +325,7 @@ class TableViewerPage(QWidget):
         self._update_panel_button()
 
     def _on_cell_selected(self, tab: int, index: QModelIndex) -> None:
-        # 기존 산식 말풍선 동작은 DataFrameTable 안에서 그대로 돌고,
-        # 여기서는 패널에 셀 상세(오류 설명 또는 지표)를 띄운다.
+        # 패널에 셀 상세(오류 설명 또는 지표) 띄우기
         report = self._reports.get(tab)
         if report is not None and index.isValid():
             df = self._tables[tab].dataframe()
@@ -353,7 +346,7 @@ class TableViewerPage(QWidget):
         self._panel.show_cell(row, column)
 
     def _on_add_row(self) -> None:
-        # 선택한 행 바로 아래에 행을 삽입한다
+        # 선택한 행 바로 아래에 행 삽입
         tab = self._tabs.current()
         table = self._tables[tab]
         model = self._model_of(tab)
@@ -374,13 +367,16 @@ class TableViewerPage(QWidget):
         model = self._model_of(tab)
         current = table.currentIndex()
         if not current.isValid():
-            QMessageBox.information(self, "행 삭제", "삭제할 행의 셀을 먼저 선택해 주세요.")
+            QMessageBox.information(
+                self, "행 삭제", "삭제할 행의 셀을 먼저 선택해 주세요."
+            )
             return
         row = current.row()
         df = model.dataframe()
         name = str(df.iloc[row].get("등급명", "") or "").strip() or "(빈 행)"
         answer = QMessageBox.question(
-            self, "행 삭제",
+            self,
+            "행 삭제",
             f"{row + 1}행을 삭제할까요?\n등급명: {name}",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
@@ -396,8 +392,7 @@ class TableViewerPage(QWidget):
         self._panel.show_cell(row, column)
 
     def _on_fix_requested(self, row: int, column: str, value) -> None:
-        # 패널의 '추천값 적용'/'직접 입력' — 셀 값을 바꾸고 즉시 재검증한다.
-        # DataFrame 자체가 바뀌므로 엑셀 저장 시 수정된 값이 그대로 나간다.
+        # 추천값 적용 or 직접 입력 시 셀 값을 바꾸고 즉시 재검증
         tab = self._tabs.current()
         if not self._model_of(tab).set_cell_value(row, column, value):
             return
@@ -405,7 +400,7 @@ class TableViewerPage(QWidget):
         self._panel.show_cell(row, column)
 
     def _on_fix_all(self) -> None:
-        # 수정 가능한 오류(기대값이 있는 셀 오류)를 전부 추천값으로 바꾼다.
+        # 수정 가능한 오류(기대값이 있는 셀 오류)를 전부 추천값으로 수정
         tab = self._tabs.current()
         model = self._model_of(tab)
         for _ in range(5):
@@ -427,7 +422,7 @@ class TableViewerPage(QWidget):
             for row, column, value in fixes:
                 model.set_cell_value(row, column, value)
             self._run_validation(tab)
- 
+
         # 추천값이 없어 자동으로 못 고친 오류 안내
         # (행 삭제로 인한 행 개수·소득형 결손, 등급구분 중복, 등급명 형식 등)
         report = self._reports.get(tab)
@@ -436,7 +431,8 @@ class TableViewerPage(QWidget):
             listed = "\n".join(f" · {issue.title()}" for issue in remaining[:8])
             more = f"\n · … 외 {len(remaining) - 8}건" if len(remaining) > 8 else ""
             QMessageBox.information(
-                self, "직접 수정이 필요한 오류",
+                self,
+                "직접 수정이 필요한 오류",
                 "다음 오류는 추천값이 없어 자동으로 고칠 수 없습니다.\n"
                 "행 추가/삭제, 등급명·등급구분 수정은 원본 파일을 직접 고친 뒤\n"
                 "다시 불러와 주세요.\n\n"
@@ -444,9 +440,9 @@ class TableViewerPage(QWidget):
             )
 
     def _on_load_table(self) -> None:
-        # 외부 단가표(엑셀)를 현재 탭에 불러와서 바로 검증한다.
+        # 외부 단가표(엑셀)를 현재 탭에 불러와서 검증
         tab = self._tabs.current()
- 
+
         if tab in self._loaded_names:
             # 적용 취소: 불러오기 전 표로 복원
             df, formulas = self._original_tables.pop(tab, (None, None))
@@ -460,7 +456,7 @@ class TableViewerPage(QWidget):
                     QApplication.restoreOverrideCursor()
             self._update_load_button()
             return
- 
+
         path, _ = QFileDialog.getOpenFileName(
             self, "검증할 단가표 선택", "", "Excel 파일 (*.xlsx *.xls)"
         )
@@ -471,7 +467,9 @@ class TableViewerPage(QWidget):
             try:
                 df = read_prev_table(path)
             except Exception as error:
-                QMessageBox.warning(self, "불러오기 실패", f"단가표를 읽지 못했습니다:\n{error}")
+                QMessageBox.warning(
+                    self, "불러오기 실패", f"단가표를 읽지 못했습니다:\n{error}"
+                )
                 return
             # 취소 시 되돌릴 수 있게 현재(생성된) 표를 저장해 둔다
             model = self._model_of(tab)
@@ -482,12 +480,12 @@ class TableViewerPage(QWidget):
             self._run_validation(tab)
         finally:
             QApplication.restoreOverrideCursor()
- 
+
     def _on_load_prev(self) -> None:
         # 작년 단가표를 불러오면 등급구분으로 짝지어 증가율을 툴팁에 덧붙인다.
-        # 이미 적용된 상태에서 다시 누르면 적용 취소(증가율 제거).
+        # 이미 적용된 상태에서 다시 누르면 적용 취소(증가율 제거)
         tab = self._tabs.current()
- 
+
         if tab in self._prev_names:
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
             try:
@@ -499,7 +497,7 @@ class TableViewerPage(QWidget):
                 return
             finally:
                 QApplication.restoreOverrideCursor()
- 
+
         path, _ = QFileDialog.getOpenFileName(
             self, "작년 단가표 선택", "", "Excel 파일 (*.xlsx *.xls)"
         )
@@ -510,7 +508,9 @@ class TableViewerPage(QWidget):
             try:
                 self._prev_tables[tab] = read_prev_table(path)
             except Exception as error:  # 형식이 다른 파일 등
-                QMessageBox.warning(self, "불러오기 실패", f"작년 단가표를 읽지 못했습니다:\n{error}")
+                QMessageBox.warning(
+                    self, "불러오기 실패", f"작년 단가표를 읽지 못했습니다:\n{error}"
+                )
                 return
             self._prev_names[tab] = os.path.basename(path)
             self._show_prev_split(tab)
@@ -519,22 +519,22 @@ class TableViewerPage(QWidget):
         finally:
             QApplication.restoreOverrideCursor()
 
-    #작년단가표 스플릿 뷰
-    def _show_prev_split(self,tab:int)->None:
-        df=self._prev_tables.get(tab)
+    # 작년단가표 스플릿 뷰
+    def _show_prev_split(self, tab: int) -> None:
+        df = self._prev_tables.get(tab)
         if df is None:
             return
-        self._prev_views[tab].set_dataframe(df,None)
+        self._prev_views[tab].set_dataframe(df, None)
         self._prev_views[tab].setVisible(True)
-        splitter=self._splitters[tab]
+        splitter = self._splitters[tab]
         QTimer.singleShot(0, lambda: splitter.setSizes([1, 1]))
 
-    def _hide_prev_split(self,tab:int)->None:
+    def _hide_prev_split(self, tab: int) -> None:
         self._prev_views[tab].hide_bubble()
         self._prev_views[tab].setVisible(False)
 
     def _toggle_panel(self) -> None:
-        # 검증 패널 접기/펼치기 — 접으면 표가 화면 전체 폭을 쓴다
+        # 검증 패널 접기/펼치기 (접으면 엑셀 표 넓이가 화면 전체에 맞춰짐)
         self._panel.setVisible(not self._panel.isVisible())
         self._update_panel_button()
 
@@ -549,13 +549,15 @@ class TableViewerPage(QWidget):
             self._panel_button.setText(f"{_PANEL_SHOW_TEXT} (오류 {count}건)")
         else:
             self._panel_button.setText(_PANEL_SHOW_TEXT)
- 
+
     def _update_prev_button(self) -> None:
         # 현재 탭에 작년 단가표가 불러와져 있으면 버튼을 '적용됨' 상태(초록)로 바꾼다.
         name = self._prev_names.get(self._tabs.current())
         if name:
             self._prev_button.setText(_PREV_DONE_TEXT)
-            self._prev_button.setToolTip(f"불러온 파일: {name}\n다시 누르면 다른 파일로 교체합니다.")
+            self._prev_button.setToolTip(
+                f"불러온 파일: {name}\n다시 누르면 다른 파일로 교체합니다."
+            )
             set_state(self._prev_button, "state", "loaded")
             self._card_hint.setText(f"오른쪽: 작년 · {os.path.splitext(name)[0][:20]}")
         else:
@@ -569,7 +571,9 @@ class TableViewerPage(QWidget):
         name = self._loaded_names.get(self._tabs.current())
         if name:
             self._load_button.setText(_LOAD_DONE_TEXT)
-            self._load_button.setToolTip(f"불러온 파일: {name}\n다시 누르면 원래 표로 되돌립니다.")
+            self._load_button.setToolTip(
+                f"불러온 파일: {name}\n다시 누르면 원래 표로 되돌립니다."
+            )
             set_state(self._load_button, "state", "loaded")
         else:
             self._load_button.setText(_LOAD_TEXT)
