@@ -2,7 +2,11 @@ import inspect
 import json
 import math
 
-RULES_PATH = "rules_2026.json"
+from pathlib import Path
+from services import recent_files
+from utils.date import yearConfig
+
+DEFAULT_RULES_PATH = Path("rules/rules_default.json")
 
 # 가능한 연산 종류
 ADD = "+"
@@ -42,7 +46,11 @@ RULE_BATH_40MIN = "bath_40min"
 
 class RuleConfig:
     def __init__(self):
-        self.set_functions()
+        rules_path = recent_files.get_recent_path(yearConfig.SYSTEM_YEAR, "rules")
+        if rules_path is None:
+            rules_path = DEFAULT_RULES_PATH
+
+        self.set_functions(rules_path)
 
     # 각 항이 함수에 들어가는 인자 또는 상수인지 구분해서 값을 찾아 반환
     def _resolve_operand(self, arg, inputs: list, values: dict):
@@ -173,9 +181,9 @@ class RuleConfig:
         )
         return fn
 
-    def set_functions(self):
+    def set_functions(self, rules_path: Path):
         try:
-            with open(RULES_PATH, "r", encoding="utf-8") as f:
+            with open(rules_path, "r", encoding="utf-8") as f:
                 self._rules = json.load(f)
 
             self.calculate_copayment = self._build_formula_function(RULE_COPAYMENT)
@@ -204,6 +212,11 @@ class RuleConfig:
 
         except Exception as e:
             print(f"계산 규칙 파일 읽기 실패: {e}")
+
+    def reset_rules(self, year: int):
+        rules_path = recent_files.get_recent_path(year, "rules")
+        if rules_path is not None:
+            self.set_functions(DEFAULT_RULES_PATH)
 
 
 ruleConfig = RuleConfig()
