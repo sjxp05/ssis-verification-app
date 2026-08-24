@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from jogyeon_matcher.contracts.schemas import (
+from models.dto import (
     CellLocation,
     Decision,
     LabelRef,

@@ -33,7 +33,7 @@ from ui.pages.upload_page import UploadPage, ValueExtractor
 from ui.pages.gosi_constants_page import GosiConstantsPage
 
 from utils.appdata import user_data_dir
-from utils.date import yearConfig
+from config.date import yearConfig
 
 STEPS = ["조견표 업로드", "단가 정보 확인", "단가표 생성 및 저장"]
 
@@ -353,7 +353,7 @@ class MainWindow(QMainWindow):
         )
         if not path:
             return
-        #저장시 커서 돌림 추가
+        # 저장시 커서 돌림 추가
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
             df.to_excel(path, index=False)
@@ -394,5 +394,5 @@ class MainWindow(QMainWindow):
                         yearConfig.SYSTEM_YEAR, "payment_unit_price", Path(path)
                     )
         finally:
-            #저장시 커서 돌림 추가
+            # 저장시 커서 돌림 추가
             QApplication.restoreOverrideCursor()

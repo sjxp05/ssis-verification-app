@@ -1,8 +1,8 @@
 from collections import Counter
 from pandas import DataFrame
 
-from utils.date import yearConfig
-from utils.rules import ruleConfig
+from config.date import yearConfig
+from config.rules import ruleConfig
 
 # 기본급여 단가표 컬럼명 - 서식 변경시 여기만 변경
 COL_SEQ = "안"

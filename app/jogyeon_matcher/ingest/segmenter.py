@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import pandas as pd
 
-from ..contracts.schemas import CellLocation, StructuralAlert
+from models.dto import CellLocation, StructuralAlert
 from ..matching.normalizer import normalize
 
 # 이보다 작은 덩어리는 표가 아니라 흩어진 주석으로 본다
@@ -77,7 +77,10 @@ class TableRegion:
                 text = value.strip()
                 if text and not _is_number(text):
                     found.append(
-                        (text, CellLocation(self.sheet, self.row0 + i, c, self.table_id))
+                        (
+                            text,
+                            CellLocation(self.sheet, self.row0 + i, c, self.table_id),
+                        )
                     )
         self._text_cells = found
         return found
@@ -118,7 +121,9 @@ class Fingerprint:
         ]
         if len(self.column_types) != len(other.column_types):
             note = f"열이 {len(other.column_types)}개에서 {len(self.column_types)}개로"
-            return f"{note}, " + (", ".join(changed[:2]) if changed else "내용 종류도 달라짐")
+            return f"{note}, " + (
+                ", ".join(changed[:2]) if changed else "내용 종류도 달라짐"
+            )
         if not changed:
             return "열 내용 종류가 달라짐"
 
@@ -208,12 +213,17 @@ def fingerprint(region: TableRegion) -> Fingerprint:
     )
     types = []
     for c in range(region.shape[1]):
-        values = [v for v in (region.cell(r, c) for r in range(region.shape[0]))
-                  if not _empty(v)]
+        values = [
+            v
+            for v in (region.cell(r, c) for r in range(region.shape[0]))
+            if not _empty(v)
+        ]
         if not values:
             types.append("empty")
             continue
-        numeric = sum(1 for v in values if isinstance(v, (int, float)) or _is_number(str(v)))
+        numeric = sum(
+            1 for v in values if isinstance(v, (int, float)) or _is_number(str(v))
+        )
         ratio = numeric / len(values)
         types.append("num" if ratio > 0.8 else "text" if ratio < 0.2 else "mixed")
     return Fingerprint(region.table_id, region.shape, headers, tuple(types))
@@ -244,11 +254,15 @@ def compare_sheets(
             target_to_base[t_sheet] = b_sheet
 
         # 작년에는 키워드가 포함된 시트가 있었는데 올해는 없는 경우
-        elif b_sheet and not t_sheet: 
-            alerts.append(StructuralAlert(
-                "SHEET_MISSING", b_sheet,
-                f"값을 읽어야 하는 '{req}' 관련 시트가 올해 파일에 없습니다.", fatal=True,
-            ))
+        elif b_sheet and not t_sheet:
+            alerts.append(
+                StructuralAlert(
+                    "SHEET_MISSING",
+                    b_sheet,
+                    f"값을 읽어야 하는 '{req}' 관련 시트가 올해 파일에 없습니다.",
+                    fatal=True,
+                )
+            )
 
     # 필수 키워드가 없는 시트들은 이름이 완벽히 같으면 매핑
     for t_sheet in target:
@@ -257,32 +271,43 @@ def compare_sheets(
                 base_to_target[t_sheet] = t_sheet
                 target_to_base[t_sheet] = t_sheet
             else:
-                alerts.append(StructuralAlert("SHEET_ADDED", t_sheet, "작년에 없던 시트입니다."))
+                alerts.append(
+                    StructuralAlert("SHEET_ADDED", t_sheet, "작년에 없던 시트입니다.")
+                )
 
     for b_sheet, t_sheet in base_to_target.items():
         base_regions = baseline[b_sheet]
         target_regions = target[t_sheet]
 
         if len(base_regions) != len(target_regions):
-            alerts.append(StructuralAlert(
-                "TABLE_COUNT_CHANGED", t_sheet,
-                f"표가 {len(base_regions)}개에서 {len(target_regions)}개로 늘거나 줄어, "
-                "이 시트는 값 비교를 건너뜁니다.",
-            ))
+            alerts.append(
+                StructuralAlert(
+                    "TABLE_COUNT_CHANGED",
+                    t_sheet,
+                    f"표가 {len(base_regions)}개에서 {len(target_regions)}개로 늘거나 줄어, "
+                    "이 시트는 값 비교를 건너뜁니다.",
+                )
+            )
             continue
 
         for base, tgt in zip(base_regions, target_regions):
             for issue in fingerprint(tgt).diff(fingerprint(base)):
-                code = "HEADER_ORDER_CHANGED" if "순서" in issue else "TABLE_SHAPE_CHANGED"
+                code = (
+                    "HEADER_ORDER_CHANGED" if "순서" in issue else "TABLE_SHAPE_CHANGED"
+                )
                 alerts.append(StructuralAlert(code, t_sheet, issue, tgt.table_id))
 
     for b_sheet in baseline:
         if b_sheet not in base_to_target:
             is_missing_req = any(req in b_sheet for req in required)
             if not is_missing_req:
-                alerts.append(StructuralAlert(
-                "SHEET_REMOVED", b_sheet, "작년 파일에만 있던 시트 (값 추출에 쓰지 않음)",
-            ))
+                alerts.append(
+                    StructuralAlert(
+                        "SHEET_REMOVED",
+                        b_sheet,
+                        "작년 파일에만 있던 시트 (값 추출에 쓰지 않음)",
+                    )
+                )
     return alerts
 
 
@@ -304,10 +329,14 @@ def check_anchor_uniqueness(
             rows = {loc.row for text, loc in cells if key in text}
             if len(rows) > 1:
                 hits = sorted({text for text, _ in cells if key in text})
-                alerts.append(StructuralAlert(
-                    "ANCHOR_NOT_UNIQUE", region.sheet,
-                    f"'{anchor}' 를 포함한 셀이 서로 다른 {len(rows)}개 행에 있습니다: "
-                    f"{hits}. 어느 행에서 값을 읽을지 결정할 수 없어 값 추출이 실패합니다.",
-                    region.table_id, fatal=True,
-                ))
+                alerts.append(
+                    StructuralAlert(
+                        "ANCHOR_NOT_UNIQUE",
+                        region.sheet,
+                        f"'{anchor}' 를 포함한 셀이 서로 다른 {len(rows)}개 행에 있습니다: "
+                        f"{hits}. 어느 행에서 값을 읽을지 결정할 수 없어 값 추출이 실패합니다.",
+                        region.table_id,
+                        fatal=True,
+                    )
+                )
     return alerts

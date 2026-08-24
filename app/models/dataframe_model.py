@@ -14,6 +14,7 @@ from resources.styles import theme
 ERROR_BG = theme.ERROR_BG
 WARNING_BG = theme.WARNING_BG
 
+
 class DataFrameModel(QAbstractTableModel):
     # 더블클릭 편집으로 셀 값 변경시
     cellEdited = pyqtSignal(int, str)
@@ -65,7 +66,9 @@ class DataFrameModel(QAbstractTableModel):
             # 기존 셀이 숫자면 같은 타입으로 맞춘다 (int 컬럼은 int로, float 컬럼은 소수점 유지)
             if pd.api.types.is_number(current) and not isinstance(current, bool):
                 parsed = float(str(value).replace(",", ""))
-                value = int(parsed) if isinstance(current, (int, np.integer)) else parsed
+                value = (
+                    int(parsed) if isinstance(current, (int, np.integer)) else parsed
+                )
         except (ValueError, TypeError):
             return False
         self._df.iat[row, col] = value
@@ -80,9 +83,9 @@ class DataFrameModel(QAbstractTableModel):
         row_metrics: dict[int, str] | None,
         warn_cells: dict[tuple[int, str], str] | None = None,
     ) -> None:
-        #issue_cells: (행, 컬럼명) -> 오류 요약 (빨간 셀로 표시)
-        #row_metrics: 행 -> 부담률/증가율 지표 
-        #warn_cells: (행, 컬럼명) -> 확인 필요 사유 (노란 셀로 표시)
+        # issue_cells: (행, 컬럼명) -> 오류 요약 (빨간 셀로 표시)
+        # row_metrics: 행 -> 부담률/증가율 지표
+        # warn_cells: (행, 컬럼명) -> 확인 필요 사유 (노란 셀로 표시)
         self._issue_cells = dict(issue_cells or {})
         self._warn_cells = dict(warn_cells or {})
         self._row_metrics = dict(row_metrics or {})
@@ -91,13 +94,13 @@ class DataFrameModel(QAbstractTableModel):
                 self.index(0, 0),
                 self.index(len(self._df.index) - 1, len(self._df.columns) - 1),
             )
- 
+
     def has_issue(self, index: QModelIndex) -> bool:
         if not index.isValid():
             return False
         column = str(self._df.columns[index.column()])
         return (index.row(), column) in self._issue_cells
-    
+
     # --- 기본 구현 --------------------------------------------------------
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
         return 0 if parent.isValid() else len(self._df.index)
@@ -105,9 +108,7 @@ class DataFrameModel(QAbstractTableModel):
     def columnCount(self, parent: QModelIndex = QModelIndex()) -> int:
         return 0 if parent.isValid() else len(self._df.columns)
 
-    def headerData(
-        self, section: int, orientation: Qt.Orientation, role: int
-    ):
+    def headerData(self, section: int, orientation: Qt.Orientation, role: int):
         if role != Qt.ItemDataRole.DisplayRole:
             return None
         if orientation == Qt.Orientation.Horizontal:
@@ -132,10 +133,10 @@ class DataFrameModel(QAbstractTableModel):
             )
             return int(flag | Qt.AlignmentFlag.AlignVCenter)
 
-        if role==Qt.ItemDataRole.EditRole:
-            if value is None or (isinstance(value,float) and pd.isna(value)):
+        if role == Qt.ItemDataRole.EditRole:
+            if value is None or (isinstance(value, float) and pd.isna(value)):
                 return ""
-            if isinstance(value,float) and value.is_integer():
+            if isinstance(value, float) and value.is_integer():
                 return str(int(value))
             return str(value)
 
@@ -146,7 +147,7 @@ class DataFrameModel(QAbstractTableModel):
             if (index.row(), column) in self._warn_cells:
                 return QColor(WARNING_BG)
             return None
- 
+
         if role == Qt.ItemDataRole.ForegroundRole:
             # 오류·경고 셀은 배경색으로만 구분하고 글씨는 검정 유지
             if column in self._accent:
@@ -159,7 +160,9 @@ class DataFrameModel(QAbstractTableModel):
         return None
 
     # 더블클릭 편집 반영: 숫자 셀이면 숫자, 아니면 문자 그대로
-    def setData(self, index: QModelIndex, value, role: int = Qt.ItemDataRole.EditRole) -> bool:
+    def setData(
+        self, index: QModelIndex, value, role: int = Qt.ItemDataRole.EditRole
+    ) -> bool:
         if role != Qt.ItemDataRole.EditRole or not index.isValid():
             return False
         column = str(self._df.columns[index.column()])
@@ -181,8 +184,10 @@ class DataFrameModel(QAbstractTableModel):
         return True
 
     # at 위치에 행 삽입 (None 이면 맨 아래)
-    def add_row(self,values:dict,at:int|None=None)->int:
-        row=len(self._df.index) if at is None else max(0, min(at,len(self._df.index)))
+    def add_row(self, values: dict, at: int | None = None) -> int:
+        row = (
+            len(self._df.index) if at is None else max(0, min(at, len(self._df.index)))
+        )
         self.beginInsertRows(QModelIndex(), row, row)
         new_row = [values.get(str(col), "") for col in self._df.columns]
         upper = self._df.iloc[:row]
@@ -202,7 +207,11 @@ class DataFrameModel(QAbstractTableModel):
         return True
 
     def flags(self, index: QModelIndex) -> Qt.ItemFlag:
-        return Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsSelectable| Qt.ItemFlag.ItemIsEditable
+        return (
+            Qt.ItemFlag.ItemIsEnabled
+            | Qt.ItemFlag.ItemIsSelectable
+            | Qt.ItemFlag.ItemIsEditable
+        )
 
     # --- 산식 -------------------------------------------------------------
     def formula_at(self, index: QModelIndex) -> str:
@@ -244,7 +253,7 @@ class DataFrameModel(QAbstractTableModel):
         if formula:
             parts.append(formula)
         return "\n\n".join(parts)
-    
+
     @staticmethod
     def _display(value: Any) -> str:
         if value is None or (isinstance(value, float) and pd.isna(value)):
@@ -254,5 +263,5 @@ class DataFrameModel(QAbstractTableModel):
         if isinstance(value, int):
             return f"{value:,}"
         if isinstance(value, float):
-            return f"{value:,.0f}" if value.is_integer() else f"{value:,.2f}"
+            return f"{value:,.0f}" if value.is_integer() else f"{value:,f}"
         return str(value)

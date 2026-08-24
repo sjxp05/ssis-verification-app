@@ -10,7 +10,7 @@ import pandas as pd
 
 from services.price_table_parser import TIERS, ParsedRow, parse_name
 from services.table_writer import ADD_CODE_INFO, TableWriter
-from utils.rules import ruleConfig
+from config.rules import ruleConfig
 
 # 조견표 추출 상수
 K_UNIT_PRICE = "기본단가"
@@ -1374,35 +1374,36 @@ def read_prev_table(path: str) -> pd.DataFrame:
     _write_table_cache(path, df)
     return df
 
-#올린 작년 단가표 순서 교체
-def align_prev_table(
-        curr_df:pd.DataFrame, prev_df: pd.DataFrame,flow: str
-)-> pd.DataFrame:
-    if flow=="unit_price":
-        key_cols=[C_CODE]
-    else:
-        key_cols=[P_CODE,P_SERVICE,P_TIME]
 
-    cols=set(map(str,prev_df.columns))
+# 올린 작년 단가표 순서 교체
+def align_prev_table(
+    curr_df: pd.DataFrame, prev_df: pd.DataFrame, flow: str
+) -> pd.DataFrame:
+    if flow == "unit_price":
+        key_cols = [C_CODE]
+    else:
+        key_cols = [P_CODE, P_SERVICE, P_TIME]
+
+    cols = set(map(str, prev_df.columns))
     if not set(key_cols).issubset(cols) or not set(key_cols).issubset(
-        set(map(str,curr_df.columns))
+        set(map(str, curr_df.columns))
     ):
         return prev_df
 
     def _key(row):
-        return tuple(str(row.get(c,"")or "").strip() for c in key_cols)
+        return tuple(str(row.get(c, "") or "").strip() for c in key_cols)
 
-    prev_by_key:dict[tuple,int]={}
+    prev_by_key: dict[tuple, int] = {}
     for idx in range(len(prev_df.index)):
-        prev_by_key.setdefault(_key(prev_df.iloc[idx]),idx)
+        prev_by_key.setdefault(_key(prev_df.iloc[idx]), idx)
 
-    #현재 표 순서대로 배치될 작년 행 인덱스
-    ordered:list[int]=[]
-    blank_marks:list[bool]=[]
-    used: set[int]=set()
+    # 현재 표 순서대로 배치될 작년 행 인덱스
+    ordered: list[int] = []
+    blank_marks: list[bool] = []
+    used: set[int] = set()
 
     for i in range(len(curr_df.index)):
-        idx=prev_by_key.get(_key(curr_df.iloc[i]))
+        idx = prev_by_key.get(_key(curr_df.iloc[i]))
         if idx is None or idx in used:
             ordered.append(-1)
             blank_marks.append(True)
@@ -1411,16 +1412,17 @@ def align_prev_table(
             blank_marks.append(False)
             used.add(idx)
 
-    #현재 표에 없는 행은 맨뒤
-    leftovers=[i for i in range(len(prev_df.index)) if i not in used]
+    # 현재 표에 없는 행은 맨뒤
+    leftovers = [i for i in range(len(prev_df.index)) if i not in used]
 
-    blank=pd.Series({c:None for c in prev_df.columns})
-    rows=[
+    blank = pd.Series({c: None for c in prev_df.columns})
+    rows = [
         blank if is_blank else prev_df.iloc[idx]
-        for idx,is_blank in zip(ordered,blank_marks)
+        for idx, is_blank in zip(ordered, blank_marks)
     ]
-    rows+=[prev_df.iloc[i] for i in leftovers]
+    rows += [prev_df.iloc[i] for i in leftovers]
     return pd.DataFrame(rows).reset_index(drop=True)
+
 
 # --- 단가표 로딩 캐시 -------------------------------------------------------
 # 캐시는 순수한 가속 장치다: 어떤 실패든 조용히 무시하고 원래 경로로 읽는다.

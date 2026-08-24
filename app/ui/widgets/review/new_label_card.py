@@ -9,7 +9,7 @@ from PyQt6.QtWidgets import (
     QWidget,
 )
 
-from jogyeon_matcher.contracts.schemas import Decision, MatchItem
+from models.dto import Decision, MatchItem
 from ui.widgets.review.shared import SheetPreview, SheetSource, render
 
 

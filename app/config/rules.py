@@ -4,7 +4,7 @@ import math
 
 from pathlib import Path
 from services import recent_files
-from utils.date import yearConfig
+from config.date import yearConfig
 
 DEFAULT_RULES_PATH = Path("rules/rules_default.json")
 

@@ -2,7 +2,7 @@
 #
 # 조견표의 형식(라벨명 등)이 달라졌을 경우 기존 형식의 라벨에 대응하는 새 조견표의 라벨을 매칭함
 
-from .contracts.schemas import (
+from models.dto import (
     Candidate,
     Decision,
     MatchItem,

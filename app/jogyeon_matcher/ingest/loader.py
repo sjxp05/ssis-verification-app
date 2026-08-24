@@ -11,37 +11,14 @@ from pathlib import Path
 
 import pandas as pd
 
+from models.dto import SanitizedCell, Workbook
+
 from . import xlsx_scan
 from ..matching.normalizer import sanitize
 
 
 class IngestError(Exception):
     """적재 단계에서 진행 불가한 상황"""
-
-
-@dataclass
-class SanitizedCell:
-    sheet: str
-    row: int
-    column: int
-    original: str
-    cleaned: str
-
-    @property
-    def removed_hex(self) -> str:
-        removed = [c for c in self.original if c not in self.cleaned]
-        return " ".join(f"U+{ord(c):04X}" for c in dict.fromkeys(removed))
-
-
-@dataclass
-class Workbook:
-    path: Path
-    sheets: dict[str, pd.DataFrame] = field(default_factory=dict)
-    audit: list[SanitizedCell] = field(default_factory=list)
-
-    @property
-    def name(self) -> str:
-        return self.path.name
 
 
 # 필수 시트가 없으면 즉시 중단한다. 조용히 진행하면 뒤에서 훨씬 알아보기
@@ -61,7 +38,8 @@ def load(path: str | Path, required_sheets: tuple[str, ...] = ()) -> Workbook:
             for sheet_name in book.sheet_names:
                 cap = caps.get(sheet_name)
                 raw[sheet_name] = book.parse(
-                    sheet_name, header=None,
+                    sheet_name,
+                    header=None,
                     **({"nrows": cap} if cap else {}),
                 )
     except Exception as error:
@@ -99,12 +77,14 @@ def _trim_to_used_range(frame: pd.DataFrame) -> pd.DataFrame:
         return frame.iloc[0:0, 0:0]
     last_row = rows_with_data[rows_with_data].index[-1]
     last_col = cols_with_data[cols_with_data].index[-1]
-    return frame.loc[: last_row, : last_col]
+    return frame.loc[:last_row, :last_col]
 
 
 # 셀 단위 파이썬 루프 대신 문자열 컬럼 단위로 정제한다. object dtype이 아닌
 # 컬럼(순수 숫자 컬럼 등)은 애초에 문자열 셀을 담을 수 없으므로 건너뛴다.
-def _sanitize(frame: pd.DataFrame, sheet: str, audit: list[SanitizedCell]) -> pd.DataFrame:
+def _sanitize(
+    frame: pd.DataFrame, sheet: str, audit: list[SanitizedCell]
+) -> pd.DataFrame:
     cleaned = frame.copy()
     for col in cleaned.columns:
         series = cleaned[col]
@@ -119,6 +99,8 @@ def _sanitize(frame: pd.DataFrame, sheet: str, audit: list[SanitizedCell]) -> pd
         if not changed.any():
             continue
         for row in changed[changed].index:
-            audit.append(SanitizedCell(sheet, int(row), int(col), original[row], fixed[row]))
+            audit.append(
+                SanitizedCell(sheet, int(row), int(col), original[row], fixed[row])
+            )
         cleaned.loc[is_str, col] = fixed
     return cleaned

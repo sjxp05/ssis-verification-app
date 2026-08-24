@@ -13,8 +13,8 @@ from PyQt6.QtWidgets import (
 )
 from models.flows import FLOWS, FlowSpec
 from ui.widgets.value_field import ValueField
-from utils.date import yearConfig
-from utils.rules import ruleConfig
+from config.date import yearConfig
+from config.rules import ruleConfig
 
 
 class FlowCard(QFrame):

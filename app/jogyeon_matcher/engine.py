@@ -7,8 +7,9 @@ from pathlib import Path
 
 import numpy as np
 
-from .config import anchors, required_values
-from .contracts.schemas import (
+from config.anchors import JOGYEON_SHEET_NAMES, SCALAR_ANCHORS
+from config.anchors import REQUIRED
+from models.dto import (
     Candidate,
     LabelRef,
     MatchItem,
@@ -40,8 +41,8 @@ def match_workbooks(
     config = (
         config or HybridConfig()
     )  # 실험을 통해 찾아낸 최적의 모델 하이퍼파라미터 hybrid.py에서 불러오기
-    baseline = loader.load(baseline_path, anchors.JOGYEON_SHEET_NAMES)
-    target = loader.load(target_path, anchors.JOGYEON_SHEET_NAMES)
+    baseline = loader.load(baseline_path, JOGYEON_SHEET_NAMES)
+    target = loader.load(target_path, JOGYEON_SHEET_NAMES)
 
     report = MatchReport(
         run_id=datetime.now().strftime("%Y%m%dT%H%M%S"),
@@ -53,11 +54,11 @@ def match_workbooks(
     target_regions = {s: segmenter.find_tables(s, f) for s, f in target.sheets.items()}
 
     report.structural_alerts += segmenter.compare_sheets(
-        base_regions, target_regions, anchors.JOGYEON_SHEET_NAMES
+        base_regions, target_regions, JOGYEON_SHEET_NAMES
     )
     for regions in target_regions.values():
         report.structural_alerts += segmenter.check_anchor_uniqueness(
-            regions, anchors.SCALAR_ANCHORS
+            regions, SCALAR_ANCHORS
         )
     report.value_anomalies += value_checks.compare_regions(base_regions, target_regions)
 
@@ -73,7 +74,7 @@ def match_workbooks(
     # ValueExtractor와 동일하게 라벨 매칭을 같은 시트 안에서만 수행
     # 시트 이름이 완전히 같지 않아도(연도 표기 등) _find_missing과 같은 방식으로 찾는다
     for sheet in baseline.sheets:
-        target_sheet = _resolve_sheet(sheet, target.sheets, anchors.JOGYEON_SHEET_NAMES)
+        target_sheet = _resolve_sheet(sheet, target.sheets, JOGYEON_SHEET_NAMES)
         if target_sheet is None:
             continue
         matcher = (
@@ -110,9 +111,9 @@ def _find_missing(
     base_labels: dict[str, dict[str, LabelRef]],
 ) -> list[MissingValue]:
     missing: list[MissingValue] = []
-    for required in required_values.REQUIRED:
+    for required in REQUIRED:
         actual_sheet = _resolve_sheet(
-            required.sheet, target_labels, anchors.JOGYEON_SHEET_NAMES
+            required.sheet, target_labels, JOGYEON_SHEET_NAMES
         )
         labels = target_labels.get(actual_sheet, {}) if actual_sheet else {}
         key = normalize(required.label)
@@ -148,7 +149,7 @@ def _find_missing(
             continue
 
         actual_base_sheet = _resolve_sheet(
-            required.sheet, base_labels, anchors.JOGYEON_SHEET_NAMES
+            required.sheet, base_labels, JOGYEON_SHEET_NAMES
         )
         baseline_ref = (
             base_labels.get(actual_base_sheet, {}).get(key)

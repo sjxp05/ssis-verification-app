@@ -16,11 +16,10 @@ from PyQt6.QtWidgets import (
 
 from jogyeon_matcher import match_workbooks
 from jogyeon_matcher.audit import decision_log
-from jogyeon_matcher.contracts.schemas import MatchReport
-from models.dto import UploadedFile
+from models.dto import UploadedFile, MatchReport
 from services import recent_files
 from ui.dialogs.review_dialog import ReviewDialog
-from utils.date import yearConfig
+from config.date import yearConfig
 
 # 이번 년도 대조 이력이 있는 조견표 경로를 기억해 두는 키
 JOGYEON_KEY = "jogyeon"

@@ -1,4 +1,4 @@
-# 2단계 - 생성된 단가표 화면
+# 생성된 단가표 화면
 
 from __future__ import annotations
 import os
@@ -18,7 +18,12 @@ from PyQt6.QtWidgets import (
 )
 
 from models.dataframe_model import DataFrameModel
-from services.table_validator import TableValidator, ValidationReport, align_prev_table, read_prev_table
+from services.table_validator import (
+    TableValidator,
+    ValidationReport,
+    align_prev_table,
+    read_prev_table,
+)
 from ui.components.card import Card
 from ui.components.button import GhostButton, PrimaryButton
 from ui.components.tab_bar import SegmentedTabBar

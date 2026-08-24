@@ -16,12 +16,12 @@ from collections import Counter
 
 import numpy as np
 
-from ..config.antonyms import ANTONYM_GROUPS, NEGATION_MARKERS
+from config.anchors import ANTONYM_GROUPS, NEGATION_MARKERS
 
 _NUMBER = re.compile(r"\d+(?:\.\d+)?")
 
 CONFLICT_PENALTY = 0.15  # 값이 정면으로 다름
-EXTRA_PENALTY = 0.6      # 한쪽에 숫자가 덧붙기만 함
+EXTRA_PENALTY = 0.6  # 한쪽에 숫자가 덧붙기만 함
 LOW_MARGIN_THRESHOLD = 0.05
 
 

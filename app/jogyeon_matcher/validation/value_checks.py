@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import itertools
 
-from ..contracts.schemas import ValueAnomaly
+from models.dto import ValueAnomaly
 
 # 이 배수를 넘으면 연도별 인상이 아니라 단위 변경으로 본다
 UNIT_SHIFT_RATIO = 10
@@ -41,20 +41,26 @@ def _compare_columns(sheet: str, base, target) -> list[ValueAnomaly]:
         direction = _direction(base_values)
         if direction and _direction(target_values) != direction:
             word = "감소" if direction < 0 else "증가"
-            out.append(ValueAnomaly(
-                "MONOTONICITY_BROKEN", sheet,
-                f"'{header}' 열은 작년에 계속 {word}했는데 올해는 그렇지 않습니다. "
-                "행 순서나 값 배치가 바뀌었을 수 있습니다.",
-            ))
+            out.append(
+                ValueAnomaly(
+                    "MONOTONICITY_BROKEN",
+                    sheet,
+                    f"'{header}' 열은 작년에 계속 {word}했는데 올해는 그렇지 않습니다. "
+                    "행 순서나 값 배치가 바뀌었을 수 있습니다.",
+                )
+            )
 
         base_median = _median(base_values)
         ratio = _median(target_values) / base_median if base_median else 0
         if ratio and (ratio > UNIT_SHIFT_RATIO or ratio < 1 / UNIT_SHIFT_RATIO):
-            out.append(ValueAnomaly(
-                "UNIT_SHIFT_SUSPECTED", sheet,
-                f"'{header}' 열 값이 작년의 {ratio:.0f}배입니다. "
-                "단위가 바뀌었을 수 있습니다(예: 시간 → 분).",
-            ))
+            out.append(
+                ValueAnomaly(
+                    "UNIT_SHIFT_SUSPECTED",
+                    sheet,
+                    f"'{header}' 열 값이 작년의 {ratio:.0f}배입니다. "
+                    "단위가 바뀌었을 수 있습니다(예: 시간 → 분).",
+                )
+            )
     return out
 
 

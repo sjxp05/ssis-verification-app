@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 
 from .. import paths
-from ..contracts.schemas import Decision
+from models.dto import Decision
 
 LOG_NAME = "decisions.jsonl"
 
