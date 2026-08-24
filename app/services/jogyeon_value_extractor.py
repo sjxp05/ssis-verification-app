@@ -320,6 +320,14 @@ class ValueExtractor:
     )
     _LIMIT_KEYS = tuple(k for k in _EXPECTED_LEN if "월한도액" in k)
 
+    def _get_excel_cell(self, r, c):
+            col = ""
+            while c >= 0:
+                col = chr(c % 26 + 65) + col
+                c = c // 26 - 1
+            return f"{col}{r + 1}"
+
+    
     def _validate(self, data):
         for key, size in self._EXPECTED_LEN.items():
             actual = len(data[key])
@@ -340,15 +348,25 @@ class ValueExtractor:
         bad = {k: v for k, v in amounts.items() if v < 0}
         if bad:
             raise ExtractError(f"금액이 음수인 항목이 있습니다: {bad}")
-
+    
         # 종합조사 월 한도액이 구간이 올라갈수록 감소하는지 검증
         for key in ("종합조사 월한도액 (기본형)", "종합조사 월한도액 (확장형)"):
-            series = list(data[key].values())
-            if any(a <= b for a, b in itertools.pairwise(series)):
-                raise ExtractError(
-                    f"'{key}'가 구간 순으로 감소하지 않습니다: {series}"
-                    "\n조치: 조견표의 구간 배치가 바뀌었는지 확인하세요."
-                )
+            series = list(data[key].items())
+            for (label_prev, val_prev), (label_curr, val_curr) in itertools.pairwise(series):
+                if val_prev <= val_curr:
+                    cell_prev = self._cell_map.get(f"{key}.{label_prev}")
+                    cell_curr = self._cell_map.get(f"{key}.{label_curr}")
+
+                    loc_prev = f"'{cell_prev[0]}' 시트 {self._get_excel_cell(cell_prev[1], cell_prev[2])}셀" if cell_prev else "위치 알 수 없음"
+                    loc_curr = f"'{cell_curr[0]}' 시트 {self._get_excel_cell(cell_curr[1], cell_curr[2])}셀" if cell_curr else "위치 알 수 없음"
+
+                    raise ExtractError(
+                        f"'{key}'의 금액이 구간(등급) 순으로 감소하지 않습니다.\n"
+                        f"[발견된 오류 위치]\n"
+                        f" - {label_prev}: {val_prev:,}원 ({loc_prev})\n"
+                        f" - {label_curr}: {val_curr:,}원 ({loc_curr})\n"
+                        f"조치: 조견표 엑셀 파일에서 위 위치의 금액이 올바르게 입력되었는지, 혹은 구간 배치가 바뀌지 않았는지 확인해 주세요."
+                    )
         # TODO: 친절한 error공지를 띄워주도록 엑셀의 위치와 설명을 명확하게 하는게 좋을듯
 
     # 인정조사 탭에 표시할 키
