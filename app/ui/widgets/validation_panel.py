@@ -140,7 +140,13 @@ class ValidationPanel(QFrame):
 
         if not report.issues:
             self._set_badge(f"PASS — 발견된 오류가 없습니다{warn_tail}", "pass")
-            return
+        else:
+            self._set_badge(f"FAIL — 오류 {len(report.issues)}건{warn_tail}", "fail")
+            for issue in report.issues:
+                item = QListWidgetItem(issue.title())
+                item.setData(Qt.ItemDataRole.UserRole, issue)
+                item.setToolTip(issue.detail())
+                self._list.addItem(item)
 
         self._set_badge(f"FAIL — 오류 {len(report.issues)}건{warn_tail}", "fail")
         for issue in report.issues:
@@ -150,7 +156,7 @@ class ValidationPanel(QFrame):
             self._list.addItem(item)
 
         #경고 목록에 표시
-        for(row,column),msg in sorted(report._warn_cells.items()):
+        for(row,column),msg in sorted(report.warn_cells.items()):
             first_line=msg.split("\n")[0]
             item = QListWidgetItem(f"⚠ {row + 1}행 · {column} — {first_line}")
             item.setToolTip(msg)

@@ -28,7 +28,7 @@ from PyQt6.QtWidgets import (
 )
 
 from models.dataframe_model import DataFrameModel
-from services.table_validator import TableValidator, ValidationReport, read_prev_table
+from services.table_validator import TableValidator, ValidationReport, align_prev_table, read_prev_table
 from ui.components.card import Card
 from ui.components.button import GhostButton, PrimaryButton
 from ui.components.tab_bar import SegmentedTabBar
@@ -495,7 +495,9 @@ class TableViewerPage(QWidget):
         QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
         try:
             try:
-                self._prev_tables[tab] = read_prev_table(path)
+                prev_df = read_prev_table(path)
+                curr_df = self._tables[tab].dataframe()
+                self._prev_tables[tab] = align_prev_table(curr_df, prev_df, self._flow)
             except Exception as error:  # 형식이 다른 파일 등
                 QMessageBox.warning(self, "불러오기 실패", f"작년 단가표를 읽지 못했습니다:\n{error}")
                 return
