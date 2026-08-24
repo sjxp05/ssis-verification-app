@@ -665,7 +665,7 @@ class TableValidator:
                             actual=support,
                             fixes=(f"{P_SUPPORT} {_fmt(support)} → {_fmt(ref_s)}",),
                             extra="결제단가의 지원량은 같은 등급구분의 기본급여 지원량과 같아야 합니다.\n"
-                            "지원량을 먼저 바로잡은 뒤 재검증하면 금액·율도 검사됩니다.",
+                            "지원량을 먼저 바로잡은 뒤 재검증하면 금액,율도 검사됩니다.",
                         )
                     )
                 else:
@@ -938,7 +938,7 @@ class TableValidator:
                 CellIssue(
                     i,
                     P_SUPPORT,
-                    "지원량이 틀림 (금액 합·두 율과 대조)",
+                    "지원량이 틀림 (금액 합, 두 율과 대조)",
                     expected=alt,
                     actual=support,
                     fixes=(f"{P_SUPPORT} {_fmt(support)} → {_fmt(alt)}",),
@@ -1165,7 +1165,7 @@ class TableValidator:
         if abs(actual - stated) <= tolerance + 1e-9:
             return
         report.warn_cells[(i, C_COPAY)] = (
-            f"본인부담률이 조견표와 다름 (조견표 {stated:g}% · 실제 {actual:.2f}%)"
+            f"본인부담률이 조견표와 다름 (조견표 {stated:g}% | 실제 {actual:.2f}%)"
         )
 
     # 부담률
@@ -1197,7 +1197,7 @@ class TableValidator:
                 and floor_100(support * rate) >= cap
             )
 
-            line = f"부담률: 조견표 {self._rate_text(rate)} · 실제 {actual:.2f}%"
+            line = f"부담률: 조견표 {self._rate_text(rate)} | 실제 {actual:.2f}%"
             if stated is not None:
                 line += f" · 차이 {actual - stated:+.2f}%"
             if capped:
@@ -1320,7 +1320,7 @@ class TableValidator:
                     self._warn_growth(
                         report, i, col, g, capped=capped, baseline=baseline
                     )
-                extra = head + ": " + " · ".join(parts)
+                extra = head + "\n" + "\n".join(parts)
             report.metrics[i] = (report.metrics.get(i, "") + "\n" + extra).strip()
 
     def _append_growth_metrics_pay(
@@ -1361,7 +1361,7 @@ class TableValidator:
                     self._warn_growth(
                         report, i, col, g, capped=capped, baseline=baseline
                     )
-                extra = head + ": " + " · ".join(parts)
+                extra = head + "\n" + "\n".join(parts)
             report.metrics[i] = (report.metrics.get(i, "") + "\n" + extra).strip()
 
 
@@ -1374,6 +1374,53 @@ def read_prev_table(path: str) -> pd.DataFrame:
     _write_table_cache(path, df)
     return df
 
+#올린 작년 단가표 순서 교체
+def align_prev_table(
+        curr_df:pd.DataFrame, prev_df: pd.DataFrame,flow: str
+)-> pd.DataFrame:
+    if flow=="unit_price":
+        key_cols=[C_CODE]
+    else:
+        key_cols=[P_CODE,P_SERVICE,P_TIME]
+
+    cols=set(map(str,prev_df.columns))
+    if not set(key_cols).issubset(cols) or not set(key_cols).issubset(
+        set(map(str,curr_df.columns))
+    ):
+        return prev_df
+
+    def _key(row):
+        return tuple(str(row.get(c,"")or "").strip() for c in key_cols)
+
+    prev_by_key:dict[tuple,int]={}
+    for idx in range(len(prev_df.index)):
+        prev_by_key.setdefault(_key(prev_df.iloc[idx]),idx)
+
+    #현재 표 순서대로 배치될 작년 행 인덱스
+    ordered:list[int]=[]
+    blank_marks:list[bool]=[]
+    used: set[int]=set()
+
+    for i in range(len(curr_df.index)):
+        idx=prev_by_key.get(_key(curr_df.iloc[i]))
+        if idx is None or idx in used:
+            ordered.append(-1)
+            blank_marks.append(True)
+        else:
+            ordered.append(idx)
+            blank_marks.append(False)
+            used.add(idx)
+
+    #현재 표에 없는 행은 맨뒤
+    leftovers=[i for i in range(len(prev_df.index)) if i not in used]
+
+    blank=pd.Series({c:None for c in prev_df.columns})
+    rows=[
+        blank if is_blank else prev_df.iloc[idx]
+        for idx,is_blank in zip(ordered,blank_marks)
+    ]
+    rows+=[prev_df.iloc[i] for i in leftovers]
+    return pd.DataFrame(rows).reset_index(drop=True)
 
 # --- 단가표 로딩 캐시 -------------------------------------------------------
 # 캐시는 순수한 가속 장치다: 어떤 실패든 조용히 무시하고 원래 경로로 읽는다.
