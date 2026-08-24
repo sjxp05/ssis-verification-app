@@ -16,11 +16,10 @@ from PyQt6.QtWidgets import (
 )
 import pandas as pd
 
-from services import gosi_verifier, recent_files
+from services import gosi_verifier
 from services.table_writer import TableWriter
 from ui.components.card import Card
 from ui.components.button import GhostButton, PrimaryButton
-from ui.components.tab_bar import SegmentedTabBar
 from utils.qss import set_state
 from ui.widgets.gosi_panel import GosiDocumentViewer
 from ui.widgets.gosi_tables import (

@@ -1,9 +1,4 @@
 # 조견표 라벨 대조 결과 검토 화면
-#
-# 화면 구성
-#   1. 문구가 바뀐 항목  (반드시 골라야 함)
-#   2. 올해 새로 생긴 문구 (대부분 연도 변경 등의 사항으로 확인 불필요)
-#   3. 표 구조 변경 (참고 정보)
 
 from __future__ import annotations
 
@@ -20,7 +15,6 @@ from jogyeon_matcher import Decision, MatchReport
 
 from ui.components.button import GhostButton, PrimaryButton
 from ui.components.scroll_page import centered_scroll_page
-from ui.dialogs.review_style import STYLESHEET
 
 from ui.widgets.review.shared import *
 from ui.widgets.review.collapsible import Collapsible
@@ -40,8 +34,6 @@ class ReviewDialog(QDialog):
         self.report = report
         self.setWindowTitle("조견표 라벨 확인")
         self.setObjectName("PageBody")
-        # app.qss 는 건드리지 않고 이 화면에만 스타일을 얹는다
-        self.setStyleSheet(STYLESHEET)
         self.resize(1120, 820)
 
         self._baseline = SheetSource(baseline_path)
