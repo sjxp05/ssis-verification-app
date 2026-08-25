@@ -158,13 +158,6 @@ class ValidationPanel(QFrame):
                 item.setToolTip(issue.detail())
                 self._list.addItem(item)
 
-        self._set_badge(f"FAIL — 오류 {len(report.issues)}건{warn_tail}", "fail")
-        for issue in report.issues:
-            item = QListWidgetItem(issue.title())
-            item.setData(Qt.ItemDataRole.UserRole, issue)
-            item.setToolTip(issue.detail())
-            self._list.addItem(item)
-
         # 경고 목록에 표시
         for (row, column), msg in sorted(report.warn_cells.items()):
             first_line = msg.split("\n")[0]

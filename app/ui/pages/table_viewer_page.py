@@ -78,7 +78,6 @@ class TableViewerPage(QWidget):
         self._prev_tables: dict[int, pd.DataFrame] = {}  # 탭별 작년 표 (증가율용)
         self._loaded_names: dict[int, str] = {}  # 탭별 '단가표 불러오기' 파일명
         self._prev_names: dict[int, str] = {}  # 탭별 작년 표 파일명 (버튼 표시용)
-        self._loaded_names: dict[int, str] = {}  # 탭별 '단가표 불러오기' 파일명
         self._original_tables: dict[int, tuple] = (
             {}
         )  # 불러오기 전 원래 표 (취소 시 복원용)
@@ -207,7 +206,6 @@ class TableViewerPage(QWidget):
         self._loaded_names.pop(tab_index, None)
         self._original_tables.pop(tab_index, None)
         self._update_load_button()
-        self._run_validation(tab_index)
 
     # --- 내부 빌드 ----------------------------------------------------------
     def _build_tabs(self, flow: str) -> None:
