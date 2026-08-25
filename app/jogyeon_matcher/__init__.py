@@ -11,7 +11,7 @@ from models.dto import (
     Status,
 )
 from .engine import match_workbooks
-from .matching.hybrid import HybridConfig
+from .similarity import HybridConfig
 
 __all__ = [
     "match_workbooks",

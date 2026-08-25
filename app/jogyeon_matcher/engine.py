@@ -33,8 +33,8 @@ from .label_rules import (
     ordinal_kind_diff,
     parse,
 )
-from .matching.dense import DenseEncoder
-from .matching.hybrid import HybridConfig, HybridMatcher
+from .encoder import DenseEncoder
+from .similarity import HybridConfig, HybridMatcher
 from .validation import value_checks
 
 # 라벨이 아닌 값 자체를 나타내는 문구. 해당 문구가 있는 셀은 다른 셀과 유사도 비교하지 않음
@@ -50,7 +50,7 @@ def match_workbooks(
 ) -> MatchReport:
     config = (
         config or HybridConfig()
-    )  # 실험을 통해 찾아낸 최적의 모델 하이퍼파라미터 hybrid.py에서 불러오기
+    )  # 실험을 통해 찾아낸 최적의 모델 하이퍼파라미터 similarity.py에서 불러오기
     baseline = loader.load(baseline_path, JOGYEON_SHEET_NAMES)
     target = loader.load(target_path, JOGYEON_SHEET_NAMES)
 
