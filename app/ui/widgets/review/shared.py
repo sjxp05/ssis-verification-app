@@ -13,7 +13,7 @@ from PyQt6.QtWidgets import (
 )
 
 import pandas as pd
-from jogyeon_matcher.ingest import xlsx_scan
+from utils import xlsx_scan
 from utils.qss import set_state
 
 RADIUS = 3

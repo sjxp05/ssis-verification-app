@@ -24,7 +24,7 @@ from config.anchors import (
     JOGYEON_SHEET_NAMES,
     RATE_GRADES,
 )
-from jogyeon_matcher.ingest import xlsx_scan
+from utils import xlsx_scan
 from jogyeon_matcher.label_rules import sanitize
 
 # 공백, 비가시문자

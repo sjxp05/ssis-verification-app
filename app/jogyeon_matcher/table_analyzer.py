@@ -17,7 +17,7 @@ from models.dto import (
     Workbook,
 )
 
-from .ingest import xlsx_scan
+from utils import xlsx_scan
 from .label_rules import normalize, sanitize
 
 
