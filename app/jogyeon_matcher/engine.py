@@ -20,11 +20,21 @@ from models.dto import (
     StructuralAlert,
     Summary,
 )
+
 from .ingest import loader, segmenter
-from .matching import constraints, rule_parser
+from .label_rules import (
+    DeterministicIndex as _DeterministicIndex,
+    apply_vetoes,
+    find_contested,
+    find_normalization_collisions,
+    margin_flag,
+    match_deterministic as _match_deterministic,
+    normalize,
+    ordinal_kind_diff,
+    parse,
+)
 from .matching.dense import DenseEncoder
 from .matching.hybrid import HybridConfig, HybridMatcher
-from .matching.normalizer import find_normalization_collisions, normalize
 from .validation import value_checks
 
 # 라벨이 아닌 값 자체를 나타내는 문구. 해당 문구가 있는 셀은 다른 셀과 유사도 비교하지 않음
@@ -122,9 +132,9 @@ def _find_missing(
             found = key in labels
             if not found:
                 # 등급/구간처럼 표기만 다른 동등 라벨도 인정
-                parsed = rule_parser.parse(key)
+                parsed = parse(key)
                 found = parsed is not None and any(
-                    rule_parser.parse(other) == parsed for other in labels
+                    parse(other) == parsed for other in labels
                 )
             reason = "" if found else "올해 파일에서 찾지 못했습니다"
         else:
@@ -178,7 +188,7 @@ def _suggest(
         return []
     keys = matcher.labels
     final, sparse, dense = matcher.score_components(key)
-    adjusted, veto_flags = constraints.apply_vetoes(key, keys, final)
+    adjusted, veto_flags = apply_vetoes(key, keys, final)
     return [
         Candidate(
             rank=rank,
@@ -255,8 +265,8 @@ def _match_sheet(
         if matched:
             claimed.add(matched)
         if item.match_path is MatchPath.RULE_PARSER:
-            base_kind = rule_parser.ordinal_kind_diff(ref.raw)
-            target_kind = rule_parser.ordinal_kind_diff(item.matched_label or "")
+            base_kind = ordinal_kind_diff(ref.raw)
+            target_kind = ordinal_kind_diff(item.matched_label or "")
             if base_kind and target_kind and base_kind != target_kind:
                 report.structural_alerts.append(
                     StructuralAlert(
@@ -284,7 +294,7 @@ def _match_sheet(
             )
 
     if reviewed:
-        for position in constraints.find_contested(np.vstack([s for _, s in reviewed])):
+        for position in find_contested(np.vstack([s for _, s in reviewed])):
             reviewed[position][0].flags.append("CONTESTED")
     return items
 
@@ -321,41 +331,9 @@ def _match_one(
         Status.NEEDS_REVIEW if passes else Status.UNMATCHED,
         MatchPath.HYBRID,
         candidates,
-        constraints.margin_flag(scores),
+        margin_flag(scores),
     )
     return item, normalize(candidates[0].base_label) if passes else None, scores
-
-
-# 결정론 판정용 인덱스
-class _DeterministicIndex:
-    def __init__(self, target_labels: dict[str, LabelRef]):
-        self.raw: dict[str, str] = {}
-        self.parsed: dict[object, str] = {}
-        for key, found in target_labels.items():
-            # setdefault()로 먼저 나온 라벨 우선 적용
-            self.raw.setdefault(found.raw, key)
-            token = rule_parser.parse(key)
-            if token is not None:
-                self.parsed.setdefault(token, key)
-
-
-# 규칙 기반 결정론적 경로 (auto pass)
-def _match_deterministic(
-    ref: LabelRef, target_labels: dict[str, LabelRef], det: _DeterministicIndex
-) -> tuple[MatchPath, str] | None:
-    key = det.raw.get(ref.raw)
-    if key is not None:
-        return MatchPath.EXACT, key
-    if ref.normalized in target_labels:
-        return MatchPath.NORMALIZED, ref.normalized
-
-    # 구조 일치 비교(예: 100%이하 == 100 % 이하)
-    token = rule_parser.parse(ref.normalized)
-    if token is not None:
-        key = det.parsed.get(token)
-        if key is not None:
-            return MatchPath.RULE_PARSER, key
-    return None
 
 
 def _rank_candidates(
@@ -363,7 +341,7 @@ def _rank_candidates(
 ) -> tuple[np.ndarray, list[Candidate]]:
     keys = matcher.labels
     final, sparse, dense = matcher.score_components(query)
-    adjusted, veto_flags = constraints.apply_vetoes(query, keys, final)
+    adjusted, veto_flags = apply_vetoes(query, keys, final)
 
     candidates = []
     for rank, i in enumerate(np.argsort(-adjusted)[:TOP_K], start=1):

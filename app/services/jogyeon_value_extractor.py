@@ -25,7 +25,7 @@ from config.anchors import (
     RATE_GRADES,
 )
 from jogyeon_matcher.ingest import xlsx_scan
-from jogyeon_matcher.matching.normalizer import sanitize
+from jogyeon_matcher.label_rules import sanitize
 
 # 공백, 비가시문자
 _WS = re.compile(r"\s+")

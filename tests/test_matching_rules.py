@@ -9,8 +9,8 @@ from __future__ import annotations
 import numpy as np
 
 import _support  # noqa: F401  (sys.path 설정)
-from jogyeon_matcher.matching import constraints, rule_parser
-from jogyeon_matcher.matching.normalizer import (
+from app.jogyeon_matcher import label_rules
+from app.jogyeon_matcher.label_rules import (
     find_normalization_collisions,
     normalize,
     sanitize,
@@ -92,14 +92,14 @@ def test_normalization_keeps_labels_distinct():
 
 def test_rule_parser():
     for left, right, expected, why in PARSER_CASES:
-        got = rule_parser.equals(normalize(left), normalize(right))
+        got = label_rules.rule_parser.equals(normalize(left), normalize(right))
         assert got is expected, f"{left!r} vs {right!r} -> {got}, 기대 {expected} ({why})"
 
 
 def test_numeric_and_antonym_constraints():
     for left, right, expected_relation, expected_antonym, why in VETO_CASES:
-        relation = constraints.numeric_relation(normalize(left), normalize(right))
-        antonym = constraints.antonym_conflict(normalize(left), normalize(right))
+        relation = label_rules.constraints.numeric_relation(normalize(left), normalize(right))
+        antonym = label_rules.constraints.antonym_conflict(normalize(left), normalize(right))
         assert relation == expected_relation, (
             f"{left!r} vs {right!r} 숫자 관계 {relation!r}, 기대 {expected_relation!r} ({why})"
         )
@@ -113,7 +113,7 @@ def test_veto_demotes_but_does_not_erase():
     # 정답이 후보 목록에서 아예 사라진다.
     labels = ["11구간", "10구간"]
     scores = np.array([0.9, 0.9])
-    adjusted, flags = constraints.apply_vetoes("10구간", labels, scores)
+    adjusted, flags = label_rules.constraints.apply_vetoes("10구간", labels, scores)
     assert adjusted[0] < adjusted[1], "충돌 후보가 강등되지 않음"
     assert adjusted[0] > 0, "강등이 아니라 소거됨 — 후보에서 사라지면 안 됨"
     assert "NUMERIC_VETO_APPLIED" in flags[0]
@@ -122,7 +122,7 @@ def test_veto_demotes_but_does_not_erase():
 def test_contested_detection():
     # 0행과 1행이 모두 열 0 을 1순위로 지목 -> 둘 다 경합
     matrix = np.array([[0.9, 0.5, 0.1], [0.8, 0.2, 0.1], [0.1, 0.2, 0.7]])
-    contested = constraints.find_contested(matrix)
+    contested = label_rules.constraints.find_contested(matrix)
     assert contested == {0, 1}, f"경합 대상 {sorted(contested)}, 기대 [0, 1]"
 
 

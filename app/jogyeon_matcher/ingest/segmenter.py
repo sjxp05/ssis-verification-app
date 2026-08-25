@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from models.dto import StructuralAlert, TableRegion, Fingerprint
-from ..matching.normalizer import normalize
+from ..label_rules import normalize
 
 # 이보다 작은 덩어리는 표가 아니라 흩어진 주석으로 본다
 MIN_CELLS = 2

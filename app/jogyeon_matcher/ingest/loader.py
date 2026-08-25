@@ -14,7 +14,7 @@ import pandas as pd
 from models.dto import SanitizedCell, Workbook
 
 from . import xlsx_scan
-from ..matching.normalizer import sanitize
+from ..label_rules import sanitize
 
 
 class IngestError(Exception):
