@@ -63,7 +63,7 @@ def load(path: str | Path, required_sheets: tuple[str, ...] = ()) -> Workbook:
             workbook.audit,
         )
 
-    # 필수 시트명 키워드를 포함하면 동일 시트로 판정
+    # [인정조사, 산정특례, 종합조사] 시트이름 완전일치 탐색에서 필수 시트명 키워드를 포함하면 동일 시트로 판정
     missing = []
 
     for required in required_sheets:
@@ -80,7 +80,7 @@ def load(path: str | Path, required_sheets: tuple[str, ...] = ()) -> Workbook:
     return workbook
 
 
-# 실제 값이 있는 마지막 행과 열까지만 유지
+# openpyxl 이 보고하는 시트 크기에서 실제 값이 있는 마지막 셀까지만 남기고 빈 영역은 잘라내기
 def _trim_to_used_range(frame: pd.DataFrame) -> pd.DataFrame:
     if frame.empty:
         return frame
@@ -98,7 +98,7 @@ def _trim_to_used_range(frame: pd.DataFrame) -> pd.DataFrame:
     return frame.loc[:last_row, :last_col]
 
 
-# 문자열 셀만 정제하고 변경된 셀은 audit에 기록
+# 문자열 컬럼 단위로 정제하고 변경된 셀은 audit에 기록
 def _sanitize(
     frame: pd.DataFrame,
     sheet: str,
