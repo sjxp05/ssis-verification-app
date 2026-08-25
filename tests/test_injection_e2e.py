@@ -5,7 +5,7 @@ from __future__ import annotations
 import _support
 
 from app.jogyeon_matcher import Status, match_workbooks
-from app.jogyeon_matcher.ingest import loader, segmenter
+from app.jogyeon_matcher import table_analyzer
 from app.jogyeon_matcher.label_rules import normalize
 
 
@@ -211,8 +211,8 @@ def test_j21_unchanged_label_auto_passes():
 
 def test_j22_adjacent_tables_separated():
     # 빈 열로 구분된 인접 표를 각각의 TableRegion으로 분리
-    workbook = loader.load(_support.BASELINE)
-    regions = segmenter.find_tables(
+    workbook = table_analyzer.load(_support.BASELINE)
+    regions = table_analyzer.find_tables(
         "고시 본문",
         workbook.sheets["고시 본문"],
     )

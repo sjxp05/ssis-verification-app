@@ -21,7 +21,6 @@ from models.dto import (
     Summary,
 )
 
-from .ingest import loader, segmenter
 from .label_rules import (
     DeterministicIndex as _DeterministicIndex,
     apply_vetoes,
@@ -33,9 +32,9 @@ from .label_rules import (
     ordinal_kind_diff,
     parse,
 )
-from .encoder import DenseEncoder
+from .embedding_encoder import DenseEncoder
 from .similarity import HybridConfig, HybridMatcher
-from .validation import value_checks
+from . import table_analyzer
 
 # 라벨이 아닌 값 자체를 나타내는 문구. 해당 문구가 있는 셀은 다른 셀과 유사도 비교하지 않음
 IGNORED = frozenset({"면제", "-", "해당없음", "비고"})
@@ -51,8 +50,8 @@ def match_workbooks(
     config = (
         config or HybridConfig()
     )  # 실험을 통해 찾아낸 최적의 모델 하이퍼파라미터 similarity.py에서 불러오기
-    baseline = loader.load(baseline_path, JOGYEON_SHEET_NAMES)
-    target = loader.load(target_path, JOGYEON_SHEET_NAMES)
+    baseline = table_analyzer.load(baseline_path, JOGYEON_SHEET_NAMES)
+    target = table_analyzer.load(target_path, JOGYEON_SHEET_NAMES)
 
     report = MatchReport(
         run_id=datetime.now().strftime("%Y%m%dT%H%M%S"),
@@ -60,17 +59,24 @@ def match_workbooks(
         target_file=target.name,
     )
 
-    base_regions = {s: segmenter.find_tables(s, f) for s, f in baseline.sheets.items()}
-    target_regions = {s: segmenter.find_tables(s, f) for s, f in target.sheets.items()}
 
-    report.structural_alerts += segmenter.compare_sheets(
+    base_regions = {
+        sheet: table_analyzer.find_tables(sheet, frame)
+        for sheet, frame in baseline.sheets.items()
+    }
+    target_regions = {
+        sheet: table_analyzer.find_tables(sheet, frame)
+        for sheet, frame in target.sheets.items()
+    }
+    
+    report.structural_alerts += table_analyzer.compare_sheets(
         base_regions, target_regions, JOGYEON_SHEET_NAMES
     )
     for regions in target_regions.values():
-        report.structural_alerts += segmenter.check_anchor_uniqueness(
+        report.structural_alerts += table_analyzer.check_anchor_uniqueness(
             regions, SCALAR_ANCHORS
         )
-    report.value_anomalies += value_checks.compare_regions(base_regions, target_regions)
+    report.value_anomalies += table_analyzer.compare_regions(base_regions, target_regions)
 
     base_labels = {s: _collect_labels(base_regions.get(s, [])) for s in baseline.sheets}
     target_labels = {

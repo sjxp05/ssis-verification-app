@@ -281,16 +281,15 @@ def gen_price_table(path: Path, rows: int = 1500):
 # ──────────────────────────────────────────────── 벤치마크 본체
 def bench_match(baseline, target, runs=2):
     from jogyeon_matcher import engine
-    from jogyeon_matcher.ingest import loader, segmenter
+    from jogyeon_matcher import table_analyzer
     from jogyeon_matcher import encoder, similarity
-    from jogyeon_matcher.validation import value_checks
 
-    wrap(loader, "load", "loader.load (엑셀 적재+정제)")
-    wrap(loader, "_sanitize", "loader._sanitize")
-    wrap(segmenter, "find_tables", "segmenter.find_tables")
-    wrap(segmenter, "compare_sheets", "segmenter.compare_sheets")
-    wrap(segmenter, "check_anchor_uniqueness", "segmenter.check_anchor_uniqueness")
-    wrap(value_checks, "compare_regions", "value_checks.compare_regions")
+    wrap(table_analyzer, "load", "table_analyzer.load (엑셀 적재+정제)")
+    wrap(table_analyzer, "_sanitize", "table_analyzer._sanitize")
+    wrap(table_analyzer, "find_tables", "table_analyzer.find_tables")
+    wrap(table_analyzer, "compare_sheets", "table_analyzer.compare_sheets")
+    wrap(table_analyzer, "check_anchor_uniqueness", "table_analyzer.check_anchor_uniqueness")
+    wrap(table_analyzer, "compare_regions", "table_analyzer.compare_regions")
     wrap(engine, "_collect_labels", "engine._collect_labels")
     wrap(
         engine,
