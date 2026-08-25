@@ -6,7 +6,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from .. import paths
+from . import paths
 from models.dto import Decision
 
 LOG_NAME = "decisions.jsonl"

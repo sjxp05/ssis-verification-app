@@ -15,7 +15,7 @@ from PyQt6.QtWidgets import (
 )
 
 from jogyeon_matcher import match_workbooks
-from jogyeon_matcher.audit import decision_log
+from jogyeon_matcher import decision_log
 from models.dto import UploadedFile, MatchReport
 from services import recent_files
 from ui.dialogs.review_dialog import ReviewDialog
