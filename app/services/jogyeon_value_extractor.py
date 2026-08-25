@@ -127,24 +127,19 @@ class ValueExtractor:
 
         # A값, 본인부담금 상한액
         r, c = self._find_one(norm, A_VALUE)
-        a_value = self._num(df.iat[r, c + 1])
-        self._mark("A값", sheet_name, r, c + 1)
-        copay_cap = self._num(df.iat[r, c + 2])
-        self._mark("인정조사 본인부담금 상한액", sheet_name, r, c + 2)
+        a_value = self._read_cell(df, sheet_name, r, c+1, "A값")
+        copay_cap = self._read_cell(df, sheet_name, r, c+2, "인정조사 본인부담금 상한액")
 
         # 기본단가
         r, c = self._find_one(norm, BASE_PRICE)
-        base_price = self._num(df.iat[r, c + 1])
-        self._mark("기본단가", sheet_name, r, c + 1)
+        base_price = self._read_cell(df, sheet_name, r, c+1, "기본단가")
 
         r, c = self._find_one(norm, BASIC_RATE)
         basic_rates = {**FIXED_BASIC_RATE}
         add_rates = {**FIXED_ADD_RATE}
         for i, g in enumerate(RATE_GRADES, start=1):
-            basic_rates[g] = self._num(df.iat[r, c + i])
-            self._mark(f"인정조사 본인부담률 (기본급여).{g}", sheet_name, r, c + i)
-            add_rates[g] = self._num(df.iat[r + 1, c + i])
-            self._mark(f"인정조사 본인부담률 (추가급여).{g}", sheet_name, r + 1, c + i)
+            basic_rates[g] = self._read_cell(df, sheet_name, r, c+i, f"인정조사 본인부담률 (기본급여).{g}")
+            add_rates[g] = self._read_cell(df, sheet_name, r+1, c+i, f"인정조사 본인부담률 (추가급여).{g}")
 
         # 월 한도액
         r, c = self._find_one(norm, GRADE_HEADER)
@@ -165,20 +160,8 @@ class ValueExtractor:
         extended_limits: dict[str, int | float] = {}
         for grade in IJ_GRADES:
             i = row_map[grade]
-            basic_limits[grade] = self._num(df.iat[base_r + i, base_c + 3])
-            self._mark(
-                f"인정조사 월한도액 (기본형).{grade}",
-                sheet_name,
-                base_r + i,
-                base_c + 3,
-            )
-            extended_limits[grade] = self._num(df.iat[base_r + i, base_c + 4])
-            self._mark(
-                f"인정조사 월한도액 (확장형).{grade}",
-                sheet_name,
-                base_r + i,
-                base_c + 4,
-            )
+            basic_limits[grade] =self._read_cell(df, sheet_name, base_r +i, base_c +3, f"인정조사 월한도액 (기본형).{grade}") 
+            extended_limits[grade] = self._read_cell(df, sheet_name, base_r +i, base_c +4, f"인정조사 월한도액 (확장형).{grade}") 
 
         return {
             "기본단가": base_price,
@@ -196,12 +179,10 @@ class ValueExtractor:
 
         # 본인부담금 상한액
         copay_cap = None
-        cap_r, cap_c = -1, -1
 
         try:
             r, c = self._find_one(norm, CAP_LABEL)
-            copay_cap = self._num(df.iat[r, c - 1])
-            cap_r, cap_c = r, c - 1
+            copay_cap = self._read_cell(df, sheet_name, r, c-1, "종합조사/산정특례 본인부담금 상한액")
         except Exception:
             pass
 
@@ -213,7 +194,7 @@ class ValueExtractor:
                         val = self._num(df.iat[r, c + offset])
                         if val is not None and 100000 <= val <= 999999:
                             copay_cap = val
-                            cap_r, cap_c = r, c + offset
+                            self._mark("종합조사/산정특례 본인부담금 상한액", sheet_name, r, c + offset)
                             break
             except Exception:
                 pass
@@ -223,15 +204,12 @@ class ValueExtractor:
                     "종합조사/산정특례 본인부담금 상한액을 찾을 수 없습니다."
                 )
 
-            self._mark("종합조사/산정특례 본인부담금 상한액", sheet_name, cap_r, cap_c)
-
         # 본인부담률
         r, c = self._find_one(norm, INCOME_HEADER)
 
         rates = {**FIXED_BASIC_RATE}
         for i, g in enumerate(RATE_GRADES):
-            rates[g] = self._num(df.iat[r + 1, c + i])
-            self._mark(f"종합조사/산정특례 본인부담률.{g}", sheet_name, r + 1, c + i)
+            rates[g] = self._read_cell(df, sheet_name, r+1, c+i, f"종합조사/산정특례 본인부담률.{g}")
 
         # 추가급여 월 한도액
         base_r, base_c = self._find_first(norm, ADD_ITEMS[0])
@@ -247,10 +225,7 @@ class ValueExtractor:
 
         limits = {}
         for k in ADD_ITEMS:
-            limits[k] = self._num(df.iat[base_r + 1, base_c + col_map[k]])
-            self._mark(
-                f"추가급여 월한도액.{k}", sheet_name, base_r + 1, base_c + col_map[k]
-            )
+            limits[k] = self._read_cell(df, sheet_name, base_r + 1, base_c + col_map[k], f"추가급여 월한도액.{k}")
 
         # 기본단가, A값이 인정조사 변경시 같이 갱신되도록 기록
         self._mark_sync_cells(norm, sheet_name)
@@ -286,8 +261,7 @@ class ValueExtractor:
 
         result = {}
         for label, zone in zip(JH_LABELS, JH_ZONES, strict=True):
-            result[label] = self._num(df.iat[base_r, col_map[zone]])
-            self._mark(f"{mark_prefix}.{label}", sheet_name, base_r, col_map[zone])
+            result[label] = self._read_cell(df, sheet_name, base_r, col_map[zone], f"{mark_prefix}.{label}")
         return result
 
     def read_jh_value(self, file_path, sheet_name):
@@ -325,6 +299,26 @@ class ValueExtractor:
             col = chr(c % 26 + 65) + col
             c = c // 26 - 1
         return f"{col}{r + 1}"
+
+    # 셀을 숫자로 읽고 좌표를 기록, 실패시 위치 및 조치를 담아 리턴
+    def _read_cell(self, df, sheet, r, c, key):
+        loc = f"'{sheet}' 시트 {self._get_excel_cell(r, c)} 셀"
+        try:
+            value = self._num(df.iat[r,c])
+        except ExtractError as error:
+            raise ExtractError(
+                f"'{key}' 값을 읽지 못했습니다 - {error}\n"
+                f"[발견된 오류 위치]: {loc}\n"
+                f"조치: 조견표 엑셀에서 위 셀이 비어 있거나 숫자가 아닌 값이 있는지 확인해 주세요."
+            ) from None
+        except IndexError:
+            raise ExtractError(
+                f"'{key}' 값을 읽지 못했습니다 — 예상 위치가 표 범위를 벗어났습니다.\n"
+                f"[발견된 오류 위치]: {loc} (예상 위치)\n"
+                f"조치: 표의 행·열이 삭제되거나 위치가 이동하지 않았는지 확인해 주세요."
+            ) from None
+        self._mark(key, sheet, r, c)
+        return value
 
     def _validate(self, data):
         for key, size in self._EXPECTED_LEN.items():
