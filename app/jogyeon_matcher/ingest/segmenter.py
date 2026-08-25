@@ -1,10 +1,4 @@
-# 표 분리와 구조 지문
-#
-# 표 경계를 찾아 메모리 안의 TableRegion 으로만 다룬다. 파일로 쪼개 저장하면
-# 재직렬화가 날짜·부동소수점·서식을 변형시켜 새 오류원을 만든다.
-#
-# 표마다 지문(헤더 순서열, 크기, 열 타입)을 만들어 작년과 비교한다. 열이 통째로
-# 뒤바뀌면 라벨은 완벽히 일치하므로, 이것이 그 변화를 잡는 유일한 경로다.
+# 표 경계를 찾고 각 표의 구조 지문(헤더 순서열, 크기, 열 타입)을 만들어 작년과 비교
 
 from __future__ import annotations
 
@@ -19,6 +13,7 @@ from ..matching.normalizer import normalize
 # 이보다 작은 덩어리는 표가 아니라 흩어진 주석으로 본다
 MIN_CELLS = 2
 
+
 def _is_number(text: str) -> bool:
     try:
         float(text.replace(",", "").replace("%", ""))
@@ -31,19 +26,17 @@ def _empty(value) -> bool:
     return pd.isna(value) or (isinstance(value, str) and not value.strip())
 
 
-# 시트 전체의 빈 셀 여부를 한 번에 계산한 bool 행렬. frame.iat 를 셀마다 부르는
-# 대신 컬럼 단위 pandas 벡터 연산으로 만든다. 숫자 등 비문자 값은 문자열로
-# 바뀌어도 빈 문자열이 될 수 없으므로 안전하다.
+# 시트 전체의 빈 셀 여부를 한 번에 계산한 bool 행렬
 def _empty_mask(frame: pd.DataFrame) -> np.ndarray:
     if frame.empty:
         return np.zeros(frame.shape, dtype=bool)
     na = frame.isna().to_numpy()
+    # frame.iat 를 셀마다 호출하지 않고 컬럼 단위 pandas 벡터 연산으로 만든다
     blank = frame.astype(str).apply(lambda c: c.str.strip().eq("")).to_numpy()
     return na | blank
 
 
-# 빈 행·열로 갈라지는 덩어리를 표로 본다. 서식(테두리·병합)에 기대면 서식이
-# 조금만 바뀌어도 탐지가 무너지므로, 가장 견고한 신호인 빈 줄을 쓴다.
+# 빈 행 또는 열을 기준으로 표 구분
 def find_tables(sheet: str, frame: pd.DataFrame) -> list[TableRegion]:
     regions: list[TableRegion] = []
     mask = _empty_mask(frame)
@@ -78,8 +71,7 @@ def _blocks(is_empty: list[bool]) -> list[tuple[int, int]]:
     return spans
 
 
-# 실제 값이 있는 최소 사각형으로 줄인다. 행을 먼저 나누고 열을 나누므로,
-# 나란히 붙은 표에서 한쪽이 짧으면 빈 영역까지 끌어안는다.
+# 실제 값이 있는 최소 사각형으로 줄인다
 def _trim(mask: np.ndarray, row0, col0, row1, col1):
     sub = mask[row0 : row1 + 1, col0 : col1 + 1]
     row_has_data = ~sub.all(axis=1)
@@ -115,22 +107,17 @@ def fingerprint(region: TableRegion) -> Fingerprint:
     return Fingerprint(region.table_id, region.shape, headers, tuple(types))
 
 
+# 작년 ↔ 올해 표 구조 비교
 def compare_sheets(
     baseline: dict, target: dict, required: tuple[str, ...] = ()
 ) -> list[StructuralAlert]:
-    """작년 ↔ 올해 표 구조 비교.
-
-    치명으로 올리는 것은 값 추출이 실제로 불가능해지는 경우뿐이다. 담당자가
-    작업용으로 남긴 시트가 사라지거나 표가 더 쪼개지는 일은 정상 범위이고,
-    그런 것까지 막으면 정상적인 조견표로도 진행이 안 된다.
-    """
     # 작년 시트이름과 완전히 동일하지 않아도 시트이름에 키워드가 포함되면 일단 매칭을 진행하도록 수정
     alerts: list[StructuralAlert] = []
 
     base_to_target = {}
     target_to_base = {}
 
-    # 필수키워드가 포함된 작년 - 올해 시트끼리 매칭
+    # 필수키워드가 포함된 작년-올해 시트끼리 매칭
     for req in required:
         b_sheet = next((s for s in baseline if req in s), None)
         t_sheet = next((s for s in target if req in s), None)
@@ -197,13 +184,7 @@ def compare_sheets(
     return alerts
 
 
-# 앵커로 값을 특정할 수 있는지. 판정 기준을 추출기와 맞춘다.
-#
-#   _find_one 은 앵커를 부분문자열로 찾은 뒤 '서로 다른 행'에 걸쳐 있을 때만
-#   실패한다. 같은 행에 여러 개면 첫 번째를 쓰고 정상 동작한다.
-#
-# 실제 조견표의 '기준중위소득70%이하 / 120%이하 / 180%이하 / 180%초과' 처럼
-# 한 행에 나란한 밴드 헤더가 정상이므로, 셀 개수로 세면 멀쩡한 파일이 막힌다.
+# 앵커 키워드 중복 여부 판정 (기준은 추출기와 일치시킴)
 def check_anchor_uniqueness(
     regions: list[TableRegion], anchors: tuple[str, ...]
 ) -> list[StructuralAlert]:
