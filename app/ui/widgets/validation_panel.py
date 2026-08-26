@@ -20,7 +20,7 @@ from PyQt6.QtWidgets import (
 )
 
 from services.table_validator import CellIssue, ValidationReport
-from ui.components.button import GhostButton
+from ui.components.button import GhostButton 
 from utils.qss import set_state
 
 
@@ -64,17 +64,11 @@ class ValidationPanel(QFrame):
         detail_caption = QLabel("상세")
         detail_caption.setObjectName("ValidationCaption")
 
-        self._detail = QLabel(
-            "표의 셀을 누르거나 위 목록의 오류를 선택하면\n자세한 설명이 여기에 표시됩니다."
-        )
+        self._detail = QLabel("표의 셀을 누르거나 위 목록의 오류를 선택하면\n자세한 설명이 여기에 표시됩니다.")
         self._detail.setObjectName("ValidationDetail")
         self._detail.setWordWrap(True)
-        self._detail.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse
-        )
-        self._detail.setAlignment(
-            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft
-        )
+        self._detail.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self._detail.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
 
         detail_area = QScrollArea()
         detail_area.setObjectName("ValidationDetailArea")
@@ -89,14 +83,14 @@ class ValidationPanel(QFrame):
 
         self._apply_button = GhostButton("추천값 적용")
         self._apply_button.clicked.connect(self._on_apply_expected)
-
+ 
         self._input = QLineEdit()
         self._input.setObjectName("FixInput")
         self._input.setPlaceholderText("직접 입력 (숫자)")
         self._input.returnPressed.connect(self._on_apply_custom)
         self._input_button = GhostButton("적용")
         self._input_button.clicked.connect(self._on_apply_custom)
-
+ 
         fix_row = QHBoxLayout()
         fix_row.setContentsMargins(0, 0, 0, 0)
         fix_row.setSpacing(6)
@@ -106,7 +100,7 @@ class ValidationPanel(QFrame):
         self._fix_area = QWidget()
         self._fix_area.setLayout(fix_row)
         self._fix_area.setVisible(False)
-
+ 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(14, 14, 14, 14)
         layout.setSpacing(10)
@@ -117,14 +111,12 @@ class ValidationPanel(QFrame):
         layout.addWidget(detail_area, 1)
         layout.addWidget(self._fix_area)
 
-    # api############################################
+    #api############################################
     def set_report(self, report: ValidationReport | None) -> None:
-        # 탭이 바뀌거나 표가 새로 만들어졌을 때 전체 목록을 바꿈
+        #탭이 바뀌거나 표가 새로 만들어졌을 때 전체 목록을 바꿈
         self._report = report
         self._list.clear()
-        self._detail.setText(
-            "표의 셀을 누르거나 위 목록의 오류를 선택하면\n자세한 설명이 여기에 표시됩니다."
-        )
+        self._detail.setText("표의 셀을 누르거나 위 목록의 오류를 선택하면\n자세한 설명이 여기에 표시됩니다.")
         self._current_cell = None
         self._current_expected = None
         self._fix_area.setVisible(False)
@@ -134,9 +126,7 @@ class ValidationPanel(QFrame):
             for issue in (report.issues if report else [])
         )
         self._fix_all.setVisible(fixable)
-        self._detail.setText(
-            "표의 셀을 누르거나 위 목록의 오류를 선택하면\n자세한 설명이 여기에 표시됩니다."
-        )
+        self._detail.setText("표의 셀을 누르거나 위 목록의 오류를 선택하면\n자세한 설명이 여기에 표시됩니다.")
 
         if report is None:
             self._set_badge("검증 대기 중", "waiting")
@@ -145,25 +135,18 @@ class ValidationPanel(QFrame):
             self._set_badge(report.notice, "waiting")
             return
 
-        warn_count = len(report.warn_cells)
-        warn_tail = f" · 경고 {warn_count}건" if warn_count else ""
-
+        warn_count=len({row for (row, _c) in report.warn_cells})
+        warn_tail = f" · 경고 {warn_count:,}행" if warn_count else ""
+        
         if not report.issues:
-            self._set_badge(f"PASS — 발견된 오류가 없습니다{warn_tail}", "pass")
+            self._set_badge(f"PASS — 발견된 오류가 없습니다 {warn_tail}", "pass")
         else:
-            self._set_badge(f"FAIL — 오류 {len(report.issues)}건{warn_tail}", "fail")
+            self._set_badge(f"FAIL — 오류 {len(report.issues)}건 {warn_tail}", "fail")
             for issue in report.issues:
                 item = QListWidgetItem(issue.title())
                 item.setData(Qt.ItemDataRole.UserRole, issue)
                 item.setToolTip(issue.detail())
                 self._list.addItem(item)
-
-        # 경고 목록에 표시
-        for (row, column), msg in sorted(report.warn_cells.items()):
-            first_line = msg.split("\n")[0]
-            item = QListWidgetItem(f"⚠ {row + 1}행 · {column} — {first_line}")
-            item.setToolTip(msg)
-            self._list.addItem(item)
 
     def show_cell(self, row: int, column: str) -> None:
         # 표에서 셀을 눌렀을 때: 오류 설명 -> 경고(노란 셀) 사유 순으로 보여주고,
@@ -176,7 +159,7 @@ class ValidationPanel(QFrame):
         header = f"{row + 1}행 · {column}"
         bar = "━" * 24
         tail = f"\n{bar}\n📊 참고 지표\n{metric}" if metric else ""
-        self._setup_fix_area(row, column, issues)
+        self._setup_fix_area(row, column, issues) 
         if issues:
             total = len(issues)
             blocks = []
@@ -190,12 +173,12 @@ class ValidationPanel(QFrame):
         self._list.clearSelection()
         if warn:
             self._detail.setText(
-                f"{header}\n{bar}\n⚠ {warn}\n" "(값을 확인해 보세요)" f"{tail}"
+                f"{header}\n{bar}\n⚠ {warn}\n"
+                "(값을 확인해 보세요)"
+                f"{tail}"
             )
             return
-        self._detail.setText(
-            f"{header}\n{bar}\n이 셀에서 발견된 오류는 없습니다.{tail}"
-        )
+        self._detail.setText(f"{header}\n{bar}\n이 셀에서 발견된 오류는 없습니다.{tail}")
 
     # --- 값 수정 -----------------------------------------------------------
     def _setup_fix_area(self, row: int, column: str, issues) -> None:
@@ -215,13 +198,13 @@ class ValidationPanel(QFrame):
             self._apply_button.setVisible(False)
         self._input.clear()
         self._fix_area.setVisible(True)
-
+ 
     def _on_apply_expected(self) -> None:
         if self._current_cell is None or self._current_expected is None:
             return
         row, column = self._current_cell
         self.fixRequested.emit(row, column, self._current_expected)
-
+ 
     def _on_apply_custom(self) -> None:
         if self._current_cell is None:
             return
@@ -237,7 +220,7 @@ class ValidationPanel(QFrame):
         row, column = self._current_cell
         self.fixRequested.emit(row, column, value)
 
-    # 내부####################
+    #내부####################
     def _set_badge(self, text: str, state: str) -> None:
         self._badge.setText(text)
         set_state(self._badge, "state", state)
@@ -249,11 +232,13 @@ class ValidationPanel(QFrame):
                 return
 
     def _on_item_clicked(self, item: QListWidgetItem) -> None:
-        data = item.data(Qt.ItemDataRole.UserRole)
-        if isinstance(data, tuple):
-            row, column = data
-            self.show_cell(row, column)
-            self.issueActivated.emit(row, column)
+        data=item.data(Qt.ItemDataRole.UserRole)
+        if data is None:
+            return
+        if isinstance(data,tuple):
+            row,column=data
+            self.show_cell(row,column)
+            self.issueActivated.emit(row,column)
             return
         issue: CellIssue = item.data(Qt.ItemDataRole.UserRole)
         self._detail.setText(issue.detail())
