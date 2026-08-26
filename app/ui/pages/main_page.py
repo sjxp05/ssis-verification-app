@@ -220,5 +220,5 @@ class MainPage(QWidget):
 
     def _on_year_changed(self, _key: str, value: object) -> None:
         yearConfig.set_system_year(value)
-        ruleConfig.reset_rules(value)
+        ruleConfig.set_rules()
         self.yearChanged.emit()
