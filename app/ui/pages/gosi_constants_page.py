@@ -16,11 +16,10 @@ from PyQt6.QtWidgets import (
 )
 import pandas as pd
 
-from services import gosi_verifier, recent_files
+from services import gosi_verifier
 from services.table_writer import TableWriter
 from ui.components.card import Card
 from ui.components.button import GhostButton, PrimaryButton
-from ui.components.tab_bar import SegmentedTabBar
 from utils.qss import set_state
 from ui.widgets.gosi_panel import GosiDocumentViewer
 from ui.widgets.gosi_tables import (
@@ -222,6 +221,11 @@ class GosiConstantsPage(QWidget):
                 if amount is not None:
                     formatted[f"{service}.{key}"] = amount
 
+        #증가율에서 사용되는 값 넘기기
+        for key in ("기본단가", "작년 기본단가"):
+            if key in self._reference:
+                formatted[key] = self._reference[key]
+
         return formatted
 
     def _prices(self) -> dict:
@@ -243,7 +247,7 @@ class GosiConstantsPage(QWidget):
         self._reference = values or {}
         if self._result:
             self._result["대조"] = gosi_verifier.compare_with_reference(
-                self._result["월한도액"], self._reference
+                self._result["월한도액"], self._reference, self._result.get("단가")
             )
             self._fill_all()
             self._refresh_state()
@@ -345,6 +349,10 @@ class GosiConstantsPage(QWidget):
         self._compare_table = CompareTableWidget()
         self._compare_table.rowSelected.connect(self._doc.render_document)
 
+        self._compare_issue_label = QLabel()
+        self._compare_issue_label.setObjectName("FindingDetail")
+        self._compare_issue_label.setWordWrap(True)
+
         self._skipped_label = QLabel()
         self._skipped_label.setObjectName("FindingDetail")
         self._skipped_label.setWordWrap(True)
@@ -352,9 +360,8 @@ class GosiConstantsPage(QWidget):
             [
                 self._compare_summary,
                 self._section("조견표 ↔ 고시", self._compare_table),
-                self._section(
-                    "고시에 없어 대조하지 않은 조견표 항목", self._skipped_label
-                ),
+                self._section("고시 자체 검증", self._compare_issue_label),
+                self._section("고시에 없어 대조하지 않은 조견표 항목", self._skipped_label),
             ]
         )
 
@@ -446,6 +453,7 @@ class GosiConstantsPage(QWidget):
 
         self._skipped_label.setText(self._skipped_text(compare_data))
         self._issue_label.setText(self._issue_text())
+        self._compare_issue_label.setText(self._issue_text()) 
 
     # 고시에 대응하는 값이 없어 대조하지 않은 조견표 항목
     def _skipped_text(self, compare_data: dict) -> str:
@@ -609,7 +617,6 @@ class GosiConstantsPage(QWidget):
         self._set_state(BUSY)
         self._generation += 1
 
-        self._basic_df = basic_df
         task = _TableWriteTask(
             self._table_writer, service_prices, basic_df, self._generation
         )

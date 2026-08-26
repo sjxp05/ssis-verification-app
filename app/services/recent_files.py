@@ -61,28 +61,3 @@ def set_recent_path(year: int, key: str, path: Path) -> None:
             json.dump(data, f, ensure_ascii=False, indent=2)
     except Exception as e:
         print(f"캐시 파일 저장 실패: {e}")
-
-
-# 전년도 조견표 경로가 캐시에 있는지 찾아서 가장 최근 것을 반환
-# TODO: 기존 Path 하나 -> 있는 파일들 모두 dict로 반환하기
-def search_jogyeon_history(year: int, key: str = "jogyeon") -> Path | None:
-    # 기록이 없거나 파일이 더 이상 존재하지 않으면 None
-    if not CACHE_FILE.exists():
-        return None
-
-    try:
-        with open(CACHE_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-
-        for y in sorted(data.keys(), reverse=True):
-            if int(y) >= year:
-                continue
-            path_str = data[y].get(key)
-            if path_str is not None:
-                return Path(path_str)
-
-        return None
-
-    except Exception as e:
-        print(f"캐시 파일 읽기 실패: {e}")
-        return None

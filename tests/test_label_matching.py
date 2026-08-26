@@ -13,8 +13,8 @@ import numpy as np
 import pandas as pd
 
 import _support
-from jogyeon_matcher.matching.hybrid import HybridConfig, HybridMatcher
-from jogyeon_matcher.matching.normalizer import normalize
+from app.jogyeon_matcher.matching.hybrid import HybridConfig, HybridMatcher
+from app.jogyeon_matcher.label_rules import normalize
 
 # 부품 성능이 실제로 갈리는 구간. 나머지는 항등(74건)·정규화(28건)라
 # 전체 평균을 지표로 쓰면 차이가 희석된다.

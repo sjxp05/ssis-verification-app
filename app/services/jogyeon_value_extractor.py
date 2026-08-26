@@ -4,10 +4,9 @@ import itertools
 import re
 from pathlib import Path
 from models.dto import UploadedFile
-from utils.date import yearConfig
+from config.date import yearConfig
 
-# TODO: 현재 config/anchors.py 에 있는 상수포함 탐색, 서식용 상수들 app 아래 폴더 만들어서 정리
-from jogyeon_matcher.config.anchors import (
+from config.anchors import (
     A_VALUE,
     ADD_ITEMS,
     BASE_PRICE,
@@ -25,8 +24,8 @@ from jogyeon_matcher.config.anchors import (
     JOGYEON_SHEET_NAMES,
     RATE_GRADES,
 )
-from jogyeon_matcher.ingest import xlsx_scan
-from jogyeon_matcher.matching.normalizer import sanitize
+from utils import xlsx_scan
+from jogyeon_matcher.label_rules import sanitize
 
 # 공백, 비가시문자
 _WS = re.compile(r"\s+")
@@ -38,25 +37,25 @@ class ExtractError(Exception):
 
 class ValueExtractor:
     def __init__(self):
-        self._cell_map:dict[str,tuple[str,int,int]]={}
-        self._source_path: Path | None=None
+        self._cell_map: dict[str, tuple[str, int, int]] = {}
+        self._source_path: Path | None = None
 
     # 값을 읽은 셀 좌표 기록(수정본 저장 시 사용하기 위해 필요함)
-    def _mark(self,key:str,sheet:str,r:int,c:int)->None:
-        self._cell_map[key]=(sheet,r,c)
+    def _mark(self, key: str, sheet: str, r: int, c: int) -> None:
+        self._cell_map[key] = (sheet, r, c)
 
-    def cell_map(self)->dict[str,tuple[str,int,int]]:
+    def cell_map(self) -> dict[str, tuple[str, int, int]]:
         return dict(self._cell_map)
 
-    def _mark_sync_cells(self,norm,sheet_name):
-        for value_key,anchor in (("기본단가",BASE_PRICE),("A값",A_VALUE)):
+    def _mark_sync_cells(self, norm, sheet_name):
+        for value_key, anchor in (("기본단가", BASE_PRICE), ("A값", A_VALUE)):
             try:
-                r,c=self._find_first(norm,anchor)
+                r, c = self._find_first(norm, anchor)
             except ExtractError:
                 continue
-            self._mark(f"{value_key}@{sheet_name}",sheet_name,r,c+1)
+            self._mark(f"{value_key}@{sheet_name}", sheet_name, r, c + 1)
 
-    def source_path(self)-> Path |None:
+    def source_path(self) -> Path | None:
         return self._source_path
 
     # 문자열 처리
@@ -109,6 +108,10 @@ class ValueExtractor:
             return int(value) if float(value).is_integer() else float(value)
 
         text = self._squeeze(value).replace(",", "").replace("%", "")
+
+        if text == "-":
+            return 0
+
         if text.lower() in ("", "nan", "none"):
             raise ExtractError("값이 비어 있습니다")
         try:
@@ -124,24 +127,19 @@ class ValueExtractor:
 
         # A값, 본인부담금 상한액
         r, c = self._find_one(norm, A_VALUE)
-        a_value = self._num(df.iat[r, c + 1])
-        self._mark("A값",sheet_name,r,c+1)
-        copay_cap = self._num(df.iat[r, c + 2])
-        self._mark("인정조사 본인부담금 상한액",sheet_name,r,c+2)
+        a_value = self._read_cell(df, sheet_name, r, c+1, "A값")
+        copay_cap = self._read_cell(df, sheet_name, r, c+2, "인정조사 본인부담금 상한액")
 
         # 기본단가
         r, c = self._find_one(norm, BASE_PRICE)
-        base_price = self._num(df.iat[r, c + 1])
-        self._mark("기본단가",sheet_name,r,c+1)
+        base_price = self._read_cell(df, sheet_name, r, c+1, "기본단가")
 
         r, c = self._find_one(norm, BASIC_RATE)
         basic_rates = {**FIXED_BASIC_RATE}
         add_rates = {**FIXED_ADD_RATE}
         for i, g in enumerate(RATE_GRADES, start=1):
-            basic_rates[g]=self._num(df.iat[r,c+i])
-            self._mark(f"인정조사 본인부담률 (기본급여).{g}",sheet_name,r,c+i)
-            add_rates[g]=self._num(df.iat[r+1,c+i])
-            self._mark(f"인정조사 본인부담률 (추가급여).{g}",sheet_name,r+1,c+i)
+            basic_rates[g] = self._read_cell(df, sheet_name, r, c+i, f"인정조사 본인부담률 (기본급여).{g}")
+            add_rates[g] = self._read_cell(df, sheet_name, r+1, c+i, f"인정조사 본인부담률 (추가급여).{g}")
 
         # 월 한도액
         r, c = self._find_one(norm, GRADE_HEADER)
@@ -162,10 +160,8 @@ class ValueExtractor:
         extended_limits: dict[str, int | float] = {}
         for grade in IJ_GRADES:
             i = row_map[grade]
-            basic_limits[grade] = self._num(df.iat[base_r + i, base_c + 3])
-            self._mark(f"인정조사 월한도액 (기본형).{grade}",sheet_name,base_r+i,base_c+3)
-            extended_limits[grade] = self._num(df.iat[base_r + i, base_c + 4])
-            self._mark(f"인정조사 월한도액 (확장형).{grade}",sheet_name,base_r+i,base_c+4)
+            basic_limits[grade] =self._read_cell(df, sheet_name, base_r +i, base_c +3, f"인정조사 월한도액 (기본형).{grade}") 
+            extended_limits[grade] = self._read_cell(df, sheet_name, base_r +i, base_c +4, f"인정조사 월한도액 (확장형).{grade}") 
 
         return {
             "기본단가": base_price,
@@ -181,18 +177,39 @@ class ValueExtractor:
     def read_sj_value(self, file_path, sheet_name):
         df, norm = self._load(file_path, sheet_name)
 
-        # 본인부담금 상한액 
-        r, c = self._find_one(norm, CAP_LABEL)
-        copay_cap = self._num(df.iat[r, c - 1])
-        self._mark("종합조사/산정특례 본인부담금 상한액",sheet_name,r,c-1)
+        # 본인부담금 상한액
+        copay_cap = None
 
-        # 본인부담률 
+        try:
+            r, c = self._find_one(norm, CAP_LABEL)
+            copay_cap = self._read_cell(df, sheet_name, r, c-1, "종합조사/산정특례 본인부담금 상한액")
+        except Exception:
+            pass
+
+        if copay_cap is None:
+            try:
+                r, c = self._find_one(norm, A_VALUE)
+                for offset in (1, 2, 3):
+                    if c + offset < df.shape[1]:
+                        val = self._num(df.iat[r, c + offset])
+                        if val is not None and 100000 <= val <= 999999:
+                            copay_cap = val
+                            self._mark("종합조사/산정특례 본인부담금 상한액", sheet_name, r, c + offset)
+                            break
+            except Exception:
+                pass
+
+            if copay_cap is None:
+                raise ExtractError(
+                    "종합조사/산정특례 본인부담금 상한액을 찾을 수 없습니다."
+                )
+
+        # 본인부담률
         r, c = self._find_one(norm, INCOME_HEADER)
 
-        rates={**FIXED_BASIC_RATE}
-        for i,g in enumerate(RATE_GRADES):
-            rates[g]=self._num(df.iat[r+1,c+i])
-            self._mark(f"종합조사/산정특례 본인부담률.{g}",sheet_name,r+1,c+i)
+        rates = {**FIXED_BASIC_RATE}
+        for i, g in enumerate(RATE_GRADES):
+            rates[g] = self._read_cell(df, sheet_name, r+1, c+i, f"종합조사/산정특례 본인부담률.{g}")
 
         # 추가급여 월 한도액
         base_r, base_c = self._find_first(norm, ADD_ITEMS[0])
@@ -206,13 +223,12 @@ class ValueExtractor:
         if missing:
             raise ExtractError(f"추가급여 항목을 찾지 못했습니다: {missing}")
 
-        limits={}
+        limits = {}
         for k in ADD_ITEMS:
-            limits[k]=self._num(df.iat[base_r+1, base_c + col_map[k]])
-            self._mark(f"추가급여 월한도액.{k}",sheet_name, base_r+1, base_c + col_map[k])
+            limits[k] = self._read_cell(df, sheet_name, base_r + 1, base_c + col_map[k], f"추가급여 월한도액.{k}")
 
-        #기본단가, A값이 인정조사 변경시 같이 갱신되도록 기록
-        self._mark_sync_cells(norm,sheet_name)
+        # 기본단가, A값이 인정조사 변경시 같이 갱신되도록 기록
+        self._mark_sync_cells(norm, sheet_name)
 
         return {
             "종합조사/산정특례 본인부담금 상한액": copay_cap,
@@ -220,7 +236,7 @@ class ValueExtractor:
             "추가급여 월한도액": limits,
         }
 
-    def _read_jh_row(self, df, norm, keyword,mark_prefix,sheet_name):
+    def _read_jh_row(self, df, norm, keyword, mark_prefix, sheet_name):
         r, _ = self._find_first(norm, keyword)
         base_r = r + 1
 
@@ -233,22 +249,30 @@ class ValueExtractor:
                 name = norm.iat[row, col]
                 if name in JH_ZONES and name not in col_map:
                     col_map[name] = col
+                if name in JH_LABELS and name not in col_map:
+                    col_map[name.replace("구간", "등급")] = col
+
+        # 시트에 컬럼이 어떤 순서로 있든 1~15 순서로 고정
+        col_map = dict(sorted(col_map.items(), key=lambda item: int(item[0][:-2])))
 
         missing = [z for z in JH_ZONES if z not in col_map]
         if missing:
             raise ExtractError(f"'{keyword}' 표에서 구간을 찾지 못했습니다: {missing}")
 
-        result={}
-        for label,zone in zip(JH_LABELS,JH_ZONES,strict=True):
-            result[label]=self._num(df.iat[base_r, col_map[zone]])
-            self._mark(f"{mark_prefix}.{label}",sheet_name,base_r,col_map[zone])
+        result = {}
+        for label, zone in zip(JH_LABELS, JH_ZONES, strict=True):
+            result[label] = self._read_cell(df, sheet_name, base_r, col_map[zone], f"{mark_prefix}.{label}")
         return result
 
     def read_jh_value(self, file_path, sheet_name):
         df, norm = self._load(file_path, sheet_name)
         return {
-            "종합조사 월한도액 (기본형)": self._read_jh_row(df, norm, JH_BASIC,"종합조사 월한도액 (기본형)",sheet_name),
-            "종합조사 월한도액 (확장형)": self._read_jh_row(df, norm, JH_EXTENDED,"종합조사 월한도액 (확장형)",sheet_name),
+            "종합조사 월한도액 (기본형)": self._read_jh_row(
+                df, norm, JH_BASIC, "종합조사 월한도액 (기본형)", sheet_name
+            ),
+            "종합조사 월한도액 (확장형)": self._read_jh_row(
+                df, norm, JH_EXTENDED, "종합조사 월한도액 (확장형)", sheet_name
+            ),
         }
 
     _EXPECTED_LEN = {
@@ -269,6 +293,33 @@ class ValueExtractor:
     )
     _LIMIT_KEYS = tuple(k for k in _EXPECTED_LEN if "월한도액" in k)
 
+    def _get_excel_cell(self, r, c):
+        col = ""
+        while c >= 0:
+            col = chr(c % 26 + 65) + col
+            c = c // 26 - 1
+        return f"{col}{r + 1}"
+
+    # 셀을 숫자로 읽고 좌표를 기록, 실패시 위치 및 조치를 담아 리턴
+    def _read_cell(self, df, sheet, r, c, key):
+        loc = f"'{sheet}' 시트 {self._get_excel_cell(r, c)} 셀"
+        try:
+            value = self._num(df.iat[r,c])
+        except ExtractError as error:
+            raise ExtractError(
+                f"'{key}' 값을 읽지 못했습니다 - {error}\n"
+                f"[발견된 오류 위치]: {loc}\n"
+                f"조치: 조견표 엑셀에서 위 셀이 비어 있거나 숫자가 아닌 값이 있는지 확인해 주세요."
+            ) from None
+        except IndexError:
+            raise ExtractError(
+                f"'{key}' 값을 읽지 못했습니다 — 예상 위치가 표 범위를 벗어났습니다.\n"
+                f"[발견된 오류 위치]: {loc} (예상 위치)\n"
+                f"조치: 표의 행·열이 삭제되거나 위치가 이동하지 않았는지 확인해 주세요."
+            ) from None
+        self._mark(key, sheet, r, c)
+        return value
+
     def _validate(self, data):
         for key, size in self._EXPECTED_LEN.items():
             actual = len(data[key])
@@ -286,18 +337,39 @@ class ValueExtractor:
         amounts.update(
             {f"추가급여 월한도액[{k}]": v for k, v in data["추가급여 월한도액"].items()}
         )
-        bad = {k: v for k, v in amounts.items() if v <= 0}
+        bad = {k: v for k, v in amounts.items() if v < 0}
         if bad:
-            raise ExtractError(f"금액이 0 이하인 항목이 있습니다: {bad}")
+            raise ExtractError(f"금액이 음수인 항목이 있습니다: {bad}")
 
         # 종합조사 월 한도액이 구간이 올라갈수록 감소하는지 검증
         for key in ("종합조사 월한도액 (기본형)", "종합조사 월한도액 (확장형)"):
-            series = list(data[key].values())
-            if any(a <= b for a, b in itertools.pairwise(series)):
-                raise ExtractError(
-                    f"'{key}'가 구간 순으로 감소하지 않습니다: {series}"
-                    "\n조치: 조견표의 구간 배치가 바뀌었는지 확인하세요."
-                )
+            series = list(data[key].items())
+            for (label_prev, val_prev), (label_curr, val_curr) in itertools.pairwise(
+                series
+            ):
+                if val_prev <= val_curr:
+                    cell_prev = self._cell_map.get(f"{key}.{label_prev}")
+                    cell_curr = self._cell_map.get(f"{key}.{label_curr}")
+
+                    loc_prev = (
+                        f"'{cell_prev[0]}' 시트 {self._get_excel_cell(cell_prev[1], cell_prev[2])}셀"
+                        if cell_prev
+                        else "위치 알 수 없음"
+                    )
+                    loc_curr = (
+                        f"'{cell_curr[0]}' 시트 {self._get_excel_cell(cell_curr[1], cell_curr[2])}셀"
+                        if cell_curr
+                        else "위치 알 수 없음"
+                    )
+
+                    raise ExtractError(
+                        f"'{key}'의 금액이 구간(등급) 순으로 감소하지 않습니다.\n"
+                        f"[발견된 오류 위치]\n"
+                        f" - {label_prev}: {val_prev:,}원 ({loc_prev})\n"
+                        f" - {label_curr}: {val_curr:,}원 ({loc_curr})\n"
+                        f"조치: 조견표 엑셀 파일에서 위 위치의 금액이 올바르게 입력되었는지, 혹은 구간 배치가 바뀌지 않았는지 확인해 주세요."
+                    )
+        # TODO: 친절한 error공지를 띄워주도록 엑셀의 위치와 설명을 명확하게 하는게 좋을듯
 
     # 인정조사 탭에 표시할 키
     _TAB1_KEYS = (
@@ -318,20 +390,74 @@ class ValueExtractor:
         "종합조사 월한도액 (확장형)",
     )
 
+    # 작년 조견표가 캐시에 있는 경우 기본단가만 읽어서 반환한다
+    def read_prev_unit_price(self, year: int) -> int | float | None:
+        from services import recent_files
+
+        path = recent_files.get_recent_path(year - 1, "jogyeon")
+        if path is None or not path.exists():
+            return None
+        saved = dict(self._cell_map)
+        try:
+            return self.read_ij_value(path, JOGYEON_SHEET_NAMES[0])["기본단가"]
+        except Exception:
+            return None
+        finally:
+            self._cell_map = saved
+
+    # 조견표를 직접 올리지 않는 결제단가표 플로우에서 인상률 기준으로 쓴다.
+    def read_cached_unit_prices(self, year: int) -> dict:
+        from services import recent_files
+
+        result: dict = {}
+        saved = dict(self._cell_map)
+        try:
+            curr_path = recent_files.get_recent_path(year, "jogyeon")
+            if curr_path is not None:
+                try:
+                    result["기본단가"] = self.read_ij_value(
+                        curr_path, JOGYEON_SHEET_NAMES[0]
+                    )["기본단가"]
+                except Exception:
+                    pass
+            prev = self.read_prev_unit_price(year)
+            if prev is not None:
+                result["작년 기본단가"] = prev
+        finally:
+            self._cell_map = saved
+        return result
+
     def extract_jogyeon_values(self, file: UploadedFile):
         self._cell_map.clear()
-        self._source_path=file.path
+        self._source_path = file.path
         readers = (self.read_ij_value, self.read_sj_value, self.read_jh_value)
         data = {}
+        # for reader, sheet in zip(readers, JOGYEON_SHEET_NAMES, strict=True):
+        try:
+            sheet_names = pd.ExcelFile(file.path).sheet_names
+        except ExtractError as error:
+            raise ExtractError(
+                f"엑셀 파일을 읽는 중 오류가 발생했습니다: {error}"
+            ) from None
+
         for reader, sheet in zip(readers, JOGYEON_SHEET_NAMES, strict=True):
+            matched_sheet = next((name for name in sheet_names if sheet in name), None)
+            if matched_sheet is None:
+                raise ExtractError(f"'{sheet}'(이)가 포함된 시트를 찾을 수 없습니다.")
+
             try:
-                data.update(reader(file.path, sheet))
+                data.update(reader(file.path, matched_sheet))
             except ExtractError as error:
-                raise ExtractError(f"'{sheet}' 시트 — {error}") from None
+                raise ExtractError(f"'{matched_sheet}' 시트 - {error}") from None
+
         self._validate(data)
 
         # 화면에 탭(페이지) 2개로 나눠 보여주기 위해 dict 2개짜리 list로 반환
         tab1 = {"사업년도": yearConfig.SYSTEM_YEAR, "차수": 1}
         tab1.update({key: data[key] for key in self._TAB1_KEYS})
+        # 작년 조견표가 있으면 기본단가 인상률 계산을 위해 함께 넘김
+        prev = self.read_prev_unit_price(yearConfig.SYSTEM_YEAR)
+        if prev is not None:
+            tab1["작년 기본단가"] = prev
         tab2 = {key: data[key] for key in self._TAB2_KEYS}
         return [tab1, tab2]

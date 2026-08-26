@@ -10,7 +10,7 @@ import pandas as pd
 
 from services.price_table_parser import TIERS, ParsedRow, parse_name
 from services.table_writer import ADD_CODE_INFO, TableWriter
-from utils.rules import ruleConfig
+from config.rules import ruleConfig
 
 # 조견표 추출 상수
 K_UNIT_PRICE = "기본단가"
@@ -29,6 +29,7 @@ K_JH_LIMITS = {
     "확장형": "종합조사 월한도액 (확장형)",
 }
 K_ADD_LIMITS = "추가급여 월한도액"
+K_PREV_UNIT_PRICE = "작년 기본단가"
 
 # 기본,추가급여 단가표 공통으로 사용
 C_SUPPORT = "지원량"
@@ -63,6 +64,14 @@ def growth_rate(prev, curr):
     if not prev or curr is None:
         return None
     return round((curr - prev) / prev * 100, 2)
+
+
+# 증가율 경고 임계값 정하기
+GROWTH_TOLERANCE = 0.5  # (%p)폭 이상 벗어나면 경고
+
+# 임계값을 알 수 없는 경우 사용하는 값
+GROWTH_WARN_MAX = 4.0  # 이보다 크면 과도한 증가
+GROWTH_WARN_MIN = 0.0  # 이보다 작으면 경고
 
 
 def _num(value):
@@ -140,6 +149,8 @@ class ValidationReport:
     metrics: dict[int, str] = field(default_factory=dict)
     # 확인이 필요한 셀 경고 아이콘 넣는용도
     warn_cells: dict[tuple[int, str], str] = field(default_factory=dict)
+    # 증가율 sort용도로 사용
+    growth_scores: dict[int,float]=field(default_factory=dict)
     # 검증을 못 돌린 경우
     notice: str = ""
 
@@ -199,11 +210,25 @@ class TableValidator:
 
         # 작년
         if prev_df is not None:
+            caps = self._collect_caps(values)
+            raw = values or {}
+            baseline = growth_rate(raw.get(K_PREV_UNIT_PRICE), raw.get(K_UNIT_PRICE))
             if flow == "unit_price":
-                self._append_growth_metrics(report, df, prev_df)
+                self._append_growth_metrics(report, df, prev_df, caps, baseline)
             else:
-                self._append_growth_metrics_pay(report, df, prev_df)
+                self._append_growth_metrics_pay(report, df, prev_df, caps, baseline)
         return report
+
+    # 본인부담금 상한액인 것
+    @staticmethod
+    def _collect_caps(values: dict | None) -> set[int]:
+        caps: set[int] = set()
+        for key, value in (values or {}).items():
+            if "상한액" not in str(key):
+                continue
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                caps.add(int(value))
+        return caps
 
     # 값 꺼내기
     def _unflatten(self, values: dict | None) -> dict:
@@ -642,7 +667,7 @@ class TableValidator:
                             actual=support,
                             fixes=(f"{P_SUPPORT} {_fmt(support)} → {_fmt(ref_s)}",),
                             extra="결제단가의 지원량은 같은 등급구분의 기본급여 지원량과 같아야 합니다.\n"
-                            "지원량을 먼저 바로잡은 뒤 재검증하면 금액·율도 검사됩니다.",
+                            "지원량을 먼저 바로잡은 뒤 재검증하면 금액,율도 검사됩니다.",
                         )
                     )
                 else:
@@ -672,8 +697,16 @@ class TableValidator:
                     # 3) 퍼센트(율) 기본급여 금액으로 계산한 값과 대조
                     if has_rates:
                         for col, rate, expected_rate in (
-                            (P_GOV_RATE, gov_rate, round(ref_g / ref_s, 10)),
-                            (P_COPAY_RATE, copay_rate, round(ref_c / ref_s, 10)),
+                            (
+                                P_GOV_RATE,
+                                gov_rate,
+                                0 if ref_s == 0 else round(ref_g / ref_s, 10),
+                            ),
+                            (
+                                P_COPAY_RATE,
+                                copay_rate,
+                                0 if ref_s == 0 else round(ref_c / ref_s, 10),
+                            ),
                         ):
                             if rate is not None and abs(rate - expected_rate) > 1e-9:
                                 report.add(
@@ -907,7 +940,7 @@ class TableValidator:
                 CellIssue(
                     i,
                     P_SUPPORT,
-                    "지원량이 틀림 (금액 합·두 율과 대조)",
+                    "지원량이 틀림 (금액 합, 두 율과 대조)",
                     expected=alt,
                     actual=support,
                     fixes=(f"{P_SUPPORT} {_fmt(support)} → {_fmt(alt)}",),
@@ -1120,6 +1153,8 @@ class TableValidator:
     ) -> None:
         if parsed.letter in ("가", "나"):
             return
+        if support == 0:
+            return  # 월한도액이 0원인 경우
         if not (isinstance(rate, float) and rate < 1) or not support or copay is None:
             return
         if cap is not None and floor_100(support * rate) >= cap:
@@ -1132,7 +1167,7 @@ class TableValidator:
         if abs(actual - stated) <= tolerance + 1e-9:
             return
         report.warn_cells[(i, C_COPAY)] = (
-            f"본인부담률이 조견표와 다름 (조견표 {stated:g}% · 실제 {actual:.2f}%)"
+            f"본인부담률이 조견표와 다름 (조견표 {stated:g}% | 실제 {actual:.2f}%)"
         )
 
     # 부담률
@@ -1152,6 +1187,8 @@ class TableValidator:
                     else f"{self._rate_text(rate)} (차상위)"
                 )
             )
+        elif support == 0:
+            lines.append("부담률: 없음 (월한도액 0원)")
         elif rate is not None and support:
             actual = (copay or 0) / support * 100
             stated = rate * 100 if isinstance(rate, float) and rate < 1 else None
@@ -1162,7 +1199,7 @@ class TableValidator:
                 and floor_100(support * rate) >= cap
             )
 
-            line = f"부담률: 조견표 {self._rate_text(rate)} · 실제 {actual:.2f}%"
+            line = f"부담률: 조견표 {self._rate_text(rate)} | 실제 {actual:.2f}%"
             if stated is not None:
                 line += f" · 차이 {actual - stated:+.2f}%"
             if capped:
@@ -1207,15 +1244,67 @@ class TableValidator:
             lines.append(f"∴ 본인부담금 = {_fmt(floored)}원")
         return "\n".join(lines)
 
+    def _warn_growth(
+        self,
+        report: ValidationReport,
+        i: int,
+        col: str,
+        g: float | None,
+        capped: bool = False,
+        baseline=None,
+    ) -> None:
+        # 증가율이 정상범위 넘어가면 노란색 경고
+        if g is None:
+            return
+        if baseline is not None:
+            if capped:
+                return
+            diff = g - baseline
+            old_score=report.growth_scores.get(i,0.0)
+            report.growth_scores[i]=max(old_score,abs(diff))
+            if abs(diff) <= GROWTH_TOLERANCE:
+                return
+            direction = "높음" if diff > 0 else "낮음"
+            msg = (
+                f"작년 대비 증가율 {g:+.2f}%  기본단가 인상률 {baseline:+.2f}%보다"
+                f" {abs(diff):.2f}%p {direction}"
+            )
+        else:
+            if g > GROWTH_WARN_MAX:
+                msg = (
+                    f"작년 대비 증가율 {g:+.2f}%  과도한 증가"
+                    f" (기준 +{GROWTH_WARN_MAX:g}% 초과)"
+                )
+            elif g < GROWTH_WARN_MIN:
+                msg = f"작년 대비 증가율 {g:+.2f}%  작년보다 감소"
+            else:
+                return
+        if capped:
+            msg += "(상한액 적용 부분)"
+        if (i, col) in report.cells:
+            return
+        old = report.warn_cells.get((i, col))
+        report.warn_cells[(i, col)] = f"{old}\n{msg}" if old else msg
+
     def _append_growth_metrics(
-        self, report: ValidationReport, df: pd.DataFrame, prev_df: pd.DataFrame
+        self,
+        report: ValidationReport,
+        df: pd.DataFrame,
+        prev_df: pd.DataFrame,
+        caps: set[int] | None = None,
+        baseline=None,
     ) -> None:
         # 과거 단가표와 비교해 증가율
         if C_CODE not in df.columns or C_CODE not in prev_df.columns:
             return
+        caps = caps or set()
         prev_by_code = {
             str(row.get(C_CODE, "") or "").strip(): row for _, row in prev_df.iterrows()
         }
+        head = "증가율(비교단가)"
+        if baseline is not None:
+            head += f" [기본단가 인상률 {baseline:+.2f}% 기준]"
+        cap_pairs: dict[int, int] = {}
         for i in range(len(df.index)):
             row = df.iloc[i]
             old = prev_by_code.get(str(row.get(C_CODE, "") or "").strip())
@@ -1224,20 +1313,39 @@ class TableValidator:
             else:
                 parts = []
                 for col in (C_SUPPORT, C_GOV, C_COPAY):
-                    g = growth_rate(_num(old.get(col)), _num(row.get(col)))
-                    parts.append(f"{col} {'-' if g is None else f'{g:+.2f}%'}")
-                extra = "증가율(비교단가): " + " · ".join(parts)
-            report.metrics[i] = (report.metrics.get(i, "") + "\n" + extra).strip()
+                    curr = _num(row.get(col))
+                    prev = _num(old.get(col))
+                    g = growth_rate(prev, curr)
+                    capped = col == C_COPAY and curr is not None and int(curr) in caps
+                    if capped and prev:
+                        cap_pairs.setdefault(int(curr), int(prev))
+                    text = f"{col} {'-' if g is None else f'{g:+.2f}%'}"
+                    parts.append(text + (" (상한 적용)" if capped else ""))
+                    self._warn_growth(
+                        report, i, col, g, capped=capped, baseline=baseline
+                    )
+                extra = head + "\n" + "\n".join(parts)
+            report.metrics[i] = (report.metrics.get(i, "") + "\n\n" + extra).strip()
 
     def _append_growth_metrics_pay(
-        self, report: ValidationReport, df: pd.DataFrame, prev_df: pd.DataFrame
+        self,
+        report: ValidationReport,
+        df: pd.DataFrame,
+        prev_df: pd.DataFrame,
+        caps: set[int] | None = None,
+        baseline=None,
     ) -> None:
         # 과거 결제 단가표와 비교해 증가율
+        caps = caps or set()
         if P_CODE not in df.columns or P_CODE not in prev_df.columns:
             return
         prev_by_code = {
             str(row.get(P_CODE, "") or "").strip(): row for _, row in prev_df.iterrows()
         }
+        head = "증가율(비교단가)"
+        if baseline is not None:
+            head += f" [기본단가 인상률 {baseline:+.2f}% 기준]"
+        cap_pairs: dict[int, int] = {}
         for i in range(len(df.index)):
             row = df.iloc[i]
             old = prev_by_code.get(str(row.get(P_CODE, "") or "").strip())
@@ -1246,23 +1354,78 @@ class TableValidator:
             else:
                 parts = []
                 for col in (P_SUPPORT, P_GOV, P_COPAY):
-                    g = growth_rate(_num(old.get(col)), _num(row.get(col)))
-                    parts.append(f"{col} {'-' if g is None else f'{g:+.2f}%'}")
-                extra = "증가율(비교단가): " + " · ".join(parts)
-            report.metrics[i] = (report.metrics.get(i, "") + "\n" + extra).strip()
+                    curr = _num(row.get(col))
+                    prev = _num(old.get(col))
+                    g = growth_rate(prev, curr)
+                    capped = col == P_COPAY and curr is not None and int(curr) in caps
+                    if capped and prev:
+                        cap_pairs.setdefault(int(curr), int(prev))
+                    text = f"{col} {'-' if g is None else f'{g:+.2f}%'}"
+                    parts.append(text + (" (상한 적용)" if capped else ""))
+                    self._warn_growth(
+                        report, i, col, g, capped=capped, baseline=baseline
+                    )
+                extra = head + "\n" + "\n".join(parts)
+            report.metrics[i] = (report.metrics.get(i, "") + "\n\n" + extra).strip()
 
 
 def read_prev_table(path: str) -> pd.DataFrame:
-    # '작년 단가표 불러오기' 버튼용 — 등급구분/지원량/정부지원금/본인부담금만 있으면 된다.
-    #
-    # 실측: 실제 결제단가표는 2만 행이 넘어 openpyxl 파싱에 10초 이상 걸린다.
-    # 파일 내용이 같으면(경로+수정시각+크기) 이전에 읽은 결과를 그대로 쓴다.
+    # '작년 단가표 불러오기' 버튼용 등급구분/지원량/정부지원금/본인부담금만 있으면 된다.
     cached = _read_table_cache(path)
     if cached is not None:
         return cached
     df = pd.read_excel(path, engine="openpyxl")
     _write_table_cache(path, df)
     return df
+
+
+# 올린 작년 단가표 순서 교체
+def align_prev_table(
+    curr_df: pd.DataFrame, prev_df: pd.DataFrame, flow: str
+) -> pd.DataFrame:
+    if flow == "unit_price":
+        key_cols = [C_CODE]
+    else:
+        key_cols = [P_CODE, P_SERVICE, P_TIME]
+
+    cols = set(map(str, prev_df.columns))
+    if not set(key_cols).issubset(cols) or not set(key_cols).issubset(
+        set(map(str, curr_df.columns))
+    ):
+        return prev_df
+
+    def _key(row):
+        return tuple(str(row.get(c, "") or "").strip() for c in key_cols)
+
+    prev_by_key: dict[tuple, int] = {}
+    for idx in range(len(prev_df.index)):
+        prev_by_key.setdefault(_key(prev_df.iloc[idx]), idx)
+
+    # 현재 표 순서대로 배치될 작년 행 인덱스
+    ordered: list[int] = []
+    blank_marks: list[bool] = []
+    used: set[int] = set()
+
+    for i in range(len(curr_df.index)):
+        idx = prev_by_key.get(_key(curr_df.iloc[i]))
+        if idx is None or idx in used:
+            ordered.append(-1)
+            blank_marks.append(True)
+        else:
+            ordered.append(idx)
+            blank_marks.append(False)
+            used.add(idx)
+
+    # 현재 표에 없는 행은 맨뒤
+    leftovers = [i for i in range(len(prev_df.index)) if i not in used]
+
+    blank = pd.Series({c: None for c in prev_df.columns})
+    rows = [
+        blank if is_blank else prev_df.iloc[idx]
+        for idx, is_blank in zip(ordered, blank_marks)
+    ]
+    rows += [prev_df.iloc[i] for i in leftovers]
+    return pd.DataFrame(rows).reset_index(drop=True)
 
 
 # --- 단가표 로딩 캐시 -------------------------------------------------------

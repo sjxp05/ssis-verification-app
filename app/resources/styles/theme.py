@@ -45,6 +45,11 @@ SUCCESS_SOFT = "#DCFCE7"
 ERROR_BG = "#FF7A7A"    # 오류 셀 (분명한 빨강 계열)
 WARNING_BG = "#F4D87B"  # 확인 필요 셀 (분명한 노랑 계열)
 
+WARNING_BANNER = "#FFF8E6"
+WARNING_BORDER = "#F0D9A0"
+INFO_BANNER = "#F2F7FD"
+WARNING_TEXT = "#7A5A10"
+
 # --- Metric --------------------------------------------------------------
 RADIUS = "6px"
 RADIUS_SM = "4px"

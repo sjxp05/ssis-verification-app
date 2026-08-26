@@ -19,7 +19,7 @@ from ui.widgets.upload_card import UploadCard
 from pathlib import Path
 from ui.components.spinner import Spinner
 
-from utils.date import yearConfig
+from config.date import yearConfig
 
 WAITING, FILLED, BUSY, READY, FAILED = "waiting", "filled", "busy", "ready", "failed"
 
@@ -55,14 +55,14 @@ class _ExtractTask(QRunnable):
         try:
             # self._files["jogyeon"] -> 슬롯이 없으면 KeyError 대신 읽을 수 있는 메시지 표시
             if self._flow.key == PAYMENT_PRICE.key:
-                values = {}
+                values = self._extractor.read_cached_unit_prices(yearConfig.SYSTEM_YEAR)
             else:
                 jogyeon = self._files.get("jogyeon")
                 if jogyeon is None:
                     raise ValueError("조견표 파일이 없습니다.")
                 values = self._extractor.extract_jogyeon_values(jogyeon)
 
-            if self._flow.key in (NOTICE_VERIFY.key,PAYMENT_PRICE.key):
+            if self._flow.key in (NOTICE_VERIFY.key, PAYMENT_PRICE.key):
                 guide = self._files.get("guide")
                 if guide is None:
                     raise ValueError("고시 파일이 없습니다.")
@@ -79,10 +79,16 @@ class _ExtractTask(QRunnable):
 
                 if not result.get("단가"):
                     issues = result.get("검증") or []
-                    error_texts = [f"· {issue['메시지']}" for issue in issues if '메시지' in issue]
-                    error_msg = "\n".join(error_texts) if error_texts else "고시 파일에서 알맞은 표를 찾을 수 없습니다."
+                    error_texts = [
+                        f"· {issue['메시지']}" for issue in issues if "메시지" in issue
+                    ]
+                    error_msg = (
+                        "\n".join(error_texts)
+                        if error_texts
+                        else "고시 파일에서 알맞은 표를 찾을 수 없습니다."
+                    )
                     raise ValueError(error_msg)
-                
+
         except Exception as error:
             self.signals.failed.emit(
                 self._generation, str(error) or type(error).__name__
@@ -92,8 +98,10 @@ class _ExtractTask(QRunnable):
 
 
 class UploadPage(QWidget):
-    valuesReady = pyqtSignal(object) # 다음 단계로 넘어가도 된다는 신호
-    filesDiverged = pyqtSignal(bool) # 지금 올라온 파일이 마지막으로 추출에 쓰인 파일과 다른지 여부 / True: 단계 이동 잠금, False: 단계 이동 가능
+    valuesReady = pyqtSignal(object)  # 다음 단계로 넘어가도 된다는 신호
+    filesDiverged = pyqtSignal(
+        bool
+    )  # 지금 올라온 파일이 마지막으로 추출에 쓰인 파일과 다른지 여부 / True: 단계 이동 잠금, False: 단계 이동 가능
 
     def __init__(
         self,
@@ -110,8 +118,8 @@ class UploadPage(QWidget):
         self._label_reviewer = label_reviewer
         self._pool = QThreadPool.globalInstance()
 
-        #멈춤상황에서 spinner추가하기
-        self._spinner=Spinner(size=22)
+        # 멈춤상황에서 spinner추가하기
+        self._spinner = Spinner(size=22)
 
         self._flow: FlowSpec | None = None
         self._cards: dict[str, UploadCard] = {}
@@ -176,7 +184,7 @@ class UploadPage(QWidget):
     # flow 세팅
     def set_flow(self, flow: FlowSpec) -> None:
         if self._flow is not None and self._flow.key == flow.key:
-            return 
+            return
         self._flow = flow
         self._title.setText(flow.upload_title)
         self._subtitle.setText(flow.upload_description)
@@ -221,11 +229,9 @@ class UploadPage(QWidget):
         return self._files()
 
     def _files(self) -> dict[str, UploadedFile]:
-        return {
-            key: card.file() for key, card in self._cards.items() if card.file()
-        } 
+        return {key: card.file() for key, card in self._cards.items() if card.file()}
 
-    #마지막 추출에 사용한 원본경로와 셀 좌표
+    # 마지막 추출에 사용한 원본경로와 셀 좌표
     def export_info(self) -> tuple[Path | None, dict]:
         if self._extractor is None:
             return None, {}
@@ -310,7 +316,9 @@ class UploadPage(QWidget):
             return
         self._start_extract(files)
 
-    def _review_labels(self, files: dict[str, UploadedFile], on_done: Callable[[bool], None]) -> None:
+    def _review_labels(
+        self, files: dict[str, UploadedFile], on_done: Callable[[bool], None]
+    ) -> None:
         sheet = files.get("jogyeon")
         if self._label_reviewer is None or sheet is None:
             on_done(True)
@@ -364,7 +372,7 @@ class UploadPage(QWidget):
                 f"문서를 읽지 못했습니다.\n{reason}\n올바른 형식의 파일인지 확인해 주세요."
             )
 
-        if state==BUSY:
+        if state == BUSY:
             self._spinner.start()
         else:
             self._spinner.stop()

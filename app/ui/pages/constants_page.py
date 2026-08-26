@@ -1,13 +1,4 @@
-# 1단계 — 문서에서 뽑은 상수 확인 화면.
-#
-# 고시 문서를 파싱해 얻은 값을 채워 넣고, 사용자가 눈으로 확인·수정한 뒤
-# '단가표 생성'을 누르면 값 묶음을 다음 단계로 넘긴다.
-#
-# UploadPage가 넘겨주는 values는 페이지(탭)별 dict의 list다. 필드를 미리
-# 정해두지 않고, 받은 dict 구조를 그대로 보고 ValueField를 만든다:
-#   - 값이 문자/숫자면            -> key - ValueField 한 쌍
-#   - 값이 dict(중첩)이면        -> 상위 key는 그룹 라벨로만 쓰고
-#                                    하위 key - ValueField 들을 나열
+# 문서에서 뽑은 상수 확인 화면
 
 from __future__ import annotations
 
@@ -26,7 +17,6 @@ from PyQt6.QtWidgets import (
     QMessageBox,
 )
 
-import pandas as pd
 from pathlib import Path
 from services.table_writer import TableWriter
 from ui.components.card import Card
@@ -46,7 +36,7 @@ _LOADING_TEXT = "⟳  불러오는 중..."
 
 
 GROUP_GRID_COLUMNS = 6
-# 라벨이 길어 기본 4열로는 잘리는 그룹은 여기서 열 수를 따로 지정한다.
+# 라벨이 길어 기본 4열로는 잘리는 그룹은 여기서 열 수를 따로 지정한다
 GROUP_COLUMN_OVERRIDES = {"추가급여 월한도액": 3}
 # value_field를 셀 오른쪽에 붙여서 정렬할 그룹
 GROUP_RIGHT_ALIGN = {"추가급여 월한도액"}
@@ -84,7 +74,7 @@ class _TableWriteSignals(QObject):
     failed = pyqtSignal(int, str)  # generation, 실패 원인
 
 
-# 단가표 생성기를 GUI 스레드 밖에서 돌린다.
+# 단가표 생성기를 GUI와 별도의 스레드에서 실행
 class _TableWriteTask(QRunnable):
     def __init__(
         self,

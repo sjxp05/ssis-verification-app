@@ -1,13 +1,4 @@
-# 라벨 검토 화면
-#
-# 화면 순서가 곧 우선순위다.
-#   1. 문구가 바뀐 항목   반드시 골라야 함. 맨 위에 펼쳐서 보여준다.
-#   2. 올해 새로 생긴 문구 대개 그냥 두면 된다. 접어 두고 필요할 때만 적는다.
-#   3. 표 구조 변경       참고 정보. 접어 둔다.
-#
-# 자동으로 확정된 항목은 아예 나오지 않는다.
-# 후보를 고르면 오른쪽 미리보기가 그 위치로 따라간다. 좌표만 알려주면 담당자가
-# 엑셀을 열어 찾아가야 하므로, 주변 몇 칸을 함께 보여줘 화면에서 판단하게 한다.
+# 조견표 라벨 대조 결과 검토 화면
 
 from __future__ import annotations
 
@@ -24,7 +15,6 @@ from jogyeon_matcher import Decision, MatchReport
 
 from ui.components.button import GhostButton, PrimaryButton
 from ui.components.scroll_page import centered_scroll_page
-from ui.dialogs.review_style import STYLESHEET
 
 from ui.widgets.review.shared import *
 from ui.widgets.review.collapsible import Collapsible
@@ -44,8 +34,6 @@ class ReviewDialog(QDialog):
         self.report = report
         self.setWindowTitle("조견표 라벨 확인")
         self.setObjectName("PageBody")
-        # app.qss 는 건드리지 않고 이 화면에만 스타일을 얹는다
-        self.setStyleSheet(STYLESHEET)
         self.resize(1120, 820)
 
         self._baseline = SheetSource(baseline_path)

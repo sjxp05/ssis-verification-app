@@ -134,16 +134,19 @@ class ValidationPanel(QFrame):
         if report.notice:
             self._set_badge(report.notice, "waiting")
             return
-        if not report.issues:
-            self._set_badge("PASS — 발견된 오류가 없습니다", "pass")
-            return
 
-        self._set_badge(f"FAIL — 오류 {len(report.issues)}건", "fail")
-        for issue in report.issues:
-            item = QListWidgetItem(issue.title())
-            item.setData(Qt.ItemDataRole.UserRole, issue)
-            item.setToolTip(issue.detail())
-            self._list.addItem(item)
+        warn_count=len({row for (row, _c) in report.warn_cells})
+        warn_tail = f" · 경고 {warn_count:,}행" if warn_count else ""
+        
+        if not report.issues:
+            self._set_badge(f"PASS — 발견된 오류가 없습니다 {warn_tail}", "pass")
+        else:
+            self._set_badge(f"FAIL — 오류 {len(report.issues)}건 {warn_tail}", "fail")
+            for issue in report.issues:
+                item = QListWidgetItem(issue.title())
+                item.setData(Qt.ItemDataRole.UserRole, issue)
+                item.setToolTip(issue.detail())
+                self._list.addItem(item)
 
     def show_cell(self, row: int, column: str) -> None:
         # 표에서 셀을 눌렀을 때: 오류 설명 -> 경고(노란 셀) 사유 순으로 보여주고,
@@ -229,6 +232,14 @@ class ValidationPanel(QFrame):
                 return
 
     def _on_item_clicked(self, item: QListWidgetItem) -> None:
+        data=item.data(Qt.ItemDataRole.UserRole)
+        if data is None:
+            return
+        if isinstance(data,tuple):
+            row,column=data
+            self.show_cell(row,column)
+            self.issueActivated.emit(row,column)
+            return
         issue: CellIssue = item.data(Qt.ItemDataRole.UserRole)
         self._detail.setText(issue.detail())
         if not issue.is_table_level() and issue.column:

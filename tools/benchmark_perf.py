@@ -100,7 +100,7 @@ def gen_jogyeon(path: Path, year: int, variant: bool, bloat: bool):
     ws["B2"] = "기준중위소득"
     for i, v in enumerate([0.06, 0.09, 0.12, 0.15]):
         ws.cell(3, 2 + i, v)
-    from jogyeon_matcher.config.anchors import ADD_ITEMS
+    from app.config.anchors import ADD_ITEMS
     for i, item in enumerate(ADD_ITEMS):
         ws.cell(5, 2 + i, item)
         ws.cell(6, 2 + i, int((3000000 - 150000 * i) * bump))
@@ -281,22 +281,25 @@ def gen_price_table(path: Path, rows: int = 1500):
 # ──────────────────────────────────────────────── 벤치마크 본체
 def bench_match(baseline, target, runs=2):
     from jogyeon_matcher import engine
-    from jogyeon_matcher.ingest import loader, segmenter
-    from jogyeon_matcher.matching import dense, sparse
-    from jogyeon_matcher.validation import value_checks
+    from jogyeon_matcher import table_analyzer
+    from jogyeon_matcher import encoder, similarity
 
-    wrap(loader, "load", "loader.load (엑셀 적재+정제)")
-    wrap(loader, "_sanitize", "loader._sanitize")
-    wrap(segmenter, "find_tables", "segmenter.find_tables")
-    wrap(segmenter, "compare_sheets", "segmenter.compare_sheets")
-    wrap(segmenter, "check_anchor_uniqueness", "segmenter.check_anchor_uniqueness")
-    wrap(value_checks, "compare_regions", "value_checks.compare_regions")
+    wrap(table_analyzer, "load", "table_analyzer.load (엑셀 적재+정제)")
+    wrap(table_analyzer, "_sanitize", "table_analyzer._sanitize")
+    wrap(table_analyzer, "find_tables", "table_analyzer.find_tables")
+    wrap(table_analyzer, "compare_sheets", "table_analyzer.compare_sheets")
+    wrap(table_analyzer, "check_anchor_uniqueness", "table_analyzer.check_anchor_uniqueness")
+    wrap(table_analyzer, "compare_regions", "table_analyzer.compare_regions")
     wrap(engine, "_collect_labels", "engine._collect_labels")
-    wrap(engine, "_match_deterministic", "engine._match_deterministic (결정론 스캔)")
+    wrap(
+        engine,
+        "_match_deterministic",
+        "label_rules.match_deterministic (절대식 매칭)",
+    )
     wrap(engine, "_find_missing", "engine._find_missing")
-    wrap(dense.DenseEncoder, "_load", "DenseEncoder._load (모델 로드)")
-    wrap(dense.DenseEncoder, "encode", "DenseEncoder.encode (임베딩)")
-    wrap(sparse.BM25, "scores", "BM25.scores")
+    wrap(encoder.DenseEncoder, "_load", "DenseEncoder._load (모델 로드)")
+    wrap(encoder.DenseEncoder, "encode", "DenseEncoder.encode (임베딩)")
+    wrap(similarity.BM25, "scores", "BM25.scores")
 
     out = []
     for i in range(runs):
@@ -305,16 +308,22 @@ def bench_match(baseline, target, runs=2):
         rep = engine.match_workbooks(baseline, target)
         total = time.perf_counter() - t0
         s = rep.summary
-        out.append(report(
-            "1. 조견표 라벨 대조", total,
-            f"(run{i + 1}) 라벨 {s.total_labels} auto {s.auto_passed} review {s.needs_review} unmatched {s.unmatched}"))
+        out.append(
+            report(
+                "1. 조견표 라벨 대조",
+                total,
+                f"(run{i + 1}) 라벨 {s.total_labels} "
+                f"auto {s.auto_passed} review {s.needs_review} "
+                f"unmatched {s.unmatched}",
+            )
+        )
     return out
 
 
 def bench_extract(sheet_path, runs=2):
     import pandas as pd
-    from models.dto import UploadedFile
-    from services import jogyeon_value_extractor as jve
+    from app.models.dto import UploadedFile
+    from app.services import jogyeon_value_extractor as jve
 
     wrap(jve.ValueExtractor, "_load", "ValueExtractor._load (read_excel+정규화사본)")
     wrap(jve.ValueExtractor, "_find_all", "ValueExtractor._find_all (키워드 전셀검색)")
@@ -331,7 +340,7 @@ def bench_extract(sheet_path, runs=2):
 
 
 def bench_gosi(hwpx_path, runs=2):
-    from services import gosi_verifier as gv
+    from app.services import gosi_verifier as gv
 
     wrap(gv, "parse_document", "parse_document (hwpx XML 파싱)")
     wrap(gv, "find_table", "find_table (앵커 탐색)")
@@ -354,7 +363,7 @@ def bench_gosi(hwpx_path, runs=2):
         os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
         from PyQt6.QtWidgets import QApplication
         app = QApplication.instance() or QApplication([])
-        from ui.widgets.gosi_panel import GosiDocumentViewer
+        from app.ui.widgets.gosi_panel import GosiDocumentViewer
 
         viewer = GosiDocumentViewer()
         _reset()
@@ -375,7 +384,7 @@ def bench_gosi(hwpx_path, runs=2):
 
 
 def bench_prev_table(path, runs=2):
-    from services import table_validator as tv
+    from app.services import table_validator as tv
 
     out = []
     for i in range(runs):

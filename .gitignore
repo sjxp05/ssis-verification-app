@@ -17,3 +17,7 @@ _experiments/
 
 # 성능 벤치마크 산출물 (tools/benchmark_perf.py)
 tools/.bench/
+
+# 코드 전체 txt 파일 
+/ctx.txt
+/files.txt

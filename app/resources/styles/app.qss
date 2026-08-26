@@ -533,8 +533,6 @@ QLabel#InfoText {
 }
 
 /* --- 버튼 비활성 상태 ----------------------------------------------- */
-/* 이 규칙이 없으면 비활성 버튼이 활성과 똑같이 보여서,
-   "두 문서를 다 올려야 진행 가능"이 사용자에게 전달되지 않습니다. */
 #PrimaryButton:disabled {
     background: ${CARD_HEADER_BG};
     color: ${TEXT_MUTED};
@@ -711,4 +709,106 @@ QLabel#FindingDetail {
     border-radius: 0;
     padding: 0 6px;
     margin: 0;
+}
+
+/* ---- review dialog ---- */
+#ReviewFooter {
+    background: ${SURFACE};
+    border-top: 1px solid ${BORDER};
+}
+
+#ReviewBanner {
+    border-radius: ${RADIUS_SM};
+    background: ${STEP_BG};
+    border: 1px solid ${BORDER};
+}
+#ReviewBanner[state="warn"] {
+    background: ${WARNING_BANNER};
+    border: 1px solid ${WARNING_BORDER};
+}
+#ReviewBanner[state="danger"] {
+    background: ${DANGER_BG};
+    border: 1px solid ${DANGER_BORDER};
+}
+#ReviewBanner[state="info"] {
+    background: ${INFO_BANNER};
+    border: 1px solid ${ACCENT_SOFT};
+}
+#ReviewBannerText {
+    font-size: 12px;
+    color: ${TEXT};
+    background: transparent;
+    border: none;
+}
+#ReviewBanner[state="warn"] #ReviewBannerText {
+    color: ${WARNING_TEXT}; 
+}
+
+#ReviewBanner[state="danger"] #ReviewBannerText {
+    color: ${DANGER_DARK}; 
+}
+#ReviewBanner[state="info"] #ReviewBannerText {
+    color: ${ACCENT}; 
+}
+
+/* 후보 선택지와 점수 */
+#ReviewChoice {
+    font-size: 13px;
+    color: ${TEXT};
+    spacing: 8px;
+}
+#ReviewChoice:checked {
+    font-weight: 700;
+    color: ${NAVY};
+}
+#ReviewScore {
+    font-family: ${FONT_MONO};
+    font-size: 11px;
+    color: ${TEXT_MUTED};
+}
+
+/* 구획 제목과 접기 버튼 */
+#ReviewSectionTitle {
+    font-size: 14px;
+    font-weight: 700;
+    color: ${TEXT};
+    margin-top: 6px;
+}
+#ReviewSectionHint {
+    font-size: 12px;
+    color: ${TEXT_MUTED};
+}
+QToolButton#ReviewToggle {
+    background: transparent;
+    border: none;
+    color: ${NAVY};
+    font-size: 13px;
+    font-weight: 700;
+    text-align: left;
+    padding: 6px 0;
+}
+QToolButton#ReviewToggle:hover {
+    color: ${ACCENT};
+}
+
+/* 조견표 미리보기 */
+#PreviewCaption {
+    font-size: 11px;
+    font-weight: 700;
+    color: ${TEXT_MUTED};
+}
+QTableWidget#PreviewTable {
+    background: ${SURFACE};
+    border: 1px solid ${BORDER};
+    border-radius: ${RADIUS_SM};
+    gridline-color: ${GRID};
+    font-size: 11px;
+}
+QTableWidget#PreviewTable::item {
+    padding: 2px 6px;
+}
+#PreviewEmpty {
+    font-size: 11px;
+    color: ${TEXT_MUTED};
+    padding: 24px 0;
 }

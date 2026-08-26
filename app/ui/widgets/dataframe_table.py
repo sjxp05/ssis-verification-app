@@ -1,5 +1,4 @@
 # dataframe을 엑셀처럼 표 형식으로 보여주는 위젯
-# 셀을 누르면 옆에 산식 말풍선이 뜬다.
 
 from __future__ import annotations
 
@@ -17,17 +16,19 @@ from PyQt6.QtWidgets import (
 from models.dataframe_model import DataFrameModel
 from ui.widgets.formula_bubble import FormulaBubble
 
+
 class _CellBackgroundDelegate(QStyledItemDelegate):
-    # 검증 오류(빨강)/경고(노랑) 셀 배경이 온전히 보이도록 여기서 직접 칠한다.
+    # 검증 오류(빨강)/경고(노랑) 셀 배경이 온전히 보이도록 여기에서 색칠함
     def paint(self, painter, option, index):
         background = index.data(Qt.ItemDataRole.BackgroundRole)
-        if background is not None and not (option.state & QStyle.StateFlag.State_Selected):
+        if background is not None and not (
+            option.state & QStyle.StateFlag.State_Selected
+        ):
             painter.fillRect(option.rect, background)
         super().paint(painter, option, index)
 
-class DataFrameTable(QTableView):
-    # set_dataframe(df, formulas) 로 데이터를 넣는다.
 
+class DataFrameTable(QTableView):
     cellSelected = pyqtSignal(QModelIndex)
 
     def __init__(
@@ -43,7 +44,7 @@ class DataFrameTable(QTableView):
         self.setModel(self._model)
 
         self._bubble = FormulaBubble(self)
-        self.setItemDelegate(_CellBackgroundDelegate(self)) 
+        self.setItemDelegate(_CellBackgroundDelegate(self))
 
         self.setAlternatingRowColors(True)
         self.setShowGrid(True)
@@ -61,9 +62,7 @@ class DataFrameTable(QTableView):
         self.verticalHeader().setVisible(show_row_numbers)
         self.verticalHeader().setDefaultSectionSize(34)
         self.horizontalHeader().setHighlightSections(False)
-        self.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeMode.Interactive
-        )
+        self.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self.horizontalHeader().setMinimumSectionSize(70)
         self.horizontalHeader().setFixedHeight(38)
 

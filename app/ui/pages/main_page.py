@@ -13,7 +13,8 @@ from PyQt6.QtWidgets import (
 )
 from models.flows import FLOWS, FlowSpec
 from ui.widgets.value_field import ValueField
-from utils.date import yearConfig
+from config.date import yearConfig
+from config.rules import ruleConfig
 
 
 class FlowCard(QFrame):
@@ -41,7 +42,7 @@ class FlowCard(QFrame):
         line_layout.addStretch(1)
 
         layout.addLayout(line_layout)
-        
+
         content_wrapper = QWidget()
         content_wrapper.setObjectName("MenuCardContent")
         content_layout = QVBoxLayout(content_wrapper)
@@ -219,4 +220,5 @@ class MainPage(QWidget):
 
     def _on_year_changed(self, _key: str, value: object) -> None:
         yearConfig.set_system_year(value)
+        ruleConfig.reset_rules(value)
         self.yearChanged.emit()
