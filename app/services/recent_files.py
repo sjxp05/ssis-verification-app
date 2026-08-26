@@ -4,8 +4,11 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from utils.appdata import user_data_dir
+
 # 캐시 데이터를 저장할 파일
-CACHE_FILE = Path(".recent_paths_cache.json")
+# CWD가 아닌 사용자 쓰기 가능 영역에 둔다 (exe는 Program Files 등 쓰기 금지 위치에 설치될 수 있음)
+CACHE_FILE = user_data_dir() / "recent_paths_cache.json"
 
 
 # 저장소에서 key 에 해당하는 경로를 읽어 반환
@@ -57,7 +60,10 @@ def set_recent_path(year: int, key: str, path: Path) -> None:
     data[year_str][key] = str(path)
 
     try:
-        with open(CACHE_FILE, "w", encoding="utf-8") as f:
+        # 쓰기 도중 종료되거나 겹쳐 쓰여도 파일이 깨지지 않도록 임시 파일에 쓰고 교체
+        tmp_file = CACHE_FILE.with_suffix(".tmp")
+        with open(tmp_file, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+        tmp_file.replace(CACHE_FILE)
     except Exception as e:
         print(f"캐시 파일 저장 실패: {e}")

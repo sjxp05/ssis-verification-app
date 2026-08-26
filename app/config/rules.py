@@ -1,12 +1,22 @@
 import inspect
 import json
 import math
+import sys
 
 from pathlib import Path
-from services import recent_files
 from config.date import yearConfig
 
-DEFAULT_RULES_PATH = Path("rules/rules_default.json")
+
+def _rules_dir() -> Path:
+    # PyInstaller로 번들되면 rules/ 는 _MEIPASS 아래로 풀리고,
+    # 소스에서 실행할 때는 CWD와 무관하게 저장소 루트의 rules/ 를 가리켜야 한다.
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        return Path(meipass) / "rules"
+    return Path(__file__).resolve().parents[2] / "rules"
+
+
+DEFAULT_RULES_PATH = _rules_dir() / "rules_default.json"
 
 # 가능한 연산 종류
 ADD = "+"
@@ -210,9 +220,10 @@ class RuleConfig:
             print(f"계산 규칙 파일 읽기 실패: {e}")
 
     def set_rules(self):
-        rules_path = recent_files.get_recent_path(yearConfig.SYSTEM_YEAR, "rules")
-        if rules_path is None:
-            rules_path = DEFAULT_RULES_PATH
+        # 연도별 규칙 파일은 캐시를 거치지 않고 매번 rules/ 폴더에서 직접 찾는다.
+        # (설치 경로가 PC마다 다르므로 절대경로를 캐시에 남기면 다른 PC에서 깨짐)
+        year_specific = _rules_dir() / f"rules_{yearConfig.SYSTEM_YEAR}.json"
+        rules_path = year_specific if year_specific.exists() else DEFAULT_RULES_PATH
 
         self.set_functions(rules_path)
 

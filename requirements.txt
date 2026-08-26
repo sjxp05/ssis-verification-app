@@ -1,3 +1,4 @@
+altgraph==0.17.5
 anyio==4.14.2
 certifi==2026.7.22
 charset-normalizer==3.4.9
@@ -18,11 +19,15 @@ onnxruntime==1.28.0
 openpyxl==3.1.5
 packaging==26.3
 pandas==3.0.5
+pefile==2024.8.26
 protobuf==7.35.1
+pyinstaller==6.22.2
+pyinstaller-hooks-contrib==2026.7
 PyQt6==6.11.0
 PyQt6-Qt6==6.11.1
 PyQt6_sip==13.11.1
 python-dateutil==2.9.0.post0
+pywin32-ctypes==0.2.3
 PyYAML==6.0.3
 requests==2.34.2
 six==1.17.0
