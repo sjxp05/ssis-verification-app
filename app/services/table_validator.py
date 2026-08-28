@@ -149,6 +149,8 @@ class ValidationReport:
     metrics: dict[int, str] = field(default_factory=dict)
     # 확인이 필요한 셀 경고 아이콘 넣는용도
     warn_cells: dict[tuple[int, str], str] = field(default_factory=dict)
+    # 증가율 sort용도로 사용
+    growth_scores: dict[int,float]=field(default_factory=dict)
     # 검증을 못 돌린 경우
     notice: str = ""
 
@@ -1258,6 +1260,8 @@ class TableValidator:
             if capped:
                 return
             diff = g - baseline
+            old_score=report.growth_scores.get(i,0.0)
+            report.growth_scores[i]=max(old_score,abs(diff))
             if abs(diff) <= GROWTH_TOLERANCE:
                 return
             direction = "높음" if diff > 0 else "낮음"
@@ -1321,7 +1325,7 @@ class TableValidator:
                         report, i, col, g, capped=capped, baseline=baseline
                     )
                 extra = head + "\n" + "\n".join(parts)
-            report.metrics[i] = (report.metrics.get(i, "") + "\n" + extra).strip()
+            report.metrics[i] = (report.metrics.get(i, "") + "\n\n" + extra).strip()
 
     def _append_growth_metrics_pay(
         self,
@@ -1362,7 +1366,7 @@ class TableValidator:
                         report, i, col, g, capped=capped, baseline=baseline
                     )
                 extra = head + "\n" + "\n".join(parts)
-            report.metrics[i] = (report.metrics.get(i, "") + "\n" + extra).strip()
+            report.metrics[i] = (report.metrics.get(i, "") + "\n\n" + extra).strip()
 
 
 def read_prev_table(path: str) -> pd.DataFrame:

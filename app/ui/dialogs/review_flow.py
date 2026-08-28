@@ -18,6 +18,8 @@ from jogyeon_matcher import match_workbooks
 from jogyeon_matcher import decision_log
 from models.dto import UploadedFile, MatchReport
 from services import recent_files
+from services.jogyeon_anchor_profile import load_profile, save_resolved_anchors
+from services.jogyeon_anchor_resolver import AnchorResolveError, resolve_anchors
 from ui.dialogs.review_dialog import ReviewDialog
 from config.date import yearConfig
 
@@ -136,6 +138,34 @@ class LabelReviewFlow:
         )
         self._pool.start(task)
 
+    # 매칭 결과와 담당자 선택을 현재 연도의 앵커 위치 JSON으로 저장
+    def _save_anchor_profile(
+        self,
+        baseline_path: Path,
+        target_path: Path,
+        report: MatchReport,
+        decisions: list,
+    ) -> bool:
+        try:
+            baseline_profile = load_profile(yearConfig.SYSTEM_YEAR - 1)
+            resolved = resolve_anchors(
+                report=report,
+                decisions=decisions,
+                baseline_path=baseline_path,
+                target_path=target_path,
+                baseline_profile=baseline_profile,
+            )
+            save_resolved_anchors(yearConfig.SYSTEM_YEAR, resolved)
+        except (AnchorResolveError, ValueError, OSError) as error:
+            QMessageBox.warning(
+                self._parent,
+                "앵커 위치 확정 실패",
+                str(error),
+            )
+            return False
+
+        return True
+
     def _on_matched(
         self,
         generation: int,
@@ -156,6 +186,15 @@ class LabelReviewFlow:
             and not report.structural_alerts
             and not report.value_anomalies
         ):
+            if not self._save_anchor_profile(
+                baseline_path,
+                target_path,
+                report,
+                [],
+            ):
+                on_done(False)
+                return
+
             QMessageBox.information(
                 self._parent,
                 "라벨 대조 완료",
@@ -170,8 +209,18 @@ class LabelReviewFlow:
             on_done(False)
             return
 
-        for decision in dialog.decisions():
+        decisions = dialog.decisions()
+        for decision in decisions:
             decision_log.record(decision)
+
+        if not self._save_anchor_profile(
+            baseline_path,
+            target_path,
+            report,
+            decisions,
+        ):
+            on_done(False)
+            return
 
         # 대조 파일 경로 저장하기
         recent_files.set_recent_path(

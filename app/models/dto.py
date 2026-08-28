@@ -222,6 +222,16 @@ class Decision:
     def to_dict(self) -> dict:
         return asdict(self)
 
+# 매칭과 담당자 검토를 거쳐 최종 확정된 추출 앵커
+@dataclass(frozen=True)
+class ResolvedAnchor:
+    anchor_id: str
+    sheet: str
+    keyword: str
+    row: int
+    column: int
+    source: str  # auto | candidate | manual | gui
+
 
 @dataclass
 class TableRegion:

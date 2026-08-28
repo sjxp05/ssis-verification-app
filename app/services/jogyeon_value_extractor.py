@@ -1,7 +1,6 @@
 from __future__ import annotations
 import pandas as pd
 import itertools
-import re
 from pathlib import Path
 from models.dto import UploadedFile
 from config.date import yearConfig
@@ -23,13 +22,11 @@ from config.anchors import (
     JH_ZONES,
     JOGYEON_SHEET_NAMES,
     RATE_GRADES,
+    get_extraction_anchor_spec,
 )
 from utils import xlsx_scan
-from jogyeon_matcher.label_rules import sanitize
-
-# 공백, 비가시문자
-_WS = re.compile(r"\s+")
-
+from services.jogyeon_anchor_locator import AnchorLocateError, AnchorLocator
+from services.jogyeon_anchor_profile import get_anchor, load_profile
 
 class ExtractError(Exception):
     """에러용 클래스"""
@@ -47,20 +44,21 @@ class ValueExtractor:
     def cell_map(self) -> dict[str, tuple[str, int, int]]:
         return dict(self._cell_map)
 
-    def _mark_sync_cells(self, norm, sheet_name):
+    def _mark_sync_cells(self, norm, sheet_name, year=None):
         for value_key, anchor in (("기본단가", BASE_PRICE), ("A값", A_VALUE)):
             try:
-                r, c = self._find_first(norm, anchor)
-            except ExtractError:
+                r, c = self._anchor_position(
+                    norm,
+                    "산정특례",
+                    anchor,
+                    year,
+                )
+            except (AnchorLocateError, ExtractError):
                 continue
             self._mark(f"{value_key}@{sheet_name}", sheet_name, r, c + 1)
 
     def source_path(self) -> Path | None:
         return self._source_path
-
-    # 문자열 처리
-    def _squeeze(self, text):
-        return _WS.sub("", sanitize(text))
 
     # 파일 읽고 원본(df)과 공백 제거한 검색용 사본(norm)을 함께 반환
     def _load(self, file_path, sheet_name):
@@ -72,31 +70,68 @@ class ValueExtractor:
             header=None,
             **({"nrows": cap} if cap else {}),
         )
-        norm = df.astype(str).map(self._squeeze)
+        norm = AnchorLocator.normalize_dataframe(df)
         return df, norm
 
-    # 키워드가 나오는 모든 칸을 읽는 순서대로 반환
-    def _find_all(self, norm, keyword):
-        key = self._squeeze(keyword)
-        # 모든 칸을 True, False 로 표시
-        hit = norm.apply(lambda s: s.str.contains(key, regex=False, na=False))
-        found = sorted(
-            (int(r), int(c)) for r, c in zip(*hit.to_numpy().nonzero(), strict=True)
-        )
-        if not found:
-            raise ExtractError(f"'{keyword}'를 찾지 못했습니다.")
-        return found
+    # 연도별 JSON이 있으면 저장 위치를 사용하고 없으면 기존 방식으로 앵커 탐색
+    def _anchor_position(self, norm, sheet, anchor_id, year=None):
+        spec = get_extraction_anchor_spec(sheet, anchor_id)
+        if spec is None:
+            raise ExtractError(
+                f"'{sheet}' 시트의 '{anchor_id}' 앵커 탐색 규칙이 없습니다."
+            )
 
-    # 한 곳에만 있어야 하는 문구 (여러 번 나오면 예외)
-    def _find_one(self, norm, keyword):
-        found = self._find_all(norm, keyword)
-        if len({r for r, _ in found}) > 1:
-            raise ExtractError(f"'{keyword}'가 여러 표에 있습니다")
-        return found[0]
+        profile = None
+        if year is not None:
+            try:
+                profile = load_profile(year)
+            except (ValueError, OSError) as error:
+                raise ExtractError(
+                    f"{year}년 앵커 프로필을 읽지 못했습니다: {error}"
+                ) from None
 
-    # 여러 곳에 반복되는 게 정상인 문구 (첫 번째 탐색 셀 채택)
-    def _find_first(self, norm, keyword):
-        return self._find_all(norm, keyword)[0]
+        if profile is None:
+            locator = AnchorLocator(norm)
+            return locator.locate(spec.keyword, spec.find_mode)
+
+        saved = get_anchor(profile, sheet, anchor_id)
+
+        if saved is None:
+            if spec.optional:
+                raise AnchorLocateError(
+                    f"'{sheet}' 시트의 '{anchor_id}' 앵커가 프로필에 없습니다."
+                )
+
+            raise ExtractError(
+                f"'{sheet}' 시트의 '{anchor_id}' 앵커가 "
+                f"{year}년 프로필에 없습니다."
+            )
+
+        try:
+            row = int(saved["row"])
+            column = int(saved["column"])
+            keyword = str(saved["keyword"])
+        except (KeyError, TypeError, ValueError):
+            raise ExtractError(
+                f"'{sheet}' 시트의 '{anchor_id}' 앵커 프로필 형식이 올바르지 않습니다."
+            ) from None
+
+        if not 0 <= row < len(norm.index) or not 0 <= column < len(norm.columns):
+            raise ExtractError(
+                f"'{sheet}' 시트의 '{anchor_id}' 앵커 위치가 "
+                f"현재 표 범위를 벗어났습니다."
+            )
+
+        actual = norm.iat[row, column]
+        expected = AnchorLocator.squeeze(keyword)
+
+        if actual != expected:
+            raise ExtractError(
+                f"'{sheet}' 시트의 '{anchor_id}' 앵커 위치가 현재 조견표와 일치하지 않습니다. "
+                f"저장 위치: {self._get_excel_cell(row, column)}"
+            )
+
+        return row, column
 
     # 엑셀에서 온 value 받아서 계산가능한 숫자로 반환
     def _num(self, value):
@@ -107,7 +142,7 @@ class ValueExtractor:
         if numeric and not pd.isna(value):
             return int(value) if float(value).is_integer() else float(value)
 
-        text = self._squeeze(value).replace(",", "").replace("%", "")
+        text = AnchorLocator.squeeze(value).replace(",", "").replace("%", "")
 
         if text == "-":
             return 0
@@ -121,20 +156,20 @@ class ValueExtractor:
         return int(number) if number.is_integer() else number
 
     # 인정조사 시트 읽고 A값, 본인부담금 상한액, 본인부담률 등 값 반환
-    def read_ij_value(self, file_path, sheet_name):
+    def read_ij_value(self, file_path, sheet_name, year=None):
         # 파일 열기
         df, norm = self._load(file_path, sheet_name)
 
         # A값, 본인부담금 상한액
-        r, c = self._find_one(norm, A_VALUE)
+        r, c = self._anchor_position(norm, "인정조사", A_VALUE, year)
         a_value = self._read_cell(df, sheet_name, r, c+1, "A값")
         copay_cap = self._read_cell(df, sheet_name, r, c+2, "인정조사 본인부담금 상한액")
 
         # 기본단가
-        r, c = self._find_one(norm, BASE_PRICE)
+        r, c = self._anchor_position(norm, "인정조사", BASE_PRICE, year)
         base_price = self._read_cell(df, sheet_name, r, c+1, "기본단가")
 
-        r, c = self._find_one(norm, BASIC_RATE)
+        r, c = self._anchor_position(norm, "인정조사", BASIC_RATE, year)
         basic_rates = {**FIXED_BASIC_RATE}
         add_rates = {**FIXED_ADD_RATE}
         for i, g in enumerate(RATE_GRADES, start=1):
@@ -142,7 +177,7 @@ class ValueExtractor:
             add_rates[g] = self._read_cell(df, sheet_name, r+1, c+i, f"인정조사 본인부담률 (추가급여).{g}")
 
         # 월 한도액
-        r, c = self._find_one(norm, GRADE_HEADER)
+        r, c = self._anchor_position(norm, "인정조사", GRADE_HEADER, year)
         base_r, base_c = r + 2, c
         row_map: dict[str, int] = {}
         for i in range(5):
@@ -174,21 +209,21 @@ class ValueExtractor:
         }
 
     # 산정 특례
-    def read_sj_value(self, file_path, sheet_name):
+    def read_sj_value(self, file_path, sheet_name, year=None):
         df, norm = self._load(file_path, sheet_name)
 
         # 본인부담금 상한액
         copay_cap = None
 
         try:
-            r, c = self._find_one(norm, CAP_LABEL)
+            r, c = self._anchor_position(norm, "산정특례", CAP_LABEL, year)
             copay_cap = self._read_cell(df, sheet_name, r, c-1, "종합조사/산정특례 본인부담금 상한액")
         except Exception:
             pass
 
         if copay_cap is None:
             try:
-                r, c = self._find_one(norm, A_VALUE)
+                r, c = self._anchor_position(norm, "산정특례", A_VALUE, year)
                 for offset in (1, 2, 3):
                     if c + offset < df.shape[1]:
                         val = self._num(df.iat[r, c + offset])
@@ -205,14 +240,14 @@ class ValueExtractor:
                 )
 
         # 본인부담률
-        r, c = self._find_one(norm, INCOME_HEADER)
+        r, c = self._anchor_position(norm, "산정특례", INCOME_HEADER, year)
 
         rates = {**FIXED_BASIC_RATE}
         for i, g in enumerate(RATE_GRADES):
             rates[g] = self._read_cell(df, sheet_name, r+1, c+i, f"종합조사/산정특례 본인부담률.{g}")
 
         # 추가급여 월 한도액
-        base_r, base_c = self._find_first(norm, ADD_ITEMS[0])
+        base_r, base_c = self._anchor_position(norm, "산정특례", ADD_ITEMS[0], year)
         col_map: dict[str, int] = {}
         for i in range(len(norm.columns) - base_c):
             name = norm.iat[base_r, base_c + i]
@@ -228,7 +263,7 @@ class ValueExtractor:
             limits[k] = self._read_cell(df, sheet_name, base_r + 1, base_c + col_map[k], f"추가급여 월한도액.{k}")
 
         # 기본단가, A값이 인정조사 변경시 같이 갱신되도록 기록
-        self._mark_sync_cells(norm, sheet_name)
+        self._mark_sync_cells(norm, sheet_name, year)
 
         return {
             "종합조사/산정특례 본인부담금 상한액": copay_cap,
@@ -236,8 +271,8 @@ class ValueExtractor:
             "추가급여 월한도액": limits,
         }
 
-    def _read_jh_row(self, df, norm, keyword, mark_prefix, sheet_name):
-        r, _ = self._find_first(norm, keyword)
+    def _read_jh_row(self, df, norm, keyword, mark_prefix, sheet_name, year=None):
+        r, _ = self._anchor_position(norm, "종합조사", keyword, year)
         base_r = r + 1
 
         col_map: dict[str, int] = {}
@@ -264,14 +299,14 @@ class ValueExtractor:
             result[label] = self._read_cell(df, sheet_name, base_r, col_map[zone], f"{mark_prefix}.{label}")
         return result
 
-    def read_jh_value(self, file_path, sheet_name):
+    def read_jh_value(self, file_path, sheet_name, year=None):
         df, norm = self._load(file_path, sheet_name)
         return {
             "종합조사 월한도액 (기본형)": self._read_jh_row(
-                df, norm, JH_BASIC, "종합조사 월한도액 (기본형)", sheet_name
+                df, norm, JH_BASIC, "종합조사 월한도액 (기본형)", sheet_name, year
             ),
             "종합조사 월한도액 (확장형)": self._read_jh_row(
-                df, norm, JH_EXTENDED, "종합조사 월한도액 (확장형)", sheet_name
+                df, norm, JH_EXTENDED, "종합조사 월한도액 (확장형)", sheet_name, year
             ),
         }
 
@@ -399,7 +434,9 @@ class ValueExtractor:
             return None
         saved = dict(self._cell_map)
         try:
-            return self.read_ij_value(path, JOGYEON_SHEET_NAMES[0])["기본단가"]
+            return self.read_ij_value(
+                path, JOGYEON_SHEET_NAMES[0], year - 1
+            )["기본단가"]
         except Exception:
             return None
         finally:
@@ -416,7 +453,7 @@ class ValueExtractor:
             if curr_path is not None:
                 try:
                     result["기본단가"] = self.read_ij_value(
-                        curr_path, JOGYEON_SHEET_NAMES[0]
+                        curr_path, JOGYEON_SHEET_NAMES[0], year
                     )["기본단가"]
                 except Exception:
                     pass
@@ -446,8 +483,14 @@ class ValueExtractor:
                 raise ExtractError(f"'{sheet}'(이)가 포함된 시트를 찾을 수 없습니다.")
 
             try:
-                data.update(reader(file.path, matched_sheet))
-            except ExtractError as error:
+                data.update(
+                    reader(
+                        file.path,
+                        matched_sheet,
+                        yearConfig.SYSTEM_YEAR,
+                    )
+                )
+            except (ExtractError, AnchorLocateError) as error:
                 raise ExtractError(f"'{matched_sheet}' 시트 - {error}") from None
 
         self._validate(data)

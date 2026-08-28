@@ -57,6 +57,7 @@ RULE_BATH_40MIN = "bath_40min"
 class RuleConfig:
     def __init__(self):
         self.set_rules()
+        self.set_rules()
 
     # 각 항이 함수에 들어가는 인자 또는 상수인지 구분해서 값을 찾아 반환
     def _resolve_operand(self, arg, inputs: list, values: dict):
