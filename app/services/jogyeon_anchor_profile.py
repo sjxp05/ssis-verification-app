@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from jogyeon_matcher.paths import user_data_dir
+from models.dto import ResolvedAnchor
 
 
 SCHEMA_VERSION = 1
@@ -101,3 +102,23 @@ def set_anchor(
         "row": row,
         "column": column,
     }
+
+
+# 확정된 앵커 목록을 해당 연도의 JSON 프로필에 반영하고 저장
+def save_resolved_anchors(
+    year: int,
+    anchors: list[ResolvedAnchor],
+) -> Path:
+    profile = load_profile(year) or create_profile(year)
+
+    for anchor in anchors:
+        set_anchor(
+            profile,
+            sheet=anchor.sheet,
+            anchor_id=anchor.anchor_id,
+            keyword=anchor.keyword,
+            row=anchor.row,
+            column=anchor.column,
+        )
+
+    return save_profile(year, profile)
