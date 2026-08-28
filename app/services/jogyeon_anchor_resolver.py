@@ -5,7 +5,15 @@ from pathlib import Path
 import pandas as pd
 
 from config.anchors import EXTRACTION_ANCHORS, ExtractionAnchorSpec
-from models.dto import Decision, MatchItem, MatchReport, ResolvedAnchor, Status
+from models.dto import (
+    Decision,
+    LabelRef,
+    MatchItem,
+    MatchPath,
+    MatchReport,
+    ResolvedAnchor,
+    Status,
+)
 from services.jogyeon_anchor_locator import AnchorLocateError, AnchorLocator
 from services.jogyeon_anchor_profile import get_anchor
 from utils import xlsx_scan
@@ -160,7 +168,7 @@ class AnchorResolver:
                 f"'{spec.anchor_id}' 앵커를 찾지 못했습니다: {error}"
             ) from None
 
-    # 이전 조견표의 정확한 셀 위치로 대응되는 MatchItem을 찾음
+    # 이전 조견표의 정확한 셀 위치로 일반 매칭 또는 누락 항목의 MatchItem을 찾음
     def _find_match_item(
         self,
         sheet: str,
@@ -178,6 +186,28 @@ class AnchorResolver:
 
             if location.row == row and location.column == column:
                 return item
+
+        for missing in self._report.missing_values:
+            location = missing.baseline_location
+
+            if location is None:
+                continue
+
+            if sheet not in location.sheet:
+                continue
+
+            if location.row == row and location.column == column:
+                return MatchItem(
+                    item_id=f"missing-{missing.sheet}-{missing.label}",
+                    input_label=LabelRef(
+                        missing.label,
+                        missing.label,
+                        missing.baseline_location,
+                    ),
+                    status=Status.UNMATCHED,
+                    match_path=MatchPath.HYBRID,
+                    candidates=missing.candidates,
+                )
 
         return None
 
