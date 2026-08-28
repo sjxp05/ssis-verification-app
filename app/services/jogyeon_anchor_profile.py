@@ -109,7 +109,7 @@ def save_resolved_anchors(
     year: int,
     anchors: list[ResolvedAnchor],
 ) -> Path:
-    profile = load_profile(year) or create_profile(year)
+    profile = create_profile(year)
 
     for anchor in anchors:
         set_anchor(
