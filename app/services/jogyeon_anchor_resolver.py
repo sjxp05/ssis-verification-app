@@ -169,24 +169,13 @@ class AnchorResolver:
             ) from None
 
     # 이전 조견표의 정확한 셀 위치로 일반 매칭 또는 누락 항목의 MatchItem을 찾음
+    # 이전 조견표의 정확한 셀 위치로 누락 항목을 우선 확인한 뒤 일반 MatchItem을 찾음
     def _find_match_item(
         self,
         sheet: str,
         row: int,
         column: int,
     ) -> MatchItem | None:
-        for item in self._report.items:
-            location = item.input_label.location
-
-            if location is None:
-                continue
-
-            if sheet not in location.sheet:
-                continue
-
-            if location.row == row and location.column == column:
-                return item
-
         for missing in self._report.missing_values:
             location = missing.baseline_location
 
@@ -209,8 +198,20 @@ class AnchorResolver:
                     candidates=missing.candidates,
                 )
 
-        return None
+        for item in self._report.items:
+            location = item.input_label.location
 
+            if location is None:
+                continue
+
+            if sheet not in location.sheet:
+                continue
+
+            if location.row == row and location.column == column:
+                return item
+
+        return None
+    
     # 선택한 후보의 실제 올해 위치를 ResolvedAnchor로 변환
     def _resolve_candidate(
         self,
