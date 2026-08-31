@@ -3,8 +3,8 @@
 # 이미 지나온 단계는 눌러서 되돌아갈 수 있다.
 # 아직 도달하지 못한 단계는 눌러도 반응하지 않는다.
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import QFrame, QHBoxLayout, QLabel, QWidget
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QWidget
 
 DONE, CURRENT, TODO = "done", "current", "todo"
 
@@ -16,7 +16,7 @@ def _repolish(widget: QWidget) -> None:
 
 
 class _StepChip(QFrame):
-    clicked = pyqtSignal(int)  # 0-based 단계 번호
+    clicked = Signal(int)  # 0-based 단계 번호
 
     def __init__(self, index: int, text: str, parent: QWidget | None = None):
         super().__init__(parent)
@@ -68,7 +68,7 @@ class StepIndicator(QFrame):
     #
     # stepClicked(index) — 이미 도달한 단계를 눌렀을 때만 발생
 
-    stepClicked = pyqtSignal(int)
+    stepClicked = Signal(int)
 
     def __init__(self, steps: list[str], parent: QWidget | None = None):
         super().__init__(parent)
@@ -125,9 +125,7 @@ class StepIndicator(QFrame):
             state = (
                 CURRENT
                 if i == self._current
-                else DONE
-                if i <= self._max_reached
-                else TODO
+                else DONE if i <= self._max_reached else TODO
             )
             chip.set_state(state)
             chip.set_navigable(i != self._current and i <= self._max_reached)

@@ -1,9 +1,9 @@
 from __future__ import annotations
 import os
 import copy
-from PyQt6.QtGui import QColor, QBrush
-from PyQt6.QtCore import QObject, QRunnable, QThreadPool, Qt, pyqtSignal
-from PyQt6.QtWidgets import (
+from PySide6.QtGui import QColor, QBrush
+from PySide6.QtCore import QObject, QRunnable, QThreadPool, Qt, Signal
+from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QMessageBox,
@@ -29,6 +29,7 @@ from ui.widgets.gosi_tables import (
     _to_int,
 )
 from resources.styles.theme import SUCCESS, WARNING_BG, DANGER
+
 WAITING, FILLED, BUSY, READY, FAILED = "waiting", "filled", "busy", "ready", "failed"
 
 _GENERATE_TEXT = "결제단가표 생성"
@@ -74,8 +75,8 @@ EDITABLE_PRICE_COLS = (2, 3)  # 금액(2열), 가산수당(3열)
 
 
 class _TableWriteSignals(QObject):
-    finished = pyqtSignal(int, object)
-    failed = pyqtSignal(int, str)
+    finished = Signal(int, object)
+    failed = Signal(int, str)
 
 
 class _TableWriteTask(QRunnable):
@@ -105,9 +106,9 @@ class _TableWriteTask(QRunnable):
 
 class GosiConstantsPage(QWidget):
     # 단가표 생성 생략 -> 값 확인이 끝났음을 메인 윈도우에 알림
-    tablesReady = pyqtSignal(object)
-    valuesChanged = pyqtSignal()
-    valuesKept = pyqtSignal()
+    tablesReady = Signal(object)
+    valuesChanged = Signal()
+    valuesKept = Signal()
 
     def __init__(
         self,
@@ -221,7 +222,7 @@ class GosiConstantsPage(QWidget):
                 if amount is not None:
                     formatted[f"{service}.{key}"] = amount
 
-        #증가율에서 사용되는 값 넘기기
+        # 증가율에서 사용되는 값 넘기기
         for key in ("기본단가", "작년 기본단가"):
             if key in self._reference:
                 formatted[key] = self._reference[key]
@@ -268,7 +269,7 @@ class GosiConstantsPage(QWidget):
                 self, "불러오기 실패", f"고시를 읽지 못했습니다:\n{error}"
             )
             return
-        
+
         self._result = result
         self._path = path
         self._price_overrides.clear()
@@ -276,7 +277,6 @@ class GosiConstantsPage(QWidget):
         self._generation += 1
         self._fill_all()
         self._refresh_state()
-
 
     def values(self) -> dict:
         return (self._result or {}).get("단가", {})
@@ -361,7 +361,9 @@ class GosiConstantsPage(QWidget):
                 self._compare_summary,
                 self._section("조견표 ↔ 고시", self._compare_table),
                 self._section("고시 자체 검증", self._compare_issue_label),
-                self._section("고시에 없어 대조하지 않은 조견표 항목", self._skipped_label),
+                self._section(
+                    "고시에 없어 대조하지 않은 조견표 항목", self._skipped_label
+                ),
             ]
         )
 
@@ -396,7 +398,11 @@ class GosiConstantsPage(QWidget):
     def _fill_all(self) -> None:
         if self._path:
             name = os.path.basename(self._path)
-            self._subtitle.setText(f"{name} · 조견표에서 읽은 항목 {len(self._reference)}개" if self._flow == "notice_verify" else f"{name}") 
+            self._subtitle.setText(
+                f"{name} · 조견표에서 읽은 항목 {len(self._reference)}개"
+                if self._flow == "notice_verify"
+                else f"{name}"
+            )
         else:
             self._subtitle.setText(
                 "고시 파일을 불러오면 대조 결과가 여기에 표시됩니다."
@@ -453,7 +459,7 @@ class GosiConstantsPage(QWidget):
 
         self._skipped_label.setText(self._skipped_text(compare_data))
         self._issue_label.setText(self._issue_text())
-        self._compare_issue_label.setText(self._issue_text()) 
+        self._compare_issue_label.setText(self._issue_text())
 
     # 고시에 대응하는 값이 없어 대조하지 않은 조견표 항목
     def _skipped_text(self, compare_data: dict) -> str:

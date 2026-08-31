@@ -1,13 +1,13 @@
 # 기본급여 / 추가급여 등 세그먼트 탭
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import QButtonGroup, QHBoxLayout, QPushButton, QWidget
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import QButtonGroup, QHBoxLayout, QPushButton, QWidget
 
 
 class SegmentedTabBar(QWidget):
     # 탭을 고르면 currentChanged(flow, index) 발생
 
-    currentChanged = pyqtSignal(str, int)
+    currentChanged = Signal(str, int)
 
     def __init__(
         self, labels: list[str], flow: str = "", parent: QWidget | None = None

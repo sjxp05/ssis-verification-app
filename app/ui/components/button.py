@@ -1,8 +1,8 @@
 # 버튼 3종. 스타일은 objectName 으로 app.qss 와 연결된다.
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QPushButton, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QPushButton, QWidget
 
 
 class _BaseButton(QPushButton):

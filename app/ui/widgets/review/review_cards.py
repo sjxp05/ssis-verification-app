@@ -1,6 +1,6 @@
 # 문구가 바뀐 항목 하나. top-3 중에서 고르거나 직접 적는다.
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
     QButtonGroup,
     QHBoxLayout,
     QLabel,

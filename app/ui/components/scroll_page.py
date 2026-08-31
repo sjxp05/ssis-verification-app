@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QScrollArea, QVBoxLayout, QWidget
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QScrollArea, QVBoxLayout, QWidget
 
 
 def centered_scroll_page(max_width: int = 640) -> tuple[QScrollArea, QVBoxLayout]:

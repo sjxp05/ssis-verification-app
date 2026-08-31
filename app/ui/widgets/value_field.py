@@ -7,8 +7,8 @@ from __future__ import annotations
 
 import re
 
-from PyQt6.QtCore import QEvent, Qt, pyqtSignal
-from PyQt6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QWidget
+from PySide6.QtCore import QEvent, Qt, Signal
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QLineEdit, QWidget
 
 _NUMBER_RE = re.compile(r"[^0-9.\-]")
 
@@ -21,7 +21,7 @@ def _repolish(widget: QWidget) -> None:
 class ValueField(QWidget):
     # kind='int' → 216,000 / kind='percent' → 4% / kind='year' → 2026 (쉼표 없음) 로 표시
 
-    valueChanged = pyqtSignal(str, object)  # key, value
+    valueChanged = Signal(str, object)  # key, value
 
     def __init__(
         self,

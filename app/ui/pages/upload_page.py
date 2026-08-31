@@ -4,8 +4,8 @@ from __future__ import annotations
 import os
 from collections.abc import Callable
 
-from PyQt6.QtCore import QObject, QRunnable, Qt, QThreadPool, pyqtSignal
-from PyQt6.QtWidgets import QLabel, QVBoxLayout, QWidget
+from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal
+from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
 
 from services.jogyeon_value_extractor import ValueExtractor
 from services.gosi_verifier import read_gosi
@@ -31,8 +31,8 @@ _BUSY_TEXT = "⟳  문서에서 값을 읽는 중..."
 
 
 class _ExtractSignals(QObject):
-    finished = pyqtSignal(int, object)  # generation, ConstantValues
-    failed = pyqtSignal(int, str)  # generation, 사유
+    finished = Signal(int, object)  # generation, ConstantValues
+    failed = Signal(int, str)  # generation, 사유
 
 
 # 추출기는 GUI 스레드 밖에서
@@ -98,8 +98,8 @@ class _ExtractTask(QRunnable):
 
 
 class UploadPage(QWidget):
-    valuesReady = pyqtSignal(object)  # 다음 단계로 넘어가도 된다는 신호
-    filesDiverged = pyqtSignal(
+    valuesReady = Signal(object)  # 다음 단계로 넘어가도 된다는 신호
+    filesDiverged = Signal(
         bool
     )  # 지금 올라온 파일이 마지막으로 추출에 쓰인 파일과 다른지 여부 / True: 단계 이동 잠금, False: 단계 이동 가능
 

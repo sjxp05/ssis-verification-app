@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import (
     QFrame,
     QLabel,
     QVBoxLayout,
@@ -18,7 +18,7 @@ from config.rules import ruleConfig
 
 
 class FlowCard(QFrame):
-    clicked = pyqtSignal(FlowSpec)
+    clicked = Signal(FlowSpec)
 
     def __init__(self, flow: FlowSpec, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -124,8 +124,8 @@ class FlowCard(QFrame):
 
 
 class MainPage(QWidget):
-    flowRequested = pyqtSignal(FlowSpec)  # FlowSpec
-    yearChanged = pyqtSignal()  # 사업년도
+    flowRequested = Signal(FlowSpec)  # FlowSpec
+    yearChanged = Signal()  # 사업년도
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)

@@ -6,9 +6,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, pyqtSignal
-from PyQt6.QtGui import QDragEnterEvent, QDragLeaveEvent, QDropEvent, QMouseEvent
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QDragEnterEvent, QDragLeaveEvent, QDropEvent, QMouseEvent
+from PySide6.QtWidgets import (
     QFileDialog,
     QFrame,
     QHBoxLayout,
@@ -22,9 +22,10 @@ from utils.qss import set_state
 
 IDLE, HOVER, DONE, REJECTED = "idle", "hover", "done", "rejected"
 
+
 # 드래그앤드롭 또는 클릭으로 파일 한 개를 받는 카드
 class UploadCard(QFrame):
-    fileSelected = pyqtSignal(object)  # UploadedFile
+    fileSelected = Signal(object)  # UploadedFile
 
     def __init__(
         self,

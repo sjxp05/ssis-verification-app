@@ -6,8 +6,8 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
-from PyQt6.QtCore import QAbstractTableModel, QModelIndex, Qt, pyqtSignal
-from PyQt6.QtGui import QColor
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
+from PySide6.QtGui import QColor
 
 from resources.styles import theme
 
@@ -17,7 +17,7 @@ WARNING_BG = theme.WARNING_BG
 
 class DataFrameModel(QAbstractTableModel):
     # 더블클릭 편집으로 셀 값 변경시
-    cellEdited = pyqtSignal(int, str)
+    cellEdited = Signal(int, str)
 
     def __init__(
         self,

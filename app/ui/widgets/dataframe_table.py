@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import pandas as pd
-from PyQt6.QtCore import QModelIndex, Qt, pyqtSignal
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import QModelIndex, Qt, Signal
+from PySide6.QtWidgets import (
     QAbstractItemView,
     QHeaderView,
     QStyle,
@@ -29,7 +29,7 @@ class _CellBackgroundDelegate(QStyledItemDelegate):
 
 
 class DataFrameTable(QTableView):
-    cellSelected = pyqtSignal(QModelIndex)
+    cellSelected = Signal(QModelIndex)
 
     def __init__(
         self,

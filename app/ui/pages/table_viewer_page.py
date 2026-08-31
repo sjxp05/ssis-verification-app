@@ -3,8 +3,8 @@
 from __future__ import annotations
 import os
 import pandas as pd
-from PyQt6.QtCore import QModelIndex, pyqtSignal, Qt, QTimer
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import QModelIndex, Signal, Qt, QTimer
+from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
     QHBoxLayout,
@@ -62,13 +62,13 @@ _ADD_ROW_TEXT = "+"
 _DEL_ROW_TEXT = "-"
 _PANEL_HIDE_TEXT = ">"
 _PANEL_SHOW_TEXT = "<"
-_SORT_TEXT="▽"
+_SORT_TEXT = "▽"
 _SORT_DONE_TEXT = "▼"
 
 
 class TableViewerPage(QWidget):
-    exportRequested = pyqtSignal(int, object)  # tab index, DataFrame
-    cellSelected = pyqtSignal(int, QModelIndex)
+    exportRequested = Signal(int, object)  # tab index, DataFrame
+    cellSelected = Signal(int, QModelIndex)
 
     def __init__(self, parent: QWidget | None = None, flow: str = "unit_price"):
         super().__init__(parent)
@@ -104,10 +104,10 @@ class TableViewerPage(QWidget):
         self._prev_button = GhostButton(_PREV_TEXT)
         self._prev_button.clicked.connect(self._on_load_prev)
 
-        self._sort_button=GhostButton(_SORT_TEXT)
+        self._sort_button = GhostButton(_SORT_TEXT)
         self._sort_button.clicked.connect(self._on_toggle_sort)
         self._sort_button.setVisible(False)
-        self._sorted_tabs:set[int]=set()
+        self._sorted_tabs: set[int] = set()
         self._presort_tables: dict[int, pd.DataFrame] = {}
 
         self._load_button = GhostButton(_LOAD_TEXT)
@@ -144,7 +144,7 @@ class TableViewerPage(QWidget):
         self._build_tables(flow)
 
         self._panel = ValidationPanel()
-        self._panel_open = True 
+        self._panel_open = True
         self._panel.issueActivated.connect(self._on_issue_activated)
         self._panel.fixRequested.connect(self._on_fix_requested)
         self._panel.fixAllRequested.connect(self._on_fix_all)
@@ -534,23 +534,27 @@ class TableViewerPage(QWidget):
         finally:
             QApplication.restoreOverrideCursor()
 
-    def _on_toggle_sort(self)->None:
-        #증가율 순 정렬
+    def _on_toggle_sort(self) -> None:
+        # 증가율 순 정렬
         tab = self._tabs.current()
         if tab in self._sorted_tabs:
-            original=self._presort_tables.pop(tab,None)
+            original = self._presort_tables.pop(tab, None)
             self._sorted_tabs.discard(tab)
             if original is not None:
-                self._tables[tab].set_dataframe(original,None)
+                self._tables[tab].set_dataframe(original, None)
                 self._run_validation(tab)
                 self._realign_prev(tab)
             self._sort_button.setText(_SORT_TEXT)
             set_state(self._sort_button, "state", "")
             return
-        
+
         report = self._reports.get(tab)
         if report is None or not report.growth_scores:
-            QMessageBox.information(self, "정렬", "증가율 데이터가 없습니다.\n작년 단가표를 먼저 불러와 주세요.")
+            QMessageBox.information(
+                self,
+                "정렬",
+                "증가율 데이터가 없습니다.\n작년 단가표를 먼저 불러와 주세요.",
+            )
             return
 
         df = self._tables[tab].dataframe()
@@ -573,7 +577,9 @@ class TableViewerPage(QWidget):
         if prev is None:
             return
         curr = self._tables[tab].dataframe()
-        self._prev_views[tab].set_dataframe(align_prev_table(curr, prev, self._flow), None)
+        self._prev_views[tab].set_dataframe(
+            align_prev_table(curr, prev, self._flow), None
+        )
 
     # 작년단가표 스플릿 뷰
     def _show_prev_split(self, tab: int) -> None:
@@ -591,7 +597,7 @@ class TableViewerPage(QWidget):
 
     def _toggle_panel(self) -> None:
         # 검증 패널 접기/펼치기 (접으면 엑셀 표 넓이가 화면 전체에 맞춰짐)
-        self._panel_open=not self._panel_open
+        self._panel_open = not self._panel_open
         self._panel.setVisible(self._panel_open)
         self._update_panel_button()
 
@@ -609,7 +615,7 @@ class TableViewerPage(QWidget):
 
     def _update_prev_button(self) -> None:
         # 현재 탭에 작년 단가표가 불러와져 있으면 버튼을 '적용됨' 상태(초록)로 바꾼다.
-        tab=self._tabs.current()
+        tab = self._tabs.current()
         name = self._prev_names.get(self._tabs.current())
         if name:
             self._prev_button.setText(_PREV_DONE_TEXT)
@@ -622,10 +628,10 @@ class TableViewerPage(QWidget):
             self._sort_button.setVisible(True)
             if tab in self._sorted_tabs:
                 self._sort_button.setText(_SORT_DONE_TEXT)
-                set_state(self._sort_button,"state","loaded")
+                set_state(self._sort_button, "state", "loaded")
             else:
                 self._sort_button.setText(_SORT_TEXT)
-                set_state(self._sort_button,"state","")
+                set_state(self._sort_button, "state", "")
         else:
             self._prev_button.setText(_PREV_TEXT)
             self._prev_button.setToolTip("")
@@ -662,7 +668,7 @@ class TableViewerPage(QWidget):
 
     def _on_export(self) -> None:
         index = self._tabs.current()
-        df=self._presort_tables.get(index)#백업본
+        df = self._presort_tables.get(index)  # 백업본
         if df is None:
-            df=self._tables[index].dataframe()
+            df = self._tables[index].dataframe()
         self.exportRequested.emit(index, df)

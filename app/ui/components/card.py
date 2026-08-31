@@ -1,6 +1,6 @@
 # 회색 제목 띠 + 흰 본문으로 이루어진 카드 컨테이너
 
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QFrame,
     QHBoxLayout,
     QLabel,

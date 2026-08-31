@@ -5,8 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from PyQt6.QtCore import QObject, QRunnable, Qt, QThreadPool, pyqtSignal
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal
+from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QFileDialog,
@@ -29,8 +29,8 @@ BASELINE_KEY = "jogyeon_baseline"
 
 
 class _MatchSignals(QObject):
-    finished = pyqtSignal(int, object)  # generation, MatchReport
-    failed = pyqtSignal(int, str)  # generation, 오류 발생 원인
+    finished = Signal(int, object)  # generation, MatchReport
+    failed = Signal(int, str)  # generation, 오류 발생 원인
 
 
 # match_workbooks()를 별도 스레드에서 실행

@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from PyQt6.QtCore import QObject, QRunnable, Qt, QThreadPool, pyqtSignal
-from PyQt6.QtGui import QFontMetrics
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal
+from PySide6.QtGui import QFontMetrics
+from PySide6.QtWidgets import (
     QApplication,
     QGridLayout,
     QHBoxLayout,
@@ -70,8 +70,8 @@ TABS = {
 
 
 class _TableWriteSignals(QObject):
-    finished = pyqtSignal(int, object)  # generation, Tables
-    failed = pyqtSignal(int, str)  # generation, 실패 원인
+    finished = Signal(int, object)  # generation, Tables
+    failed = Signal(int, str)  # generation, 실패 원인
 
 
 # 단가표 생성기를 GUI와 별도의 스레드에서 실행
@@ -106,12 +106,12 @@ class _TableWriteTask(QRunnable):
 
 class ConstantsPage(QWidget):
     # tablesReady(dict): 단가표 생성이 끝나 다음 단계로 넘어가도 된다는 신호
-    tablesReady = pyqtSignal(object)
+    tablesReady = Signal(object)
     valuesChanged = (
-        pyqtSignal()
+        Signal()
     )  # 수정된 값이 있으면 반영하여 단가표를 다시 만들도록 알리는 신호
     valuesKept = (
-        pyqtSignal()
+        Signal()
     )  # 값 수정했다가 취소한 경우 바뀌지 않은 것으로 처리, 단가표 페이지로 정상적 이동 가능
 
     def __init__(

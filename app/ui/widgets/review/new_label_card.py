@@ -1,7 +1,7 @@
 # 올해 새로 생긴 문구 하나. 적지 않으면 아무 일도 일어나지 않는다.
 
-from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import (
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
     QHBoxLayout,
     QLineEdit,
     QToolButton,

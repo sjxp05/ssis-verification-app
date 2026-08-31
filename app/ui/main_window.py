@@ -6,7 +6,7 @@ from pathlib import Path
 from enum import IntEnum
 
 import pandas as pd
-from PyQt6.QtWidgets import (
+from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
     QLineEdit,
@@ -16,7 +16,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from PyQt6.QtCore import Qt
+from PySide6.QtCore import Qt
 from services.table_writer import TableWriter
 from services import recent_files
 
