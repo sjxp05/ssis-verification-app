@@ -30,6 +30,8 @@ class Spinner(QWidget):
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(QPen(self._color, 3, cap=Qt.PenCapStyle.RoundCap))
+        painter.setPen(
+            QPen(self._color, 3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+        )
         rect = QRectF(4, 4, self.width() - 8, self.height() - 8)
         painter.drawArc(rect, self._angle * 16, 270 * 16)
